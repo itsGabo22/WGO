@@ -13,6 +13,7 @@ export interface TelemetryData {
 
 export function useTelemetry(isActive: boolean) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [isFinished, setIsFinished] = useState(false);
 
   useEffect(() => {
     if (!isActive) return;
@@ -21,13 +22,18 @@ export function useTelemetry(isActive: boolean) {
       setCurrentStepIndex((prev) => {
         if (prev < MOCK_ROUTE_STEPS.length - 1) {
           return prev + 1;
+        } else {
+          setIsFinished(true);
+          return prev;
         }
-        return prev;
       });
     }, 4000); // Progress to the next step every 4 seconds
 
     return () => clearInterval(interval);
   }, [isActive]);
 
-  return MOCK_ROUTE_STEPS[currentStepIndex];
+  return {
+    data: MOCK_ROUTE_STEPS[currentStepIndex],
+    isFinished
+  };
 }
