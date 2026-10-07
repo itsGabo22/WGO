@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { ScreenListening } from "@/components/ScreenListening";
 import { ScreenModeSelection } from "@/components/ScreenModeSelection";
 import { ScreenActiveNavigation } from "@/components/ScreenActiveNavigation";
-import { ScreenArrived } from "@/components/ScreenArrived";
+import { ScreenDestinationReached } from "@/components/ScreenDestinationReached";
 import { motion, AnimatePresence } from "framer-motion";
 
 type ScreenState = "listening" | "mode" | "navigation" | "arrived";
@@ -28,8 +28,9 @@ export default function Home() {
 
   const handleToggleListen = () => setIsListening(true);
   
-  const handleCancel = () => {
+  const handleReset = () => {
     setIsListening(false);
+    setTransportMode(null);
     setCurrentScreen("listening");
   };
   
@@ -54,7 +55,7 @@ export default function Home() {
             transition={{ duration: 0.3 }}
             className="w-full h-full absolute inset-0"
           >
-            <ScreenListening isListening={isListening} onToggleListen={handleToggleListen} onCancel={handleCancel} />
+            <ScreenListening isListening={isListening} onToggleListen={handleToggleListen} onCancel={handleReset} />
           </motion.div>
         )}
         
@@ -82,7 +83,7 @@ export default function Home() {
           >
             <ScreenActiveNavigation 
               isActive={true} 
-              onCancel={handleCancel} 
+              onCancel={handleReset} 
               onArrived={handleArrived} 
             />
           </motion.div>
@@ -97,7 +98,7 @@ export default function Home() {
             transition={{ duration: 0.3 }}
             className="w-full h-full absolute inset-0"
           >
-            <ScreenArrived onDismiss={handleCancel} />
+            <ScreenDestinationReached onDismiss={handleReset} />
           </motion.div>
         )}
       </AnimatePresence>
