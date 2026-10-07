@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { PrimaryMicButton } from "./PrimaryMicButton";
 import { MassiveButton } from "./MassiveButton";
 import { X } from "lucide-react";
@@ -13,6 +13,18 @@ interface ScreenListeningProps {
 }
 
 export function ScreenListening({ isListening, onToggleListen, onCancel }: ScreenListeningProps) {
+  const [statusText, setStatusText] = useState("ESCUCHANDO...");
+
+  useEffect(() => {
+    if (isListening) {
+      setStatusText("ESCUCHANDO...");
+      const timer = setTimeout(() => {
+        setStatusText("TRAZANDO RUTA...");
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isListening]);
+
   return (
     <div className="flex h-full w-full flex-col items-center justify-between py-6">
       {/* Top Zone */}
@@ -20,7 +32,7 @@ export function ScreenListening({ isListening, onToggleListen, onCancel }: Scree
         <StatusBadge variant="neutral">WGO • NAV</StatusBadge>
         <h1 className="mt-2 text-center text-[20px] font-bold leading-tight tracking-tight text-black px-4">
           {isListening ? (
-            <span className="text-primary text-[13px] tracking-widest uppercase">Escuchando...</span>
+            <span className="text-primary text-[13px] tracking-widest uppercase">{statusText}</span>
           ) : (
             "¿A dónde vamos?"
           )}
