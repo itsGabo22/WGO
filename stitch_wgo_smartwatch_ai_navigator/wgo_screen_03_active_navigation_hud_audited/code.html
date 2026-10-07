@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_blank" name="shell-type"/>
+<title>Screen 03 - Active Navigation HUD</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "inverse-on-surface": "#f1f1f1",
+            "background": "#ffffff",
+            "tertiary": "#952200",
+            "on-surface": "#000000",
+            "tertiary-fixed": "#ffdbd2",
+            "on-primary-container": "#dfe3ff",
+            "inverse-surface": "#121212",
+            "on-secondary": "#ffffff",
+            "primary-fixed-dim": "#b7c4ff",
+            "surface-tint": "#004ced",
+            "surface-container-lowest": "#ffffff",
+            "secondary-fixed": "#b4ebff",
+            "surface-container": "#f0f2f5",
+            "error": "#ba1a1a",
+            "error-container": "#ffdad6",
+            "surface-dim": "#e2e4e9",
+            "tertiary-fixed-dim": "#ffb4a1",
+            "on-tertiary": "#ffffff",
+            "surface-container-highest": "#e2e2e2",
+            "outline": "#737688",
+            "on-background": "#000000",
+            "on-tertiary-container": "#ffddd5",
+            "tertiary-container": "#bf3003",
+            "on-primary-fixed": "#001452",
+            "on-tertiary-fixed-variant": "#891e00",
+            "primary-container": "#0052ff",
+            "on-tertiary-fixed": "#3c0800",
+            "on-primary-fixed-variant": "#0038b6",
+            "on-secondary-fixed": "#001f27",
+            "primary": "#003ec7",
+            "on-error": "#ffffff",
+            "on-primary": "#ffffff",
+            "on-surface-variant": "#434656",
+            "surface": "#ffffff",
+            "secondary-fixed-dim": "#3cd7ff",
+            "primary-fixed": "#dde1ff",
+            "surface-container-low": "#f6f7f9",
+            "on-secondary-container": "#005669",
+            "outline-variant": "#c3c5d9",
+            "secondary": "#00677e",
+            "on-secondary-fixed-variant": "#004e5f",
+            "surface-bright": "#ffffff",
+            "surface-variant": "#f0f2f5",
+            "on-error-container": "#93000a",
+            "inverse-primary": "#b7c4ff",
+            "surface-container-high": "#e8eaf0"
+          },
+          fontFamily: {
+            "headline-lg": ["Space Grotesk", "sans-serif"],
+            "headline-md": ["Space Grotesk", "sans-serif"],
+            "headline-sm": ["Space Grotesk", "sans-serif"],
+            "body-lg": ["Space Grotesk", "sans-serif"],
+            "body-md": ["Space Grotesk", "sans-serif"],
+            "label-lg": ["Space Grotesk", "sans-serif"],
+            "label-md": ["Space Grotesk", "sans-serif"],
+            "label-sm": ["Space Grotesk", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    @layer base {
+      html, body {
+        width: 100vw;
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+      }
+    }
+    ::-webkit-scrollbar { display: none; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="bg-[#121214] text-white min-h-screen w-full flex flex-col items-center justify-center p-4 select-none antialiased">
+<!-- Interactive Device / Form-Factor Switcher -->
+<header class="z-50 mb-4 flex items-center gap-1.5 p-1.5 rounded-full bg-neutral-900/90 backdrop-blur-md shadow-2xl border border-neutral-700/80">
+<button aria-label="Vista Compacto 40mm" class="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all bg-neutral-800 text-neutral-300 hover:text-white" id="btn-compact" onclick="setFormFactor('compact')">
+      Compacto 40mm
+    </button>
+<button aria-label="Vista Grande 46mm" class="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all bg-[#0052ff] text-white shadow-md" id="btn-large" onclick="setFormFactor('large')">
+      Grande 46mm
+    </button>
+<button aria-label="Vista Rectangular" class="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all bg-neutral-800 text-neutral-300 hover:text-white" id="btn-squircle" onclick="setFormFactor('squircle')">
+      Rectangular
+    </button>
+</header>
+<!-- Simulated Physical Smartwatch Hardware Chassis -->
+<div class="relative w-[420px] h-[420px] rounded-full p-[14px] bg-[#1a1b1e] shadow-[0_30px_80px_rgba(0,0,0,0.8),inset_0_1px_2px_rgba(255,255,255,0.15)] ring-1 ring-neutral-700/60 flex items-center justify-center transition-all duration-300 ease-out" id="watchFrame">
+<!-- Watch Bezel Edge Accent -->
+<div class="absolute inset-[3px] rounded-full border border-neutral-800 pointer-events-none transition-all duration-300" id="bezelBorder"></div>
+<!-- Active Watch Screen Display (Pure White Ground, Zero Clip HUD) -->
+<main class="relative w-full h-full rounded-full bg-white text-black overflow-hidden flex flex-col items-center justify-between transition-all duration-300 shadow-inner" id="watchScreen">
+<!-- BACKGROUND MINIMAP / VECTOR ROUTE CANVAS -->
+<div class="absolute inset-0 w-full h-full pointer-events-none flex items-center justify-center overflow-hidden">
+<svg class="w-full h-full" fill="none" viewbox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+<!-- Subtle Orienting Spatial Grid / Distance Rings -->
+<circle cx="200" cy="200" opacity="0.9" r="160" stroke="#f0f2f5" stroke-dasharray="3 6" stroke-width="1.5"></circle>
+<circle cx="200" cy="200" opacity="0.9" r="105" stroke="#f0f2f5" stroke-dasharray="2 6" stroke-width="1.5"></circle>
+<!-- Secondary Context Street Lines (Ghost routes) -->
+<path d="M200 370 V200" stroke="#e8eaf0" stroke-linecap="round" stroke-width="14"></path>
+<path d="M200 200 H90" stroke="#e8eaf0" stroke-linecap="round" stroke-width="10"></path>
+<path d="M200 200 V120" stroke="#e8eaf0" stroke-linecap="round" stroke-width="10"></path>
+<!-- Primary Active Route Path (#0052FF) -->
+<path d="M200 340 L200 200 Q200 170 230 170 L330 170" id="primaryRouteSvg" stroke="#0052FF" stroke-linecap="round" stroke-linejoin="round" stroke-width="14"></path>
+<!-- Target Waypoint Pulse Anchor -->
+<circle class="animate-ping" cx="325" cy="170" fill="#0052FF" opacity="0.25" r="7"></circle>
+<circle cx="325" cy="170" fill="#0052FF" r="5"></circle>
+<!-- User Heading & Positioning Puck (High contrast outdoor puck) -->
+<g id="userPuckGroup" transform="translate(200, 260)">
+<circle cx="0" cy="0" fill="#0052FF" opacity="0.14" r="22"></circle>
+<circle cx="0" cy="0" fill="#000000" r="13" stroke="#ffffff" stroke-width="2.5"></circle>
+<!-- Navigation Heading Chevron -->
+<path d="M0 -7 L5 4 L0 2 L-5 4 Z" fill="#FFFFFF"></path>
+</g>
+</svg>
+</div>
+<!-- TOP HUD: NEXT MANEUVER CLUSTER (Strict safe area clearance) -->
+<header class="relative z-10 w-full pt-10 px-8 flex flex-col items-center pointer-events-auto transition-all duration-300" id="topHud">
+<!-- Glanceable Maneuver Tile -->
+<div class="flex items-center justify-center gap-3 bg-white/95 backdrop-blur-sm px-4 py-2 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-neutral-100">
+<!-- Maneuver Direction Icon -->
+<div class="w-11 h-11 shrink-0 rounded-full bg-black text-white flex items-center justify-center shadow-md">
+<span class="material-symbols-outlined text-[28px] text-white">turn_right</span>
+</div>
+<!-- Maneuver Distance & Action -->
+<div class="flex flex-col text-left">
+<div class="flex items-baseline gap-1 leading-none">
+<span class="font-headline-lg text-[26px] font-bold text-black tracking-tight leading-none" id="turnDistVal">200</span>
+<span class="font-headline-sm text-[16px] font-bold text-black">m</span>
+</div>
+<span class="font-label-md text-[11px] font-bold uppercase tracking-wider text-[#434656] mt-0.5 whitespace-nowrap" id="turnInstruction">
+              GIRA A LA DERECHA
+            </span>
+</div>
+</div>
+</header>
+<!-- MID VIEWPORT SPACER: Preserves center visibility for active navigation vector -->
+<div class="flex-1 w-full pointer-events-none"></div>
+<!-- BOTTOM HUD: ERGONOMIC SAFE AREA CONTROLS (ETA & VOICE TOGGLE) -->
+<footer class="relative z-10 w-full pb-10 px-8 flex items-center justify-center pointer-events-auto transition-all duration-300" id="bottomHud">
+<div class="flex items-center justify-center gap-2.5 max-w-[270px] w-full">
+<!-- ETA Pill: Look-understand-act in < 1s -->
+<div class="flex-1 h-12 px-4 rounded-full bg-black text-white flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,0,0,0.18)] min-w-[130px]" id="etaBadge">
+<span class="material-symbols-outlined text-[#3cd7ff] text-[18px]">navigation</span>
+<div class="flex items-baseline gap-1.5 leading-none">
+<span class="font-label-sm text-[10px] tracking-wider font-bold text-neutral-400 uppercase">ETA</span>
+<span class="font-headline-sm text-[16px] font-bold text-white tracking-tight whitespace-nowrap">14 min</span>
+</div>
+</div>
+<!-- Voice Guidance Toggle: Accessible 48x48dp Touch Target -->
+<button aria-label="Alternar guía por voz" class="w-12 h-12 shrink-0 rounded-full bg-[#f0f2f5] active:bg-black active:text-white text-black flex items-center justify-center shadow-[0_2px_10px_rgba(0,0,0,0.06)] border border-neutral-200/80 transition-all active:scale-95 focus:outline-none" id="voiceBtn">
+<span class="material-symbols-outlined text-[22px]" id="voiceIcon">volume_up</span>
+</button>
+<!-- Quick Recalculate / Reroute Action -->
+<button aria-label="Recalcular ruta actual" class="w-12 h-12 shrink-0 rounded-full bg-[#f0f2f5] active:bg-black active:text-white text-black flex items-center justify-center shadow-[0_2px_10px_rgba(0,0,0,0.06)] border border-neutral-200/80 transition-all active:scale-95 focus:outline-none" id="rerouteBtn">
+<span class="material-symbols-outlined text-[20px]" id="rerouteIcon">sync</span>
+</button>
+</div>
+</footer>
+</main>
+</div>
+<script>
+    // Wearable Micro-Interactions: Voice Toggle & Reroute feedback
+    const voiceBtn = document.getElementById('voiceBtn');
+    const voiceIcon = document.getElementById('voiceIcon');
+    let isVoiceActive = true;
+
+    voiceBtn.addEventListener('click', () => {
+      isVoiceActive = !isVoiceActive;
+      if (isVoiceActive) {
+        voiceIcon.textContent = 'volume_up';
+        voiceBtn.classList.remove('bg-neutral-200', 'text-neutral-500');
+        voiceBtn.classList.add('bg-[#f0f2f5]', 'text-black');
+      } else {
+        voiceIcon.textContent = 'volume_off';
+        voiceBtn.classList.remove('bg-[#f0f2f5]', 'text-black');
+        voiceBtn.classList.add('bg-neutral-200', 'text-neutral-500');
+      }
+    });
+
+    const rerouteBtn = document.getElementById('rerouteBtn');
+    const rerouteIcon = document.getElementById('rerouteIcon');
+    rerouteBtn.addEventListener('click', () => {
+      rerouteIcon.classList.add('animate-spin');
+      setTimeout(() => {
+        rerouteIcon.classList.remove('animate-spin');
+      }, 700);
+    });
+
+    // Form Factor Switcher with Strict Safe-Area Adjustments
+    function setFormFactor(mode) {
+      const frame = document.getElementById('watchFrame');
+      const screen = document.getElementById('watchScreen');
+      const bezel = document.getElementById('bezelBorder');
+      const topHud = document.getElementById('topHud');
+      const bottomHud = document.getElementById('bottomHud');
+
+      const btns = {
+        compact: document.getElementById('btn-compact'),
+        large: document.getElementById('btn-large'),
+        squircle: document.getElementById('btn-squircle')
+      };
+
+      Object.values(btns).forEach(btn => {
+        if (btn) {
+          btn.classList.remove('bg-[#0052ff]', 'text-white', 'shadow-md');
+          btn.classList.add('bg-neutral-800', 'text-neutral-300');
+        }
+      });
+
+      if (btns[mode]) {
+        btns[mode].classList.remove('bg-neutral-800', 'text-neutral-300');
+        btns[mode].classList.add('bg-[#0052ff]', 'text-white', 'shadow-md');
+      }
+
+      if (mode === 'compact') {
+        // Compact 40mm Circular (380x380px)
+        frame.style.width = '380px';
+        frame.style.height = '380px';
+        frame.style.borderRadius = '9999px';
+        screen.style.borderRadius = '9999px';
+        bezel.style.borderRadius = '9999px';
+
+        // Elevated insets so text/buttons never graze the outer perimeter
+        topHud.className = "relative z-10 w-full pt-8 px-8 flex flex-col items-center pointer-events-auto transition-all duration-300";
+        bottomHud.className = "relative z-10 w-full pb-9 px-8 flex items-center justify-center pointer-events-auto transition-all duration-300";
+      } else if (mode === 'large') {
+        // Large 46mm Circular (420x420px)
+        frame.style.width = '420px';
+        frame.style.height = '420px';
+        frame.style.borderRadius = '9999px';
+        screen.style.borderRadius = '9999px';
+        bezel.style.borderRadius = '9999px';
+
+        // Ample radial margin
+        topHud.className = "relative z-10 w-full pt-10 px-8 flex flex-col items-center pointer-events-auto transition-all duration-300";
+        bottomHud.className = "relative z-10 w-full pb-10 px-8 flex items-center justify-center pointer-events-auto transition-all duration-300";
+      } else if (mode === 'squircle') {
+        // Rectangular Smartwatch (Apple Watch / Rectangular Wear OS 370x440px)
+        frame.style.width = '370px';
+        frame.style.height = '440px';
+        frame.style.borderRadius = '54px';
+        screen.style.borderRadius = '42px';
+        bezel.style.borderRadius = '50px';
+
+        // Standard rectangular safe area margins
+        topHud.className = "relative z-10 w-full pt-6 px-5 flex flex-col items-center pointer-events-auto transition-all duration-300";
+        bottomHud.className = "relative z-10 w-full pb-6 px-5 flex items-center justify-center pointer-events-auto transition-all duration-300";
+      }
+    }
+  </script>
+</body></html>
