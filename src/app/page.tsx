@@ -16,12 +16,9 @@ export enum ScreenState {
   Arrived = "arrived"
 }
 
-type TransportMode = "drive" | "walk" | null;
-
 export default function Home() {
   const [currentScreen, setCurrentScreen] = useState<ScreenState>(ScreenState.Listening);
   const [isListening, setIsListening] = useState(false);
-  const [transportMode, setTransportMode] = useState<TransportMode>(null);
   const [gpsLost, setGpsLost] = useState(false);
 
   useEffect(() => {
@@ -39,13 +36,11 @@ export default function Home() {
   
   const handleReset = () => {
     setIsListening(false);
-    setTransportMode(null);
     setGpsLost(false);
     setCurrentScreen(ScreenState.Listening);
   };
   
   const handleSelectMode = (mode: "drive" | "walk") => {
-    setTransportMode(mode);
     setCurrentScreen(ScreenState.Navigation);
   };
 

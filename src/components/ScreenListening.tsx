@@ -13,17 +13,20 @@ interface ScreenListeningProps {
 }
 
 export function ScreenListening({ isListening, onToggleListen, onCancel }: ScreenListeningProps) {
-  const [statusText, setStatusText] = useState("ESCUCHANDO...");
+  const [showRouting, setShowRouting] = useState(false);
 
   useEffect(() => {
     if (isListening) {
-      setStatusText("ESCUCHANDO...");
       const timer = setTimeout(() => {
-        setStatusText("TRAZANDO RUTA...");
+        setShowRouting(true);
       }, 1500);
       return () => clearTimeout(timer);
+    } else {
+      setShowRouting(false);
     }
   }, [isListening]);
+
+  const statusText = showRouting ? "TRAZANDO RUTA..." : "ESCUCHANDO...";
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-between py-6">

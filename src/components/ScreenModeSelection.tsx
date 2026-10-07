@@ -2,7 +2,6 @@ import React from "react";
 import { Car, Footprints } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { MassiveButton } from "./MassiveButton";
-import { motion } from "framer-motion";
 
 interface ScreenModeSelectionProps {
   destination?: string;
