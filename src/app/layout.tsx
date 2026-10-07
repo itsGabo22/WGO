@@ -30,9 +30,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${spaceGrotesk.variable} antialiased`}>
-        <WearableSimulator>
-          {children}
-        </WearableSimulator>
+        {children}
       </body>
     </html>
   );
