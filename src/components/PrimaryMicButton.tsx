@@ -53,6 +53,7 @@ export function PrimaryMicButton({ isListening = false, className, ...props }: P
         )}
         animate={isListening ? { scale: 1.04 } : { scale: 1 }}
         whileTap={{ scale: 0.95, backgroundColor: "#000000" }}
+        aria-label={isListening ? "Detener escucha" : "Iniciar destino por voz"}
         {...props}
       >
         <Mic size={40} className={isListening ? "animate-pulse" : ""} />

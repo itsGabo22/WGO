@@ -51,10 +51,10 @@ export default function Home() {
       {/* Debug GPS Trigger */}
       <button 
         onClick={() => setGpsLost(!gpsLost)}
-        className="absolute top-2 left-2 z-50 p-2 text-xs bg-black/20 text-white rounded-md opacity-50 hover:opacity-100 transition-opacity"
-        aria-label="Toggle GPS Error"
+        className="absolute top-2 left-2 z-50 flex min-h-[48px] min-w-[48px] items-center justify-center p-2 text-xs bg-black/20 text-white rounded-md opacity-50 hover:opacity-100 transition-opacity"
+        aria-label="Simular error de GPS"
       >
-        GPS Debug
+        GPS
       </button>
 
       <AnimatePresence mode="wait">

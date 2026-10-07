@@ -35,7 +35,8 @@ export function ScreenActiveNavigation({ isActive, onCancel, onArrived }: Screen
     >
       <button 
         onClick={onCancel}
-        className="absolute top-4 right-4 z-50 p-2 rounded-full bg-surface/80 border border-neutral/10 text-black active:scale-90 transition-transform"
+        className="absolute top-4 right-4 z-50 flex h-[48px] w-[48px] items-center justify-center rounded-full bg-surface/80 border border-neutral/10 text-black active:scale-90 transition-transform"
+        aria-label="Cancelar navegación"
       >
         <X size={20} strokeWidth={2.5} />
       </button>
