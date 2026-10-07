@@ -20,7 +20,7 @@ val WgoLightColors = Colors(
     onError = WgoWhite,
     background = WgoWhite,
     onBackground = WgoBlack,
-    surface = WgoWhite,
+    surface = Color(0xFFF2F4F7),
     onSurface = WgoBlack,
     onSurfaceVariant = WgoBlack
 )
@@ -36,7 +36,7 @@ val WgoDarkColors = Colors(
     onError = WgoBlack,
     background = WgoBlack,
     onBackground = WgoWhite,
-    surface = WgoBlack,
+    surface = Color(0xFF1E1E1E),
     onSurface = WgoWhite,
     onSurfaceVariant = WgoWhite
 )

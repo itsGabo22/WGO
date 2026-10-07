@@ -71,9 +71,16 @@ fun ScreenSettings(
                     )
                 },
                 colors = ToggleChipDefaults.toggleChipColors(
-                    checkedStartBackgroundColor = WgoPrimary.copy(alpha = 0.3f),
-                    checkedEndBackgroundColor = WgoPrimary.copy(alpha = 0.1f),
-                    checkedToggleControlColor = WgoPrimary
+                    checkedStartBackgroundColor = WgoPrimary.copy(alpha = 0.2f),
+                    checkedEndBackgroundColor = WgoPrimary.copy(alpha = 0.05f),
+                    checkedToggleControlColor = WgoPrimary,
+                    checkedContentColor = MaterialTheme.colors.onBackground,
+                    checkedSecondaryContentColor = MaterialTheme.colors.onBackground.copy(alpha = 0.8f),
+                    uncheckedStartBackgroundColor = MaterialTheme.colors.surface,
+                    uncheckedEndBackgroundColor = MaterialTheme.colors.surface,
+                    uncheckedContentColor = MaterialTheme.colors.onSurface,
+                    uncheckedSecondaryContentColor = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
+                    uncheckedToggleControlColor = MaterialTheme.colors.onSurface
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -96,9 +103,16 @@ fun ScreenSettings(
                     )
                 },
                 colors = ToggleChipDefaults.toggleChipColors(
-                    checkedStartBackgroundColor = WgoPrimary.copy(alpha = 0.3f),
-                    checkedEndBackgroundColor = WgoPrimary.copy(alpha = 0.1f),
-                    checkedToggleControlColor = WgoPrimary
+                    checkedStartBackgroundColor = WgoPrimary.copy(alpha = 0.2f),
+                    checkedEndBackgroundColor = WgoPrimary.copy(alpha = 0.05f),
+                    checkedToggleControlColor = WgoPrimary,
+                    checkedContentColor = MaterialTheme.colors.onBackground,
+                    checkedSecondaryContentColor = MaterialTheme.colors.onBackground.copy(alpha = 0.8f),
+                    uncheckedStartBackgroundColor = MaterialTheme.colors.surface,
+                    uncheckedEndBackgroundColor = MaterialTheme.colors.surface,
+                    uncheckedContentColor = MaterialTheme.colors.onSurface,
+                    uncheckedSecondaryContentColor = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
+                    uncheckedToggleControlColor = MaterialTheme.colors.onSurface
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
