@@ -9,11 +9,17 @@ import { GPSLostOverlay } from "@/components/GPSLostOverlay";
 import { GPSDebugTrigger } from "@/components/GPSDebugTrigger";
 import { motion, AnimatePresence } from "framer-motion";
 
-type ScreenState = "listening" | "mode" | "navigation" | "arrived";
+export enum ScreenState {
+  Listening = "listening",
+  ModeSelection = "mode",
+  Navigation = "navigation",
+  Arrived = "arrived"
+}
+
 type TransportMode = "drive" | "walk" | null;
 
 export default function Home() {
-  const [currentScreen, setCurrentScreen] = useState<ScreenState>("listening");
+  const [currentScreen, setCurrentScreen] = useState<ScreenState>(ScreenState.Listening);
   const [isListening, setIsListening] = useState(false);
   const [transportMode, setTransportMode] = useState<TransportMode>(null);
   const [gpsLost, setGpsLost] = useState(false);
@@ -23,7 +29,7 @@ export default function Home() {
     if (isListening) {
       timeout = setTimeout(() => {
         setIsListening(false);
-        setCurrentScreen("mode");
+        setCurrentScreen(ScreenState.ModeSelection);
       }, 3000);
     }
     return () => clearTimeout(timeout);
@@ -35,16 +41,16 @@ export default function Home() {
     setIsListening(false);
     setTransportMode(null);
     setGpsLost(false);
-    setCurrentScreen("listening");
+    setCurrentScreen(ScreenState.Listening);
   };
   
   const handleSelectMode = (mode: "drive" | "walk") => {
     setTransportMode(mode);
-    setCurrentScreen("navigation");
+    setCurrentScreen(ScreenState.Navigation);
   };
 
   const handleArrived = () => {
-    setCurrentScreen("arrived");
+    setCurrentScreen(ScreenState.Arrived);
   };
 
   return (
@@ -56,7 +62,7 @@ export default function Home() {
       />
 
       <AnimatePresence mode="wait">
-        {currentScreen === "listening" && (
+        {currentScreen === ScreenState.Listening && (
           <motion.div 
             key="listening"
             initial={{ opacity: 0, x: -20 }}
@@ -69,7 +75,7 @@ export default function Home() {
           </motion.div>
         )}
         
-        {currentScreen === "mode" && (
+        {currentScreen === ScreenState.ModeSelection && (
           <motion.div 
             key="mode"
             initial={{ opacity: 0, x: 20 }}
@@ -82,7 +88,7 @@ export default function Home() {
           </motion.div>
         )}
 
-        {currentScreen === "navigation" && (
+        {currentScreen === ScreenState.Navigation && (
           <motion.div 
             key="navigation"
             initial={{ opacity: 0, x: 20 }}
@@ -100,7 +106,7 @@ export default function Home() {
           </motion.div>
         )}
 
-        {currentScreen === "arrived" && (
+        {currentScreen === ScreenState.Arrived && (
           <motion.div 
             key="arrived"
             initial={{ opacity: 0, scale: 0.95 }}
