@@ -25,44 +25,47 @@ fun ScreenModeSelection(
         modifier = Modifier
             .fillMaxSize()
             .background(WgoWhite)
-            .padding(vertical = 12.dp, horizontal = 12.dp),
+            .padding(top = 28.dp, bottom = 20.dp, start = 16.dp, end = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         // TOP ZONE
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 16.dp)
+            modifier = Modifier.padding(top = 8.dp)
         ) {
             Text(
                 text = destination,
                 color = WgoBlack,
-                style = MaterialTheme.typography.title2,
+                style = MaterialTheme.typography.title3,
                 textAlign = TextAlign.Center,
-                maxLines = 1
+                maxLines = 1,
+                modifier = Modifier.fillMaxWidth(0.8f)
             )
             Spacer(modifier = Modifier.height(4.dp))
             StatusBadge(text = "VOICE ON", variant = StatusBadgeVariant.Primary)
         }
 
+        Spacer(modifier = Modifier.weight(1f))
+
         // ACTION ZONE
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(bottom = 12.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
         ) {
             MassiveButton(
                 onClick = { onSelectMode("drive") },
                 variant = MassiveButtonVariant.Primary
             ) {
-                Text(text = "CONDUCIR")
+                Text(text = "CONDUCIR", style = MaterialTheme.typography.button)
             }
 
             MassiveButton(
                 onClick = { onSelectMode("walk") },
                 variant = MassiveButtonVariant.Inverted
             ) {
-                Text(text = "CAMINAR")
+                Text(text = "CAMINAR", style = MaterialTheme.typography.button)
             }
         }
     }
