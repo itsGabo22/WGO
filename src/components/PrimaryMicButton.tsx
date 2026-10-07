@@ -2,10 +2,10 @@
 
 import React from "react";
 import { Mic } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, HTMLMotionProps } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-interface PrimaryMicButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface PrimaryMicButtonProps extends HTMLMotionProps<"button"> {
   isListening?: boolean;
 }
 
