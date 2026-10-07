@@ -6,6 +6,7 @@ import { ScreenModeSelection } from "@/components/ScreenModeSelection";
 import { ScreenActiveNavigation } from "@/components/ScreenActiveNavigation";
 import { ScreenDestinationReached } from "@/components/ScreenDestinationReached";
 import { GPSLostOverlay } from "@/components/GPSLostOverlay";
+import { GPSDebugTrigger } from "@/components/GPSDebugTrigger";
 import { motion, AnimatePresence } from "framer-motion";
 
 type ScreenState = "listening" | "mode" | "navigation" | "arrived";
@@ -48,14 +49,11 @@ export default function Home() {
 
   return (
     <main className="flex h-full w-full bg-background relative overflow-hidden">
-      {/* Debug GPS Trigger */}
-      <button 
-        onClick={() => setGpsLost(!gpsLost)}
-        className="absolute top-2 left-2 z-50 flex min-h-[48px] min-w-[48px] items-center justify-center p-2 text-xs bg-black/20 text-white rounded-md opacity-50 hover:opacity-100 transition-opacity"
-        aria-label="Simular error de GPS"
-      >
-        GPS
-      </button>
+      <GPSDebugTrigger 
+        gpsLost={gpsLost} 
+        onToggle={() => setGpsLost(!gpsLost)} 
+        className="top-2 left-2" 
+      />
 
       <AnimatePresence mode="wait">
         {currentScreen === "listening" && (
