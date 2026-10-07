@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -14,10 +16,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.material.Chip
+import androidx.wear.compose.material.ChipDefaults
+import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
-import com.wgo.navigator.ui.components.MassiveButton
-import com.wgo.navigator.ui.components.MassiveButtonVariant
 import com.wgo.navigator.ui.components.StatusBadge
 import com.wgo.navigator.ui.components.StatusBadgeVariant
 import com.wgo.navigator.ui.theme.WgoBlack
@@ -36,14 +39,16 @@ fun ScreenListening(
         modifier = Modifier
             .fillMaxSize()
             .background(WgoWhite)
-            .padding(vertical = 12.dp, horizontal = 12.dp),
+            .padding(top = 24.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         // TOP ZONE
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 16.dp)
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .padding(top = 4.dp)
         ) {
             StatusBadge(text = "WGO • NAV", variant = StatusBadgeVariant.Neutral)
             Spacer(modifier = Modifier.height(4.dp))
@@ -58,9 +63,9 @@ fun ScreenListening(
                 Text(
                     text = statusText,
                     color = WgoBlack,
-                    style = MaterialTheme.typography.title2,
+                    style = MaterialTheme.typography.title3,
                     textAlign = TextAlign.Center,
-                    maxLines = 1
+                    maxLines = 2
                 )
             }
         }
@@ -78,14 +83,25 @@ fun ScreenListening(
 
         // BOTTOM ZONE
         Box(
-            modifier = Modifier.padding(bottom = 12.dp)
+            modifier = Modifier.padding(bottom = 8.dp)
         ) {
-            MassiveButton(
+            Chip(
                 onClick = onCancel,
-                variant = MassiveButtonVariant.Secondary,
-            ) {
-                Text(text = "CANCELAR")
-            }
+                colors = ChipDefaults.chipColors(
+                    backgroundColor = androidx.compose.ui.graphics.Color(0xFFF2F4F7),
+                    contentColor = WgoBlack
+                ),
+                label = {
+                    Text(
+                        text = "CANCELAR",
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth(0.7f)
+                    .height(40.dp)
+            )
         }
     }
 }
@@ -113,7 +129,7 @@ fun PrimaryMicButton(
             .clip(CircleShape)
             .background(WgoPrimary.copy(alpha = if (isListening) 0.2f else 0.1f))
             .clickable(onClick = onClick)
-            .semantics { contentDescription = "Activar escucha" },
+            .semantics { contentDescription = "Activar micrófono" },
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -123,11 +139,11 @@ fun PrimaryMicButton(
                 .background(WgoPrimary),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .clip(CircleShape)
-                    .background(WgoWhite)
+            Icon(
+                imageVector = Icons.Rounded.Mic,
+                contentDescription = null,
+                tint = WgoWhite,
+                modifier = Modifier.size(32.dp)
             )
         }
     }
