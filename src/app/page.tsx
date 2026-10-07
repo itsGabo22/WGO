@@ -40,7 +40,7 @@ export default function Home() {
     setCurrentScreen(ScreenState.Listening);
   };
   
-  const handleSelectMode = (mode: "drive" | "walk") => {
+  const handleSelectMode = () => {
     setCurrentScreen(ScreenState.Navigation);
   };
 

@@ -22,6 +22,7 @@ export function ScreenListening({ isListening, onToggleListen, onCancel }: Scree
       }, 1500);
       return () => clearTimeout(timer);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowRouting(false);
     }
   }, [isListening]);
