@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { useTelemetry } from "@/hooks/useTelemetry";
 import { NextTurnIndicator } from "./NextTurnIndicator";
 import { AbstractMinimap } from "./AbstractMinimap";
-import { BottomNavigationHUD } from "./BottomNavigationHUD";
+
 import { X } from "lucide-react";
 
 interface ScreenActiveNavigationProps {
@@ -15,7 +15,7 @@ interface ScreenActiveNavigationProps {
 }
 
 export function ScreenActiveNavigation({ isActive, onCancel, onArrived }: ScreenActiveNavigationProps) {
-  const { data: telemetry, isFinished } = useTelemetry(isActive);
+  const { data: telemetry, isFinished, progress } = useTelemetry(isActive);
 
   useEffect(() => {
     if (isFinished) {
@@ -27,34 +27,36 @@ export function ScreenActiveNavigation({ isActive, onCancel, onArrived }: Screen
 
   return (
     <motion.div 
-      className="flex h-full w-full flex-col items-center justify-between py-6 relative"
+      className="flex h-full w-full flex-col justify-between py-8 px-6"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.3 }}
     >
-      <button 
-        onClick={onCancel}
-        className="absolute top-4 right-4 z-50 flex h-[48px] w-[48px] items-center justify-center rounded-full bg-surface/80 border border-neutral/10 text-black active:scale-90 transition-transform"
-        aria-label="Cancelar navegación"
-      >
-        <X size={20} strokeWidth={2.5} />
-      </button>
-
-      <div className="w-full flex-1 flex flex-col items-center pt-2 gap-4">
+      {/* TOP: Direction, Distance, Instruction */}
+      <div className="flex flex-col items-center justify-start gap-1">
         <NextTurnIndicator 
           instruction={telemetry.instruction}
           distance={telemetry.distanceToTurn}
           turnDirection={telemetry.turnDirection}
         />
-        <AbstractMinimap />
       </div>
 
-      <div className="w-full mb-2">
-        <BottomNavigationHUD 
-          eta={telemetry.eta}
-          totalDistance={telemetry.totalDistance}
-        />
+      {/* CENTER: SVG Minimap */}
+      <div className="flex-1 flex flex-col items-center justify-center w-full my-2">
+        <AbstractMinimap progress={progress} />
+      </div>
+
+      {/* BOTTOM: Cancel Button */}
+      <div className="flex flex-col items-center justify-end w-full pb-2">
+        <button 
+          onClick={onCancel}
+          className="flex h-[48px] min-w-[120px] items-center justify-center gap-2 rounded-full bg-surface/80 border border-neutral/10 text-black active:scale-95 transition-transform px-4"
+          aria-label="Cancelar navegación"
+        >
+          <X size={20} strokeWidth={2.5} />
+          <span className="text-[14px] font-bold tracking-widest">CANCELAR</span>
+        </button>
       </div>
     </motion.div>
   );

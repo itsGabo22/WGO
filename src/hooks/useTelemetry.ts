@@ -34,6 +34,7 @@ export function useTelemetry(isActive: boolean) {
 
   return {
     data: MOCK_ROUTE_STEPS[currentStepIndex],
-    isFinished
+    isFinished,
+    progress: currentStepIndex / Math.max(1, MOCK_ROUTE_STEPS.length - 1)
   };
 }

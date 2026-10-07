@@ -31,7 +31,7 @@ export function AbstractMinimap({ progress = 0 }: AbstractMinimapProps) {
         <path 
           d="M 100 120 L 100 60 C 100 40 120 40 120 40 L 200 40" 
           stroke="#0052FF" 
-          strokeWidth="14" 
+          strokeWidth="20" 
           strokeLinecap="round" 
           strokeLinejoin="round" 
           strokeDasharray="200"
@@ -42,8 +42,8 @@ export function AbstractMinimap({ progress = 0 }: AbstractMinimapProps) {
         <path 
           d="M 100 120 L 100 80" 
           stroke="#000000" 
-          strokeWidth="14" 
-          strokeOpacity="0.15"
+          strokeWidth="20" 
+          strokeOpacity="0.10"
           strokeLinecap="round" 
         />
       </svg>
