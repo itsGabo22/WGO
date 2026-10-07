@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { WearableSimulator } from "@/components/WearableSimulator";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -29,10 +30,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${spaceGrotesk.variable} antialiased`}>
-        {/* Wearable Simulator Wrapper */}
-        <div className="relative w-[340px] h-[340px] bg-background rounded-full overflow-hidden shadow-2xl flex flex-col border-[4px] border-neutral/10">
+        <WearableSimulator>
           {children}
-        </div>
+        </WearableSimulator>
       </body>
     </html>
   );
