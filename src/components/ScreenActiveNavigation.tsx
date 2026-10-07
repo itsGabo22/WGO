@@ -1,18 +1,27 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTelemetry } from "@/hooks/useTelemetry";
 import { NextTurnIndicator } from "./NextTurnIndicator";
 import { AbstractMinimap } from "./AbstractMinimap";
 import { BottomNavigationHUD } from "./BottomNavigationHUD";
+import { X } from "lucide-react";
 
 interface ScreenActiveNavigationProps {
   isActive: boolean;
+  onCancel: () => void;
+  onArrived: () => void;
 }
 
-export function ScreenActiveNavigation({ isActive }: ScreenActiveNavigationProps) {
-  const telemetry = useTelemetry(isActive);
+export function ScreenActiveNavigation({ isActive, onCancel, onArrived }: ScreenActiveNavigationProps) {
+  const { data: telemetry, isFinished } = useTelemetry(isActive);
+
+  useEffect(() => {
+    if (isFinished) {
+      onArrived();
+    }
+  }, [isFinished, onArrived]);
 
   if (!telemetry) return null;
 
@@ -24,6 +33,13 @@ export function ScreenActiveNavigation({ isActive }: ScreenActiveNavigationProps
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.3 }}
     >
+      <button 
+        onClick={onCancel}
+        className="absolute top-4 right-4 z-50 p-2 rounded-full bg-surface/80 border border-neutral/10 text-black active:scale-90 transition-transform"
+      >
+        <X size={20} strokeWidth={2.5} />
+      </button>
+
       <div className="w-full flex-1 flex flex-col items-center pt-2 gap-4">
         <NextTurnIndicator 
           instruction={telemetry.instruction}
