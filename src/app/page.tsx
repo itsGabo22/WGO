@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { ScreenListening } from "@/components/ScreenListening";
 import { ScreenModeSelection } from "@/components/ScreenModeSelection";
 import { ScreenActiveNavigation } from "@/components/ScreenActiveNavigation";
+import { ScreenArrived } from "@/components/ScreenArrived";
 import { motion, AnimatePresence } from "framer-motion";
 
-type ScreenState = "listening" | "mode" | "navigation";
+type ScreenState = "listening" | "mode" | "navigation" | "arrived";
 type TransportMode = "drive" | "walk" | null;
 
 export default function Home() {
@@ -26,6 +27,7 @@ export default function Home() {
   }, [isListening]);
 
   const handleToggleListen = () => setIsListening(true);
+  
   const handleCancel = () => {
     setIsListening(false);
     setCurrentScreen("listening");
@@ -34,6 +36,10 @@ export default function Home() {
   const handleSelectMode = (mode: "drive" | "walk") => {
     setTransportMode(mode);
     setCurrentScreen("navigation");
+  };
+
+  const handleArrived = () => {
+    setCurrentScreen("arrived");
   };
 
   return (
@@ -74,7 +80,24 @@ export default function Home() {
             transition={{ duration: 0.3 }}
             className="w-full h-full absolute inset-0"
           >
-            <ScreenActiveNavigation isActive={true} />
+            <ScreenActiveNavigation 
+              isActive={true} 
+              onCancel={handleCancel} 
+              onArrived={handleArrived} 
+            />
+          </motion.div>
+        )}
+
+        {currentScreen === "arrived" && (
+          <motion.div 
+            key="arrived"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.3 }}
+            className="w-full h-full absolute inset-0"
+          >
+            <ScreenArrived onDismiss={handleCancel} />
           </motion.div>
         )}
       </AnimatePresence>
