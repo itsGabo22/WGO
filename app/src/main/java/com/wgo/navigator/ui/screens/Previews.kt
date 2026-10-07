@@ -13,7 +13,6 @@ fun ScreenListeningPreview() {
             ScreenListening(
                 isListening = false,
                 onToggleListen = {},
-                onCancel = {},
                 onOpenSettings = {}
             )
         }

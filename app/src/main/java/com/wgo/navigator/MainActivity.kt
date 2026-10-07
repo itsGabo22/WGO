@@ -17,6 +17,7 @@ import com.wgo.navigator.ui.screens.ScreenListening
 import com.wgo.navigator.ui.screens.ScreenModeSelection
 import com.wgo.navigator.ui.screens.ScreenSettings
 import com.wgo.navigator.ui.theme.WgoTheme
+import org.osmdroid.config.Configuration
 
 enum class ScreenState {
     Listening, ModeSelection, Navigation, Settings
@@ -27,6 +28,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize osmdroid configuration globally
+        Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE))
+        Configuration.getInstance().userAgentValue = packageName
+
         setContent {
             val isDarkMode by settingsViewModel.isDarkMode.collectAsState()
             val language by settingsViewModel.language.collectAsState()
@@ -52,9 +58,6 @@ class MainActivity : ComponentActivity() {
                                             currentScreen = ScreenState.ModeSelection
                                             isListening = false
                                         }, 2000)
-                                    },
-                                    onCancel = {
-                                        isListening = false
                                     },
                                     onOpenSettings = {
                                         currentScreen = ScreenState.Settings

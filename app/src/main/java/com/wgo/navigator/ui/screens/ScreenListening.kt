@@ -36,7 +36,6 @@ import com.wgo.navigator.ui.theme.WgoWhite
 fun ScreenListening(
     isListening: Boolean,
     onToggleListen: () -> Unit,
-    onCancel: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val statusText = if (isListening) string(StringKey.TITLE_ROUTING) else string(StringKey.TITLE_WHERE_TO)
@@ -47,17 +46,17 @@ fun ScreenListening(
                 .fillMaxSize()
                 .padding(top = 28.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.Center
         ) {
             // TOP ZONE
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .fillMaxWidth(0.85f)
-                    .padding(top = 4.dp)
+                    .padding(bottom = 16.dp)
             ) {
                 StatusBadge(text = "WGO • NAV", variant = StatusBadgeVariant.Neutral)
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 if (isListening) {
                     Text(
                         text = statusText,
@@ -78,36 +77,11 @@ fun ScreenListening(
 
             // CENTER ZONE (Mic)
             Box(
-                modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 PrimaryMicButton(
                     isListening = isListening,
                     onClick = onToggleListen
-                )
-            }
-
-            // BOTTOM ZONE
-            Box(
-                modifier = Modifier.padding(bottom = 8.dp)
-            ) {
-                val isLight = MaterialTheme.colors.background == WgoWhite
-                Chip(
-                    onClick = onCancel,
-                    colors = ChipDefaults.chipColors(
-                        backgroundColor = if (isLight) androidx.compose.ui.graphics.Color(0xFFF2F4F7) else androidx.compose.ui.graphics.Color(0xFF1E1E1E),
-                        contentColor = MaterialTheme.colors.onBackground
-                    ),
-                    label = {
-                        Text(
-                            text = string(StringKey.BTN_CANCEL),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth(0.7f)
-                        .height(40.dp)
                 )
             }
         }
