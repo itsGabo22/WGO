@@ -5,6 +5,7 @@ import { ScreenListening } from "@/components/ScreenListening";
 import { ScreenModeSelection } from "@/components/ScreenModeSelection";
 import { ScreenActiveNavigation } from "@/components/ScreenActiveNavigation";
 import { ScreenDestinationReached } from "@/components/ScreenDestinationReached";
+import { GPSLostOverlay } from "@/components/GPSLostOverlay";
 import { motion, AnimatePresence } from "framer-motion";
 
 type ScreenState = "listening" | "mode" | "navigation" | "arrived";
@@ -14,6 +15,7 @@ export default function Home() {
   const [currentScreen, setCurrentScreen] = useState<ScreenState>("listening");
   const [isListening, setIsListening] = useState(false);
   const [transportMode, setTransportMode] = useState<TransportMode>(null);
+  const [gpsLost, setGpsLost] = useState(false);
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
@@ -31,6 +33,7 @@ export default function Home() {
   const handleReset = () => {
     setIsListening(false);
     setTransportMode(null);
+    setGpsLost(false);
     setCurrentScreen("listening");
   };
   
@@ -45,6 +48,15 @@ export default function Home() {
 
   return (
     <main className="flex h-full w-full bg-background relative overflow-hidden">
+      {/* Debug GPS Trigger */}
+      <button 
+        onClick={() => setGpsLost(!gpsLost)}
+        className="absolute top-2 left-2 z-50 p-2 text-xs bg-black/20 text-white rounded-md opacity-50 hover:opacity-100 transition-opacity"
+        aria-label="Toggle GPS Error"
+      >
+        GPS Debug
+      </button>
+
       <AnimatePresence mode="wait">
         {currentScreen === "listening" && (
           <motion.div 
@@ -82,10 +94,11 @@ export default function Home() {
             className="w-full h-full absolute inset-0"
           >
             <ScreenActiveNavigation 
-              isActive={true} 
+              isActive={!gpsLost} 
               onCancel={handleReset} 
               onArrived={handleArrived} 
             />
+            <GPSLostOverlay isVisible={gpsLost} />
           </motion.div>
         )}
 
