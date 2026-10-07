@@ -11,12 +11,7 @@ interface ScreenModeSelectionProps {
 
 export function ScreenModeSelection({ destination = "Centro Histórico", onSelectMode }: ScreenModeSelectionProps) {
   return (
-    <motion.div 
-      className="flex h-full w-full flex-col items-center py-6"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
-    >
+    <div className="flex h-full w-full flex-col items-center py-6">
       {/* Top Zone */}
       <div className="flex flex-col items-center gap-1 mt-2">
         <StatusBadge variant="primary">VOICE ON</StatusBadge>
@@ -45,6 +40,6 @@ export function ScreenModeSelection({ destination = "Centro Histórico", onSelec
           CAMINAR
         </MassiveButton>
       </div>
-    </motion.div>
+    </div>
   );
 }
