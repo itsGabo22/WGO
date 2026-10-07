@@ -21,14 +21,9 @@ export function ScreenDestinationReached({ onDismiss }: ScreenDestinationReached
       <div className="flex flex-col items-center gap-3">
         <motion.div 
           className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-white mb-2"
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0.2
-          }}
+          initial={{ scale: 0 }}
+          animate={{ scale: [0, 1.2, 1] }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
         >
           <CheckCircle2 size={36} strokeWidth={2.5} />
         </motion.div>
