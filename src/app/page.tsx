@@ -53,7 +53,7 @@ export default function Home() {
       <GPSDebugTrigger 
         gpsLost={gpsLost} 
         onToggle={() => setGpsLost(!gpsLost)} 
-        className="top-2 left-2" 
+        className="top-[40px] left-[40px] scale-75 origin-center" 
       />
 
       <AnimatePresence mode="wait">
