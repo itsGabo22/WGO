@@ -3,7 +3,11 @@
 import React from "react";
 import { motion } from "framer-motion";
 
-export function AbstractMinimap() {
+interface AbstractMinimapProps {
+  progress?: number; // 0 to 1
+}
+
+export function AbstractMinimap({ progress = 0 }: AbstractMinimapProps) {
   return (
     <div className="relative w-full h-[120px] flex items-center justify-center overflow-hidden">
       {/* Background Dot Grid */}
@@ -30,6 +34,9 @@ export function AbstractMinimap() {
           strokeWidth="14" 
           strokeLinecap="round" 
           strokeLinejoin="round" 
+          strokeDasharray="200"
+          strokeDashoffset={200 - (200 * progress)}
+          className="transition-all duration-1000 ease-in-out"
         />
         {/* Trailed path (past) */}
         <path 
