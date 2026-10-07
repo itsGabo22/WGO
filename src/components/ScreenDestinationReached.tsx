@@ -28,7 +28,11 @@ export function ScreenDestinationReached({ onDismiss }: ScreenDestinationReached
           <CheckCircle2 size={36} strokeWidth={2.5} />
         </motion.div>
         
-        <h1 className="text-center text-[24px] font-bold leading-tight tracking-tight text-black max-w-[200px]">
+        <h1 
+          className="text-center text-[24px] font-bold leading-tight tracking-tight text-black max-w-[200px]"
+          role="status"
+          aria-live="polite"
+        >
           Llegaste a tu destino
         </h1>
       </div>
