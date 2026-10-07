@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+
+<html lang="es"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_blank" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">tailwind.config = { darkMode: 'class', theme: { extend: { colors: { 'surface-container': '#eeeeee', 'secondary-container': '#00d2fd', 'primary': '#003ec7', 'surface': '#ffffff', 'on-surface': '#000000', 'secondary': '#00677e', 'on-secondary-fixed': '#001f27', 'secondary-fixed-dim': '#3cd7ff', 'error': '#ba1a1a', 'on-primary': '#ffffff', 'error-container': '#ffdad6', 'on-primary-fixed': '#001452', 'surface-dim': '#dadada', 'on-error': '#ffffff', 'tertiary-container': '#bf3003', 'surface-container-low': '#f3f3f3', 'outline-variant': '#c3c5d9', 'secondary-fixed': '#b4ebff', 'tertiary-fixed-dim': '#ffb4a1', 'on-tertiary': '#ffffff', 'surface-container-high': '#e8e8e8', 'surface-container-lowest': '#ffffff', 'on-secondary-container': '#005669', 'surface-variant': '#e2e2e2', 'on-error-container': '#93000a', 'on-secondary': '#ffffff', 'on-surface-variant': '#434656', 'surface-container-highest': '#e2e2e2', 'background': '#ffffff', 'primary-fixed': '#dde1ff', 'primary-container': '#0052ff', 'on-primary-fixed-variant': '#0038b6', 'surface-tint': '#004ced', 'inverse-surface': '#1b1b1b', 'on-tertiary-container': '#ffddd5', 'inverse-primary': '#b7c4ff', 'on-secondary-fixed-variant': '#004e5f', 'on-background': '#000000', 'primary-fixed-dim': '#b7c4ff', 'on-tertiary-fixed-variant': '#891e00', 'inverse-on-surface': '#f1f1f1', 'on-primary-container': '#dfe3ff', 'outline': '#737688', 'surface-bright': '#ffffff', 'on-tertiary-fixed': '#3c0800', 'tertiary': '#952200', 'tertiary-fixed': '#ffdbd2' }, borderRadius: { DEFAULT: '1rem', lg: '2rem', xl: '3rem', full: '9999px' }, spacing: { 'space-xl': '1.5rem', 'gutter': '0.5rem', 'space-sm': '0.5rem', 'space-lg': '1rem', 'margin': '1rem', 'space-xs': '0.25rem', 'space-md': '0.75rem' }, fontFamily: { 'label-lg': ['Space Grotesk', 'sans-serif'], 'body-lg': ['Space Grotesk', 'sans-serif'], 'label-md': ['Space Grotesk', 'sans-serif'], 'body-md': ['Space Grotesk', 'sans-serif'], 'headline-lg': ['Space Grotesk', 'sans-serif'], 'headline-md': ['Space Grotesk', 'sans-serif'], 'label-sm': ['Space Grotesk', 'sans-serif'], 'headline-sm': ['Space Grotesk', 'sans-serif'] }, fontSize: { 'label-lg': ['13px', { lineHeight: '16px', letterSpacing: '0.04em', fontWeight: '700' }], 'body-lg': ['16px', { lineHeight: '20px', letterSpacing: '0em', fontWeight: '500' }], 'label-md': ['11px', { lineHeight: '14px', letterSpacing: '0.08em', fontWeight: '700' }], 'body-md': ['14px', { lineHeight: '18px', letterSpacing: '0em', fontWeight: '500' }], 'headline-lg': ['26px', { lineHeight: '30px', letterSpacing: '-0.03em', fontWeight: '700' }], 'headline-md': ['20px', { lineHeight: '24px', letterSpacing: '-0.02em', fontWeight: '700' }], 'label-sm': ['9px', { lineHeight: '12px', letterSpacing: '0.12em', fontWeight: '700' }], 'headline-sm': ['17px', { lineHeight: '20px', letterSpacing: '-0.01em', fontWeight: '600' }] } } } };</script><style>@layer base{html,body{width:100vw;min-height:100vh;margin:0;padding:0;font-family:'Space Grotesk',sans-serif;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head><body class="bg-neutral-950 min-h-screen w-full flex items-center justify-center p-4 selection:bg-primary-container selection:text-white"><div class="flex flex-col items-center gap-5 select-none w-full max-w-[480px]"><!-- Form Factor Switcher --><div class="flex items-center gap-1 p-1 bg-neutral-900/95 backdrop-blur-md rounded-full shadow-2xl border border-neutral-800 z-30"><button class="px-3 py-1.5 rounded-full text-[11px] font-bold tracking-wide uppercase transition-all duration-150 bg-primary-container text-white shadow-sm flex items-center gap-1.5" id="btn-ff-compact" onclick="setFormFactor('compact')"><span class="material-symbols-outlined text-[14px]">circle</span><span>Compacto 40mm</span></button><button class="px-3 py-1.5 rounded-full text-[11px] font-bold tracking-wide uppercase transition-all duration-150 text-neutral-400 hover:text-white flex items-center gap-1.5" id="btn-ff-large" onclick="setFormFactor('large')"><span class="material-symbols-outlined text-[14px]">radio_button_unchecked</span><span>Grande 46mm</span></button><button class="px-3 py-1.5 rounded-full text-[11px] font-bold tracking-wide uppercase transition-all duration-150 text-neutral-400 hover:text-white flex items-center gap-1.5" id="btn-ff-rect" onclick="setFormFactor('rect')"><span class="material-symbols-outlined text-[14px]">watch</span><span>Rectangular</span></button></div><!-- Wearable Device Simulation Container --><div class="relative w-[390px] h-[390px] rounded-full p-[14px] bg-[#121212] ring-1 ring-neutral-800/80 shadow-[0_25px_70px_rgba(0,0,0,0.8)] flex items-center justify-center transition-all duration-300 ease-out" id="device-bezel"><div class="relative w-full h-full rounded-full bg-white overflow-hidden flex flex-col items-center justify-center transition-all duration-300 ease-out" id="device-screen"><!-- Decorative circular reference / safe zone --><div class="absolute inset-3 rounded-full pointer-events-none opacity-20 transition-all duration-300" id="safe-ring"><svg class="w-full h-full animate-[spin_50s_linear_infinite]" viewbox="0 0 100 100"><circle cx="50" cy="50" fill="none" r="48" stroke="#0052ff" stroke-dasharray="2 6" stroke-width="0.8"></circle></svg></div><!-- Inner Watch Safe-Area Layout --><div class="relative flex flex-col w-full h-full items-center justify-between px-8 pt-7 pb-6 z-10 transition-all duration-300" id="content-wrapper"><!-- HEADER ZONE: Clean hierarchy, removed redundant microcopy --><header class="flex flex-col items-center text-center w-full max-w-[240px] pt-1 z-10 transition-all duration-200" id="header-zone"><div class="flex items-center justify-center gap-1.5 mb-1"><span class="inline-flex items-center px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-900 font-label-sm text-[9px] tracking-widest font-bold uppercase">DESTINO</span><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-primary-container font-label-sm text-[9px] tracking-wider font-bold"><span class="material-symbols-outlined text-[11px] leading-none text-primary-container" style="font-variation-settings: 'FILL' 1;">volume_up</span>VOICE ON</span></div><h1 class="font-headline-md text-[18px] text-black font-bold leading-tight tracking-tight max-w-[220px] truncate" id="dest-title">Centro Histórico</h1></header><!-- CENTER ZONE: Dominant 1-touch transport options with generous touch targets (>= 48dp) --><section aria-label="Seleccionar medio de transporte" class="flex flex-col items-center justify-center gap-2 w-full max-w-[250px] z-10 transition-all duration-200" id="mode-options"><!-- Mode: Conducir (Active Default) --><button class="group relative w-full h-[52px] px-3.5 rounded-2xl bg-primary-container text-white flex items-center justify-between shadow-md active:scale-95 transition-all duration-100 cursor-pointer overflow-hidden border border-primary-container" id="mode-drive" onclick="selectMode('drive')" type="button"><div class="flex items-center gap-2.5 min-w-0"><div class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0"><svg class="w-5 h-5 fill-current text-white" viewbox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"></path></svg></div><div class="flex flex-col text-left min-w-0"><span class="font-headline-sm text-[15px] font-bold uppercase tracking-wide leading-none text-white">Conducir</span><span class="font-label-sm text-[10px] text-white/80 font-medium truncate mt-0.5">Iniciar en auto</span></div></div><span class="material-symbols-outlined text-[18px] shrink-0 text-white" style="font-variation-settings: 'FILL' 1;">arrow_forward</span></button><!-- Mode: Caminar --><button class="group relative w-full h-[52px] px-3.5 rounded-2xl bg-neutral-100 text-neutral-900 flex items-center justify-between shadow-sm active:scale-95 transition-all duration-100 cursor-pointer overflow-hidden border border-neutral-200/80" id="mode-walk" onclick="selectMode('walk')" type="button"><div class="flex items-center gap-2.5 min-w-0"><div class="w-9 h-9 rounded-full bg-neutral-200 flex items-center justify-center shrink-0"><svg class="w-5 h-5 fill-current text-neutral-900" viewbox="0 0 24 24"><path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7z"></path></svg></div><div class="flex flex-col text-left min-w-0"><span class="font-headline-sm text-[15px] font-bold uppercase tracking-wide leading-none text-neutral-900">Caminar</span><span class="font-label-sm text-[10px] text-neutral-500 font-medium truncate mt-0.5">Iniciar a pie</span></div></div><span class="material-symbols-outlined text-[18px] shrink-0 text-neutral-600" style="font-variation-settings: 'FILL' 1;">arrow_forward</span></button></section><!-- FOOTER ZONE: Safely elevated above circular bottom bezel --><footer class="flex flex-col items-center justify-center pb-2 z-10 w-full transition-all duration-200" id="footer-zone"><button class="h-8 px-4 rounded-full bg-neutral-100 text-neutral-800 border border-neutral-200/70 flex items-center justify-center gap-1.5 active:bg-neutral-900 active:text-white transition-all duration-100 cursor-pointer shadow-sm hover:bg-neutral-200" id="cancel-btn" onclick="handleCancel()" type="button"><span class="material-symbols-outlined text-[13px] leading-none font-bold">close</span><span class="font-label-md text-[11px] uppercase tracking-wider font-bold">Cancelar</span></button></footer></div></div></div></div><script>function setFormFactor(mode) {
+  const bezel = document.getElementById('device-bezel');
+  const screen = document.getElementById('device-screen');
+  const wrapper = document.getElementById('content-wrapper');
+  const ring = document.getElementById('safe-ring');
+  const modeSection = document.getElementById('mode-options');
+  const destTitle = document.getElementById('dest-title');
+  const headerZone = document.getElementById('header-zone');
+  const footerZone = document.getElementById('footer-zone');
+  const btnDrive = document.getElementById('mode-drive');
+  const btnWalk = document.getElementById('mode-walk');
+
+  const btnCompact = document.getElementById('btn-ff-compact');
+  const btnLarge = document.getElementById('btn-ff-large');
+  const btnRect = document.getElementById('btn-ff-rect');
+
+  [btnCompact, btnLarge, btnRect].forEach(b => {
+    b.className = 'px-3 py-1.5 rounded-full text-[11px] font-bold tracking-wide uppercase transition-all duration-150 text-neutral-400 hover:text-white flex items-center gap-1.5';
+  });
+
+  if (mode === 'compact') {
+    btnCompact.className = 'px-3 py-1.5 rounded-full text-[11px] font-bold tracking-wide uppercase transition-all duration-150 bg-primary-container text-white shadow-sm flex items-center gap-1.5';
+    bezel.className = 'relative w-[390px] h-[390px] rounded-full p-[14px] bg-[#121212] ring-1 ring-neutral-800/80 shadow-[0_25px_70px_rgba(0,0,0,0.8)] flex items-center justify-center transition-all duration-300 ease-out';
+    screen.className = 'relative w-full h-full rounded-full bg-white overflow-hidden flex flex-col items-center justify-center transition-all duration-300 ease-out';
+    ring.style.display = 'block';
+    ring.className = 'absolute inset-3 rounded-full pointer-events-none opacity-20 transition-all duration-300';
+    wrapper.className = 'relative flex flex-col w-full h-full items-center justify-between px-8 pt-7 pb-6 z-10 transition-all duration-300';
+    headerZone.className = 'flex flex-col items-center text-center w-full max-w-[240px] pt-1 z-10 transition-all duration-200';
+    destTitle.className = 'font-headline-md text-[18px] text-black font-bold leading-tight tracking-tight max-w-[220px] truncate';
+    modeSection.className = 'flex flex-col items-center justify-center gap-2 w-full max-w-[250px] z-10 transition-all duration-200';
+    btnDrive.className = btnDrive.className.replace(/h-\[\d+px\]/, 'h-[52px]').replace(/max-w-\S+/, '');
+    btnWalk.className = btnWalk.className.replace(/h-\[\d+px\]/, 'h-[52px]').replace(/max-w-\S+/, '');
+    footerZone.className = 'flex flex-col items-center justify-center pb-2 z-10 w-full transition-all duration-200';
+  } else if (mode === 'large') {
+    btnLarge.className = 'px-3 py-1.5 rounded-full text-[11px] font-bold tracking-wide uppercase transition-all duration-150 bg-primary-container text-white shadow-sm flex items-center gap-1.5';
+    bezel.className = 'relative w-[440px] h-[440px] rounded-full p-[16px] bg-[#121212] ring-1 ring-neutral-800/80 shadow-[0_25px_70px_rgba(0,0,0,0.8)] flex items-center justify-center transition-all duration-300 ease-out';
+    screen.className = 'relative w-full h-full rounded-full bg-white overflow-hidden flex flex-col items-center justify-center transition-all duration-300 ease-out';
+    ring.style.display = 'block';
+    ring.className = 'absolute inset-4 rounded-full pointer-events-none opacity-20 transition-all duration-300';
+    wrapper.className = 'relative flex flex-col w-full h-full items-center justify-between px-10 pt-9 pb-8 z-10 transition-all duration-300';
+    headerZone.className = 'flex flex-col items-center text-center w-full max-w-[270px] pt-2 z-10 transition-all duration-200';
+    destTitle.className = 'font-headline-md text-[22px] text-black font-bold leading-tight tracking-tight max-w-[260px] truncate';
+    modeSection.className = 'flex flex-col items-center justify-center gap-3 w-full max-w-[290px] z-10 transition-all duration-200';
+    btnDrive.className = btnDrive.className.replace(/h-\[\d+px\]/, 'h-[58px]');
+    btnWalk.className = btnWalk.className.replace(/h-\[\d+px\]/, 'h-[58px]');
+    footerZone.className = 'flex flex-col items-center justify-center pb-2 z-10 w-full transition-all duration-200';
+  } else if (mode === 'rect') {
+    btnRect.className = 'px-3 py-1.5 rounded-full text-[11px] font-bold tracking-wide uppercase transition-all duration-150 bg-primary-container text-white shadow-sm flex items-center gap-1.5';
+    bezel.className = 'relative w-[360px] h-[440px] rounded-[44px] p-[12px] bg-[#121212] ring-1 ring-neutral-800/80 shadow-[0_25px_70px_rgba(0,0,0,0.8)] flex items-center justify-center transition-all duration-300 ease-out';
+    screen.className = 'relative w-full h-full rounded-[34px] bg-white overflow-hidden flex flex-col items-center justify-center transition-all duration-300 ease-out';
+    ring.style.display = 'none';
+    wrapper.className = 'relative flex flex-col w-full h-full items-center justify-between px-5 pt-6 pb-5 z-10 transition-all duration-300';
+    headerZone.className = 'flex flex-col items-center text-center w-full max-w-[300px] pt-1 z-10 transition-all duration-200';
+    destTitle.className = 'font-headline-md text-[21px] text-black font-bold leading-tight tracking-tight max-w-[290px] truncate';
+    modeSection.className = 'flex flex-col items-center justify-center gap-3 w-full max-w-[310px] z-10 transition-all duration-200';
+    btnDrive.className = btnDrive.className.replace(/h-\[\d+px\]/, 'h-[58px]');
+    btnWalk.className = btnWalk.className.replace(/h-\[\d+px\]/, 'h-[58px]');
+    footerZone.className = 'flex flex-col items-center justify-center pb-1 z-10 w-full transition-all duration-200';
+  }
+}
+
+function selectMode(type) {
+  const driveBtn = document.getElementById('mode-drive');
+  const walkBtn = document.getElementById('mode-walk');
+  if (!driveBtn || !walkBtn) return;
+
+  const currentHeight = driveBtn.classList.contains('h-[58px]') ? 'h-[58px]' : 'h-[52px]';
+
+  if (type === 'drive') {
+    driveBtn.className = `group relative w-full ${currentHeight} px-3.5 rounded-2xl bg-primary-container text-white flex items-center justify-between shadow-md active:scale-95 transition-all duration-100 cursor-pointer overflow-hidden border border-primary-container`;
+    driveBtn.querySelector('div > div:first-child').className = 'w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0';
+    driveBtn.querySelector('div > div:first-child svg').setAttribute('class', 'w-5 h-5 fill-current text-white');
+    driveBtn.querySelector('div > div:last-child > span:first-child').className = 'font-headline-sm text-[15px] font-bold uppercase tracking-wide leading-none text-white';
+    driveBtn.querySelector('div > div:last-child > span:last-child').className = 'font-label-sm text-[10px] text-white/80 font-medium truncate mt-0.5';
+    driveBtn.querySelector('span.material-symbols-outlined').className = 'material-symbols-outlined text-[18px] shrink-0 text-white';
+
+    walkBtn.className = `group relative w-full ${currentHeight} px-3.5 rounded-2xl bg-neutral-100 text-neutral-900 flex items-center justify-between shadow-sm active:scale-95 transition-all duration-100 cursor-pointer overflow-hidden border border-neutral-200/80`;
+    walkBtn.querySelector('div > div:first-child').className = 'w-9 h-9 rounded-full bg-neutral-200 flex items-center justify-center shrink-0';
+    walkBtn.querySelector('div > div:first-child svg').setAttribute('class', 'w-5 h-5 fill-current text-neutral-900');
+    walkBtn.querySelector('div > div:last-child > span:first-child').className = 'font-headline-sm text-[15px] font-bold uppercase tracking-wide leading-none text-neutral-900';
+    walkBtn.querySelector('div > div:last-child > span:last-child').className = 'font-label-sm text-[10px] text-neutral-500 font-medium truncate mt-0.5';
+    walkBtn.querySelector('span.material-symbols-outlined').className = 'material-symbols-outlined text-[18px] shrink-0 text-neutral-600';
+  } else {
+    walkBtn.className = `group relative w-full ${currentHeight} px-3.5 rounded-2xl bg-primary-container text-white flex items-center justify-between shadow-md active:scale-95 transition-all duration-100 cursor-pointer overflow-hidden border border-primary-container`;
+    walkBtn.querySelector('div > div:first-child').className = 'w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0';
+    walkBtn.querySelector('div > div:first-child svg').setAttribute('class', 'w-5 h-5 fill-current text-white');
+    walkBtn.querySelector('div > div:last-child > span:first-child').className = 'font-headline-sm text-[15px] font-bold uppercase tracking-wide leading-none text-white';
+    walkBtn.querySelector('div > div:last-child > span:last-child').className = 'font-label-sm text-[10px] text-white/80 font-medium truncate mt-0.5';
+    walkBtn.querySelector('span.material-symbols-outlined').className = 'material-symbols-outlined text-[18px] shrink-0 text-white';
+
+    driveBtn.className = `group relative w-full ${currentHeight} px-3.5 rounded-2xl bg-neutral-100 text-neutral-900 flex items-center justify-between shadow-sm active:scale-95 transition-all duration-100 cursor-pointer overflow-hidden border border-neutral-200/80`;
+    driveBtn.querySelector('div > div:first-child').className = 'w-9 h-9 rounded-full bg-neutral-200 flex items-center justify-center shrink-0';
+    driveBtn.querySelector('div > div:first-child svg').setAttribute('class', 'w-5 h-5 fill-current text-neutral-900');
+    driveBtn.querySelector('div > div:last-child > span:first-child').className = 'font-headline-sm text-[15px] font-bold uppercase tracking-wide leading-none text-neutral-900';
+    driveBtn.querySelector('div > div:last-child > span:last-child').className = 'font-label-sm text-[10px] text-neutral-500 font-medium truncate mt-0.5';
+    driveBtn.querySelector('span.material-symbols-outlined').className = 'material-symbols-outlined text-[18px] shrink-0 text-neutral-600';
+  }
+}
+
+function handleCancel() {
+  const btn = document.getElementById('cancel-btn');
+  if (!btn) return;
+  btn.style.transform = 'scale(0.92)';
+  setTimeout(() => {
+    btn.style.transform = 'scale(1)';
+  }, 150);
+}</script></body></html>
