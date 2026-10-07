@@ -25,6 +25,22 @@ val WgoLightColors = Colors(
     onSurfaceVariant = WgoBlack
 )
 
+val WgoDarkColors = Colors(
+    primary = WgoPrimary,
+    primaryVariant = WgoPrimary,
+    secondary = WgoPrimary,
+    secondaryVariant = WgoPrimary,
+    error = Color(0xFFF2B8B5),
+    onPrimary = WgoWhite,
+    onSecondary = WgoWhite,
+    onError = WgoBlack,
+    background = WgoBlack,
+    onBackground = WgoWhite,
+    surface = WgoBlack,
+    onSurface = WgoWhite,
+    onSurfaceVariant = WgoWhite
+)
+
 val WgoTypography = Typography(
     display1 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold, fontSize = 40.sp),
     display2 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold, fontSize = 34.sp),
@@ -41,11 +57,13 @@ val WgoTypography = Typography(
 
 @Composable
 fun WgoTheme(
+    isDarkMode: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    // Explicitly forcing Light Theme by passing the same WgoLightColors
+    val colors = if (isDarkMode) WgoDarkColors else WgoLightColors
+
     MaterialTheme(
-        colors = WgoLightColors,
+        colors = colors,
         typography = WgoTypography,
         content = content
     )
