@@ -19,6 +19,11 @@ body {
   overflow: hidden;
 }
 
+/* Base utility for focus */
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* Base utility for hiding scrollbars but allowing scroll if ever needed */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
