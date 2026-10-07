@@ -36,4 +36,11 @@ export const MOCK_ROUTE_STEPS: TelemetryData[] = [
     totalDistance: "2.2 km",
     turnDirection: "left",
   },
+  {
+    instruction: "Llegando a tu destino",
+    distanceToTurn: "0m",
+    eta: "0 min",
+    totalDistance: "0 km",
+    turnDirection: "straight",
+  },
 ];
