@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@theme {
+  --color-background: #FFFFFF;
+  --color-foreground: #000000;
+  --color-primary: #0052FF;
+  --color-primary-hover: #0038B6;
+  --color-secondary: #00D4FF;
+  --color-neutral: #000000;
+  --color-surface: #F2F4F7;
+  --color-surface-outline: #E1E4EA;
+  --font-sans: var(--font-space-grotesk);
+}
+
 :root {
   --background: #FFFFFF;
   --foreground: #000000;
