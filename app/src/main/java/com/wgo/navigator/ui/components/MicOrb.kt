@@ -27,7 +27,9 @@ import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.string
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoClock
+import com.wgo.navigator.ui.theme.atLeastRealDp
 import com.wgo.navigator.ui.theme.rememberWgoClock
+import com.wgo.navigator.ui.theme.wgoMinTouch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -77,6 +79,7 @@ fun MicOrb(
 
     Box(
         modifier = modifier
+            .wgoMinTouch()
             .size(OrbSize)
             .drawBehind {
                 val t = sharedClock ?: return@drawBehind
@@ -121,7 +124,7 @@ fun MicOrb(
                 }
                 .clip(CircleShape)
                 .background(palette.primary)
-                .then(if (state == MicState.Idle) Modifier.border(1.dp, OrbIdleBorder, CircleShape) else Modifier),
+                .then(if (state == MicState.Idle) Modifier.border(1.dp.atLeastRealDp(), OrbIdleBorder, CircleShape) else Modifier),
             contentAlignment = Alignment.Center
         ) {
             Icon(
