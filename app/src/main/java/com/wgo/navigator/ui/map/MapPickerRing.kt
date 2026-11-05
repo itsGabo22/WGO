@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -30,7 +31,7 @@ private const val INACTIVE_ALPHA = 0.42f
 @Composable
 fun MapPickerRing(index: () -> Float, modifier: Modifier = Modifier) {
     val pointerColor = Wgo.palette.ink
-    Canvas(modifier = modifier.fillMaxSize().clearAndSetSemantics { }) {
+    Canvas(modifier = modifier.fillMaxSize().graphicsLayer().clearAndSetSemantics { }) {
         val u = size.width / 227f
         val center = size.center
         val k = index()
