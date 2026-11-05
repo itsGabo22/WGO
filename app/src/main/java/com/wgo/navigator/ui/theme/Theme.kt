@@ -1,58 +1,25 @@
 package com.wgo.navigator.ui.theme
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.wear.compose.material.Colors
 import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.Typography
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.graphics.Color
 
-val WgoLightColors = Colors(
-    primary = WgoPrimary,
-    primaryVariant = WgoPrimary,
-    secondary = WgoPrimary,
-    secondaryVariant = WgoPrimary,
-    error = Color(0xFFB3261E),
-    onPrimary = WgoWhite,
-    onSecondary = WgoWhite,
-    onError = WgoWhite,
-    background = WgoWhite,
-    onBackground = WgoBlack,
-    surface = Color(0xFFF2F4F7),
-    onSurface = WgoBlack,
-    onSurfaceVariant = WgoBlack
-)
-
-val WgoDarkColors = Colors(
-    primary = WgoPrimary,
-    primaryVariant = WgoPrimary,
-    secondary = WgoPrimary,
-    secondaryVariant = WgoPrimary,
-    error = Color(0xFFF2B8B5),
-    onPrimary = WgoWhite,
-    onSecondary = WgoWhite,
-    onError = WgoBlack,
-    background = WgoBlack,
-    onBackground = WgoWhite,
-    surface = Color(0xFF1E1E1E),
-    onSurface = WgoWhite,
-    onSurfaceVariant = WgoWhite
-)
-
-val WgoTypography = Typography(
-    display1 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold, fontSize = 40.sp),
-    display2 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold, fontSize = 34.sp),
-    display3 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold, fontSize = 30.sp),
-    title1 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold, fontSize = 24.sp),
-    title2 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold, fontSize = 20.sp),
-    title3 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold, fontSize = 16.sp),
-    body1 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Normal, fontSize = 16.sp),
-    body2 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Normal, fontSize = 14.sp),
-    button = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = 1.sp),
-    caption1 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Medium, fontSize = 14.sp),
-    caption2 = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+/** Wear Material 2 colors derived from the WGO palette (canvas, ink, primary, alert). */
+private fun WgoPalette.toWearColors() = Colors(
+    primary = primary,
+    primaryVariant = primary,
+    secondary = primary,
+    secondaryVariant = primary,
+    error = alert,
+    onPrimary = onPrimary,
+    onSecondary = onPrimary,
+    onError = onAlert,
+    background = canvas,
+    onBackground = ink,
+    surface = surface,
+    onSurface = ink,
+    onSurfaceVariant = ink
 )
 
 @Composable
@@ -60,11 +27,13 @@ fun WgoTheme(
     isDarkMode: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colors = if (isDarkMode) WgoDarkColors else WgoLightColors
+    val palette = if (isDarkMode) NightPalette else DaylightPalette
 
-    MaterialTheme(
-        colors = colors,
-        typography = WgoTypography,
-        content = content
-    )
+    CompositionLocalProvider(LocalWgoPalette provides palette) {
+        MaterialTheme(
+            colors = palette.toWearColors(),
+            typography = WgoTypography,
+            content = content
+        )
+    }
 }
