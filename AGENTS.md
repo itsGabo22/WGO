@@ -43,6 +43,14 @@ WGO is a **100% native Wear OS app** (Kotlin + Jetpack Compose for Wear OS; no w
 * Haptics are emitted from ViewModels, never from composables.
 * Map styles are original genre-inspired looks. Never use the name, logo, icon or art of any video game, in code, strings, comments or commit messages.
 
+## UI conventions
+
+* One `WgoClock` (`rememberWgoClock()`) per screen, created at screen level and passed to every looping piece. Pieces read it only inside draw / `graphicsLayer` lambdas, so nothing recomposes per frame. Do not add `InfiniteTransition`s.
+* Respect reduce motion everywhere: read `LocalWgoReduceMotion` (provided by `WgoTheme`), use static states for loops and `orCut()` / 120 ms cuts for transitions.
+* Icons are hand-drawn `ImageVector`s in `WgoIcons` (24 grid, 2 dp round stroke). Do not add `material-icons-extended` usages in new code.
+* Haptics: ViewModels emit `HapticEvent`s through a `SharedFlow`; `MainActivity` plays them. Composables never touch the vibrator.
+* Every commit must compile (`assembleDebug` exit 0), so history stays bisectable. Changes that must land together go in one commit.
+
 ## Git
 
 * Atomic Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...), one concern per commit.
