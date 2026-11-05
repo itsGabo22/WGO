@@ -30,14 +30,16 @@ fun wgoScreenTransition(
     mode: TravelMode?,
     reduceMotion: Boolean
 ): ContentTransform {
-    if (from == to || from == ScreenState.Settings || to == ScreenState.Settings) {
+    val involvesSettings = from == ScreenState.Settings || to == ScreenState.Settings
+    val involvesPicker = from == ScreenState.MapPicker || to == ScreenState.MapPicker
+    if (from == to || (involvesSettings && !involvesPicker)) {
         return EnterTransition.None togetherWith ExitTransition.None
     }
     if (reduceMotion) {
         return fadeIn(tween(WgoMotion.SNAP)) togetherWith fadeOut(tween(WgoMotion.SNAP))
     }
     return when {
-        to == ScreenState.Listening -> {
+        to == ScreenState.Listening || (from == ScreenState.MapPicker && to == ScreenState.Settings) -> {
             val accel = tween<Float>(WgoMotion.EXIT, easing = WgoMotion.EmphasizedAccel)
             EnterTransition.None togetherWith (fadeOut(accel) + scaleOut(accel, targetScale = 0.96f))
         }

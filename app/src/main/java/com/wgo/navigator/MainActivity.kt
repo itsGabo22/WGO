@@ -30,6 +30,7 @@ import androidx.wear.compose.material.Scaffold
 import com.wgo.navigator.ui.LocalLanguage
 import com.wgo.navigator.ui.screens.ScreenActiveNavigation
 import com.wgo.navigator.ui.screens.ScreenListening
+import com.wgo.navigator.ui.screens.ScreenMapPicker
 import com.wgo.navigator.ui.screens.ScreenModeSelection
 import com.wgo.navigator.ui.screens.ScreenSettings
 import com.wgo.navigator.ui.map.WgoMapConfig
@@ -39,7 +40,7 @@ import com.wgo.navigator.ui.theme.WgoTheme
 import kotlinx.coroutines.runBlocking
 
 enum class ScreenState {
-    Listening, ModeSelection, Navigation, Settings
+    Listening, ModeSelection, Navigation, Settings, MapPicker
 }
 
 class MainActivity : ComponentActivity() {
@@ -91,7 +92,9 @@ class MainActivity : ComponentActivity() {
                     val reduceMotion = LocalWgoReduceMotion.current
 
                     // Back leaves mode selection, navigation and settings for the listening screen.
-                    BackHandler(enabled = currentScreen != ScreenState.Listening) { appViewModel.backToListening() }
+                    BackHandler(enabled = currentScreen != ScreenState.Listening) {
+                        if (currentScreen == ScreenState.MapPicker) appViewModel.backToSettings() else appViewModel.backToListening()
+                    }
 
                     Scaffold(
                         timeText = { 
@@ -127,6 +130,16 @@ class MainActivity : ComponentActivity() {
                                 ScreenActiveNavigation(
                                     onCancel = appViewModel::backToListening,
                                     mapStyleId = mapStyleId
+                                )
+                            }
+                            ScreenState.MapPicker -> {
+                                ScreenMapPicker(
+                                    currentStyle = mapStyleId,
+                                    onUse = { style ->
+                                        settingsViewModel.commitMapStyle(style)
+                                        appViewModel.backToSettings()
+                                    },
+                                    onStep = settingsViewModel::onMapPickerStep
                                 )
                             }
                             ScreenState.Settings -> {

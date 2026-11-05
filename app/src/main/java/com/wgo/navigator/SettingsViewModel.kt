@@ -55,6 +55,17 @@ class SettingsViewModel(
         _haptics.tryEmit(HapticEvent.Click)
     }
 
+    /** One Tick per style step in the map picker. */
+    fun onMapPickerStep() {
+        _haptics.tryEmit(HapticEvent.Tick)
+    }
+
+    /** USAR in the map picker: persist the style and confirm with a Click. */
+    fun commitMapStyle(style: MapStyleId) {
+        setMapStyle(style)
+        _haptics.tryEmit(HapticEvent.Click)
+    }
+
     fun setMapStyle(style: MapStyleId) {
         _mapStyle.value = style
         viewModelScope.launch { repository.setMapStyle(style) }

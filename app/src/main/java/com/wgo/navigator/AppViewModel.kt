@@ -72,6 +72,15 @@ class AppViewModel : ViewModel(), HapticSource {
         _screen.value = ScreenState.Settings
     }
 
+    fun openMapPicker() {
+        _screen.value = ScreenState.MapPicker
+    }
+
+    /** Back from the map picker to Settings (the style is unchanged unless USAR committed it). */
+    fun backToSettings() {
+        _screen.value = ScreenState.Settings
+    }
+
     private companion object {
         const val LISTENING_MS = 1200L
         const val PROCESSING_MS = 800L // listening + processing = the previous 2000 ms
