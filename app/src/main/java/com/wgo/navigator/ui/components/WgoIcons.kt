@@ -46,6 +46,14 @@ object WgoIcons {
     /** Maneuver icon with a custom stroke (the TurnCard uses 2.6). */
     fun turnRight(strokeWidth: Float = 2f): ImageVector =
         icon("TurnRight", strokeWidth, "M6 20v-8a4 4 0 0 1 4-4h8", "M14 4l4 4-4 4")
+    /** Gear: center hub, outer ring and eight teeth. */
+    val Settings = icon(
+        "Settings",
+        "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+        "M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z",
+        "M12 2.5v3.5 M12 18v3.5 M2.5 12H6 M18 12h3.5",
+        "M5.3 5.3l2.5 2.5 M16.2 16.2l2.5 2.5 M5.3 18.7l2.5-2.5 M16.2 7.8l2.5-2.5"
+    )
     val Check = icon("Check", "M5 12.5l4.5 4.5L19 7")
     val Close = icon("Close", "M6 6l12 12", "M18 6L6 18")
     val DirectionsCar = icon(
