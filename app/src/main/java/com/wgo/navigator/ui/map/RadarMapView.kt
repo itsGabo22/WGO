@@ -1,6 +1,7 @@
 package com.wgo.navigator.ui.map
 
 import android.graphics.ColorMatrixColorFilter
+import android.view.MotionEvent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
@@ -59,7 +60,10 @@ fun RadarMapView(
             isHorizontalMapRepetitionEnabled = false
             isVerticalMapRepetitionEnabled = false
             // Static radar: swallow touches so the map cannot be panned.
-            setOnTouchListener { _, _ -> true }
+            setOnTouchListener { view, event ->
+                if (event.action == MotionEvent.ACTION_UP) view.performClick()
+                true
+            }
         }
     }
 
