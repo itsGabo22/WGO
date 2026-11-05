@@ -45,17 +45,17 @@ private fun TogglePiece() = SegmentedToggle(listOf("Claro", "Oscuro"), selectedI
 @Composable
 private fun LanguagePiece() = LanguageSwitch(language = Language.ES, onToggle = {})
 
-@WgoPreview @Composable private fun GalleryButtonDaylight() = Gallery(false) { ButtonPiece() }
-@WgoPreview @Composable private fun GalleryButtonNight() = Gallery(true) { ButtonPiece() }
-@WgoPreview @Composable private fun GalleryBadgeDaylight() = Gallery(false) { BadgePiece() }
-@WgoPreview @Composable private fun GalleryBadgeNight() = Gallery(true) { BadgePiece() }
-@WgoPreview @Composable private fun GalleryBezelDaylight() = Gallery(false) { BezelPiece() }
-@WgoPreview @Composable private fun GalleryBezelNight() = Gallery(true) { BezelPiece() }
-@WgoPreview @Composable private fun GalleryMicDaylight() = Gallery(false) { MicPiece() }
-@WgoPreview @Composable private fun GalleryMicNight() = Gallery(true) { MicPiece() }
-@WgoPreview @Composable private fun GalleryTurnDaylight() = Gallery(false) { TurnPiece() }
-@WgoPreview @Composable private fun GalleryTurnNight() = Gallery(true) { TurnPiece() }
-@WgoPreview @Composable private fun GalleryToggleDaylight() = Gallery(false) { TogglePiece() }
-@WgoPreview @Composable private fun GalleryToggleNight() = Gallery(true) { TogglePiece() }
-@WgoPreview @Composable private fun GalleryLanguageDaylight() = Gallery(false) { LanguagePiece() }
-@WgoPreview @Composable private fun GalleryLanguageNight() = Gallery(true) { LanguagePiece() }
+@WgoWatchPreviews @Composable private fun GalleryButtonDaylight() = Gallery(false) { ButtonPiece() }
+@WgoWatchPreviews @Composable private fun GalleryButtonNight() = Gallery(true) { ButtonPiece() }
+@WgoWatchPreviews @Composable private fun GalleryBadgeDaylight() = Gallery(false) { BadgePiece() }
+@WgoWatchPreviews @Composable private fun GalleryBadgeNight() = Gallery(true) { BadgePiece() }
+@WgoWatchPreviews @Composable private fun GalleryBezelDaylight() = Gallery(false) { BezelPiece() }
+@WgoWatchPreviews @Composable private fun GalleryBezelNight() = Gallery(true) { BezelPiece() }
+@WgoWatchPreviews @Composable private fun GalleryMicDaylight() = Gallery(false) { MicPiece() }
+@WgoWatchPreviews @Composable private fun GalleryMicNight() = Gallery(true) { MicPiece() }
+@WgoWatchPreviews @Composable private fun GalleryTurnDaylight() = Gallery(false) { TurnPiece() }
+@WgoWatchPreviews @Composable private fun GalleryTurnNight() = Gallery(true) { TurnPiece() }
+@WgoWatchPreviews @Composable private fun GalleryToggleDaylight() = Gallery(false) { TogglePiece() }
+@WgoWatchPreviews @Composable private fun GalleryToggleNight() = Gallery(true) { TogglePiece() }
+@WgoWatchPreviews @Composable private fun GalleryLanguageDaylight() = Gallery(false) { LanguagePiece() }
+@WgoWatchPreviews @Composable private fun GalleryLanguageNight() = Gallery(true) { LanguagePiece() }
