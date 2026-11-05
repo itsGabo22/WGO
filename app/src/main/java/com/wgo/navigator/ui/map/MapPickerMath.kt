@@ -47,6 +47,9 @@ object MapPickerMath {
     /** Radius of the circular iris (0 -> [maxRadius]) for a 0..1 [progress]. */
     fun irisRadius(maxRadius: Float, progress: Float): Float = maxRadius * progress.coerceIn(0f, 1f)
 
+    /** Scale of the circular iris layer for a 0..1 [progress]: the circle grows from nothing to the full disc. */
+    fun irisScale(progress: Float): Float = progress.coerceIn(0f, 1f)
+
     /** Converts a drag of [dragPx] pixels into a change of the continuous index (dragging right goes back). */
     fun indexDelta(dragPx: Float, pxPerStyle: Float): Float = -dragPx / pxPerStyle
 }

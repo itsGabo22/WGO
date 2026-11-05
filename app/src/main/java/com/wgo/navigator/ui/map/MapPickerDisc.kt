@@ -15,12 +15,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.center
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
@@ -31,7 +28,6 @@ import com.wgo.navigator.ui.theme.WgoMotion
 import com.wgo.navigator.ui.theme.accent
 import com.wgo.navigator.ui.theme.wgoMapStyle
 import kotlinx.coroutines.launch
-import kotlin.math.hypot
 
 private const val IRIS_MS = 500
 private const val FLASH_MS = 550
@@ -80,24 +76,36 @@ fun MapPickerDisc(styleId: MapStyleId, clock: WgoClock, modifier: Modifier = Mod
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            RadarSchematic(
-                style = wgoMapStyle(shown, theme),
-                live = true,
-                clock = clock,
-                modifier = Modifier
+            // Circular iris: a circle-outline layer that grows from 0 to the full disc while its content is counter-scaled,
+            // so the scene stays fixed and is revealed from the centre. A layer property, not a per-frame clipPath.
+            Box(
+                Modifier
                     .fillMaxSize()
-                    .drawWithContent {
-                        val progress = iris.value
-                        if (progress >= 1f) {
-                            // Fully open: no clip at all (a non-rectangular clip every frame is expensive).
-                            this@drawWithContent.drawContent()
-                        } else {
-                            val radius = MapPickerMath.irisRadius(hypot(size.width, size.height) / 2f, progress)
-                            val iris = Path().apply { addOval(Rect(center = size.center, radius = radius)) }
-                            clipPath(iris) { this@drawWithContent.drawContent() }
-                        }
+                    .graphicsLayer {
+                        val p = maxOf(MapPickerMath.irisScale(iris.value), 0.001f)
+                        scaleX = p
+                        scaleY = p
+                        shape = CircleShape
+                        clip = true
                     }
-            )
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val inverse = 1f / maxOf(MapPickerMath.irisScale(iris.value), 0.001f)
+                            scaleX = inverse
+                            scaleY = inverse
+                        }
+                ) {
+                    RadarSchematic(
+                        style = wgoMapStyle(shown, theme),
+                        live = true,
+                        clock = clock,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
         }
         Box(Modifier.fillMaxSize().border(3.dp, theme.ink, CircleShape))
 
