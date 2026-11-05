@@ -2,6 +2,13 @@ package com.wgo.navigator
 
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.wgo.navigator.haptics.HapticPlayer
+import com.wgo.navigator.ui.components.MicState
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -35,6 +42,8 @@ class MainActivity : ComponentActivity() {
     // Seeded from the one-time blocking read in onCreate (runs before the first frame).
     private lateinit var initialSettings: WgoSettings
 
+    private val appViewModel: AppViewModel by viewModels()
+
     private val settingsViewModel: SettingsViewModel by viewModels {
         SettingsViewModel.Factory(settingsRepository, initialSettings)
     }
@@ -48,6 +57,14 @@ class MainActivity : ComponentActivity() {
         val initialCanvas = (if (initialSettings.isDarkMode) NightPalette else DaylightPalette).canvas
         window.setBackgroundDrawable(ColorDrawable(initialCanvas.toArgb()))
         
+        // Haptics: ViewModels emit events, only the Activity touches the vibrator.
+        val hapticPlayer = HapticPlayer(applicationContext)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                merge(appViewModel.haptics, settingsViewModel.haptics).collect { hapticPlayer.play(it) }
+            }
+        }
+
         // Initialize osmdroid configuration globally
         Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE))
         Configuration.getInstance().userAgentValue = packageName
@@ -62,8 +79,8 @@ class MainActivity : ComponentActivity() {
 
             CompositionLocalProvider(LocalLanguage provides language) {
                 WgoTheme(isDarkMode = isDarkMode) {
-                    var currentScreen by remember { mutableStateOf(ScreenState.Listening) }
-                    var isListening by remember { mutableStateOf(false) }
+                    val currentScreen by appViewModel.screen.collectAsState()
+                    val micState by appViewModel.micState.collectAsState()
 
                     Scaffold(
                         timeText = { 
@@ -73,40 +90,27 @@ class MainActivity : ComponentActivity() {
                         when (currentScreen) {
                             ScreenState.Listening -> {
                                 ScreenListening(
-                                    isListening = isListening,
-                                    onToggleListen = {
-                                        isListening = true
-                                        // Simulate voice processing delay
-                                        window.decorView.postDelayed({
-                                            currentScreen = ScreenState.ModeSelection
-                                            isListening = false
-                                        }, 2000)
-                                    },
-                                    onOpenSettings = {
-                                        currentScreen = ScreenState.Settings
-                                    }
+                                    isListening = micState != MicState.Idle,
+                                    onToggleListen = appViewModel::onMicTapped,
+                                    onOpenSettings = appViewModel::openSettings
                                 )
                             }
                             ScreenState.ModeSelection -> {
                                 ScreenModeSelection(
-                                    onSelectMode = { _ ->
-                                        currentScreen = ScreenState.Navigation
+                                    onSelectMode = { mode ->
+                                        appViewModel.selectMode(if (mode == "walk") TravelMode.Walk else TravelMode.Drive)
                                     }
                                 )
                             }
                             ScreenState.Navigation -> {
                                 ScreenActiveNavigation(
-                                    onCancel = {
-                                        currentScreen = ScreenState.Listening
-                                    }
+                                    onCancel = appViewModel::backToListening
                                 )
                             }
                             ScreenState.Settings -> {
                                 ScreenSettings(
                                     viewModel = settingsViewModel,
-                                    onClose = {
-                                        currentScreen = ScreenState.Listening
-                                    }
+                                    onClose = appViewModel::backToListening
                                 )
                             }
                         }

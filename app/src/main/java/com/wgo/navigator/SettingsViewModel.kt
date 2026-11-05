@@ -3,8 +3,13 @@ package com.wgo.navigator
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.wgo.navigator.haptics.HapticEvent
+import com.wgo.navigator.haptics.HapticSource
 import com.wgo.navigator.ui.theme.MapStyleId
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -20,7 +25,10 @@ enum class Language {
 class SettingsViewModel(
     private val repository: SettingsRepository,
     initial: WgoSettings
-) : ViewModel() {
+) : ViewModel(), HapticSource {
+    private val _haptics = MutableSharedFlow<HapticEvent>(extraBufferCapacity = 4)
+    override val haptics: SharedFlow<HapticEvent> = _haptics.asSharedFlow()
+
     private val _isDarkMode = MutableStateFlow(initial.isDarkMode)
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
 
@@ -44,6 +52,7 @@ class SettingsViewModel(
     /** ES <-> EN, applied immediately and persisted. */
     fun toggleLanguage() {
         setLanguage(if (_language.value == Language.ES) Language.EN else Language.ES)
+        _haptics.tryEmit(HapticEvent.Click)
     }
 
     fun setMapStyle(style: MapStyleId) {
