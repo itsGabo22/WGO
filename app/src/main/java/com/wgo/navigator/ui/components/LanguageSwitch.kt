@@ -40,9 +40,9 @@ import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoMotion
 import com.wgo.navigator.ui.theme.WgoType
+import com.wgo.navigator.ui.theme.wgoMinTouch
 
 private val SwitchSize = 40.dp
-private val HitSize = 48.dp
 private const val PRESSED_SCALE = 0.94f
 
 /**
@@ -75,7 +75,7 @@ fun LanguageSwitch(
 
     Box(
         modifier = modifier
-            .size(HitSize)
+            .wgoMinTouch()
             .semantics { contentDescription = description }
             .clickable(
                 interactionSource = interactionSource,
