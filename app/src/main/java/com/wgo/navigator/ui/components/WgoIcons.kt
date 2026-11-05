@@ -13,7 +13,9 @@ import androidx.compose.ui.unit.dp
  * material-icons-extended for the new pieces. Icons are tinted by the caller (the stroke color here is a placeholder).
  */
 object WgoIcons {
-    private fun icon(name: String, vararg paths: String): ImageVector =
+    private fun icon(name: String, vararg paths: String): ImageVector = icon(name, 2f, *paths)
+
+    private fun icon(name: String, strokeWidth: Float, vararg paths: String): ImageVector =
         ImageVector.Builder(
             name = name,
             defaultWidth = 24.dp,
@@ -25,7 +27,7 @@ object WgoIcons {
                 addPath(
                     pathData = PathParser().parsePathString(d).toNodes(),
                     stroke = SolidColor(Color.Black),
-                    strokeLineWidth = 2f,
+                    strokeLineWidth = strokeWidth,
                     strokeLineCap = StrokeCap.Round,
                     strokeLineJoin = StrokeJoin.Round
                 )
@@ -39,7 +41,11 @@ object WgoIcons {
         "M12 18v3"
     )
     val ArrowUpward = icon("ArrowUpward", "M12 19V5", "M5 12l7-7 7 7")
-    val TurnRight = icon("TurnRight", "M6 20v-8a4 4 0 0 1 4-4h8", "M14 4l4 4-4 4")
+    val TurnRight = turnRight()
+
+    /** Maneuver icon with a custom stroke (the TurnCard uses 2.6). */
+    fun turnRight(strokeWidth: Float = 2f): ImageVector =
+        icon("TurnRight", strokeWidth, "M6 20v-8a4 4 0 0 1 4-4h8", "M14 4l4 4-4 4")
     val Check = icon("Check", "M5 12.5l4.5 4.5L19 7")
     val Close = icon("Close", "M6 6l12 12", "M18 6L6 18")
     val DirectionsCar = icon(

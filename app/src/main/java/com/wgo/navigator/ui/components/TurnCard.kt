@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -64,7 +65,7 @@ fun TurnCard(
     distanceMeters: Int,
     instruction: String,
     modifier: Modifier = Modifier,
-    icon: ImageVector = WgoIcons.TurnRight,
+    icon: ImageVector = remember { WgoIcons.turnRight(2.6f) },
     imminent: Boolean = distanceMeters <= TURN_IMMINENT_METERS,
     clock: WgoClock? = null
 ) {
