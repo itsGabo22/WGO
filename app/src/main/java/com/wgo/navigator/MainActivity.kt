@@ -12,7 +12,12 @@ import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
+import com.wgo.navigator.ui.wgoScreenTransition
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -81,13 +86,23 @@ class MainActivity : ComponentActivity() {
                 WgoTheme(isDarkMode = isDarkMode) {
                     val currentScreen by appViewModel.screen.collectAsState()
                     val micState by appViewModel.micState.collectAsState()
+                    val selectedMode by appViewModel.selectedMode.collectAsState()
+                    val reduceMotion = LocalWgoReduceMotion.current
 
                     Scaffold(
                         timeText = { 
                             // Only show time on certain screens if desired, or omit for pure UI focus
                         }
                     ) {
-                        when (currentScreen) {
+                        AnimatedContent(
+                            targetState = currentScreen,
+                            transitionSpec = {
+                                wgoScreenTransition(initialState, targetState, selectedMode, reduceMotion)
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                            label = "screens"
+                        ) { screen ->
+                        when (screen) {
                             ScreenState.Listening -> {
                                 ScreenListening(
                                     micState = micState,
@@ -99,7 +114,9 @@ class MainActivity : ComponentActivity() {
                             }
                             ScreenState.ModeSelection -> {
                                 ScreenModeSelection(
-                                    onSelectMode = appViewModel::selectMode
+                                    onSelectMode = appViewModel::selectMode,
+                                    // The chosen pad stays inverted until the zoom transition finishes.
+                                    pressedMode = selectedMode
                                 )
                             }
                             ScreenState.Navigation -> {
@@ -113,6 +130,7 @@ class MainActivity : ComponentActivity() {
                                     onClose = appViewModel::backToListening
                                 )
                             }
+                        }
                         }
                     }
                 }
