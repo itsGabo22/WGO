@@ -30,7 +30,7 @@ import com.wgo.navigator.ui.theme.WgoMapStyle
 import com.wgo.navigator.ui.theme.WgoType
 
 /** Strength of the `map-ground` wash over the tiles, so they never fight the route. */
-private const val WASH_ALPHA = 0.35f
+private const val WASH_ALPHA = 0.25f
 
 /**
  * Circular, heading-up radar minimap (docs/design section 6). From bottom to top: tiles, `map-ground` wash, range
