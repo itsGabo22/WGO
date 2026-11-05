@@ -61,6 +61,8 @@ dependencies {
     implementation("org.osmdroid:osmdroid-android:6.1.18")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     
+    testImplementation("junit:junit:4.13.2")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
