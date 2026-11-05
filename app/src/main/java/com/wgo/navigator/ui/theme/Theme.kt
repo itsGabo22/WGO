@@ -29,7 +29,10 @@ fun WgoTheme(
 ) {
     val palette = if (isDarkMode) NightPalette else DaylightPalette
 
-    CompositionLocalProvider(LocalWgoPalette provides palette) {
+    CompositionLocalProvider(
+        LocalWgoPalette provides palette,
+        LocalWgoReduceMotion provides rememberWgoReduceMotion()
+    ) {
         MaterialTheme(
             colors = palette.toWearColors(),
             typography = WgoTypography,
