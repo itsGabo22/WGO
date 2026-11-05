@@ -83,9 +83,9 @@ fun MapRow(styleId: MapStyleId, onClick: () -> Unit, modifier: Modifier = Modifi
                 .clip(CircleShape)
                 .background(background)
                 .border(1.5.dp, palette.ink, CircleShape)
-                .padding(start = 5.dp, end = 8.dp),
+                .padding(start = 5.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             RadarSchematic(
                 style = wgoMapStyle(styleId, palette),
@@ -109,7 +109,11 @@ fun MapRow(styleId: MapStyleId, onClick: () -> Unit, modifier: Modifier = Modifi
                 Text(
                     text = name.uppercase(),
                     color = primaryText,
-                    style = WgoType.labelMd,
+                    // Long names ("PERGAMINO") step down to the 10 sp minimum so they fit the 132 dp row.
+                    style = WgoType.labelMd.copy(
+                        fontSize = when { name.length <= 7 -> 12.sp; name.length == 8 -> 11.sp; else -> 10.sp },
+                        letterSpacing = 0.02.em
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
