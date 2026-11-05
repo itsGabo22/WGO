@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +25,7 @@ import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoMotion
 import com.wgo.navigator.ui.theme.WgoType
+import com.wgo.navigator.ui.theme.wgoMinTouch
 
 /**
  * Small secondary pill (default 104 x 32 dp visual, 48 dp touch height): `surface` + `edge-control`,
@@ -48,7 +50,8 @@ fun WgoChip(
 
     Box(
         modifier = modifier
-            .size(width, 48.dp)
+            .width(width)
+            .wgoMinTouch(height = 48.dp)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
