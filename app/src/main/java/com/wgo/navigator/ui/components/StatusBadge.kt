@@ -8,14 +8,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
-import com.wgo.navigator.ui.theme.WgoBlack
-import com.wgo.navigator.ui.theme.WgoPrimary
-import com.wgo.navigator.ui.theme.WgoWhite
+import com.wgo.navigator.ui.theme.Wgo
 
 enum class StatusBadgeVariant {
     Primary, Neutral
@@ -27,14 +24,15 @@ fun StatusBadge(
     modifier: Modifier = Modifier,
     variant: StatusBadgeVariant = StatusBadgeVariant.Primary
 ) {
+    val palette = Wgo.palette
     val backgroundColor = when (variant) {
-        StatusBadgeVariant.Primary -> WgoPrimary.copy(alpha = 0.1f)
-        StatusBadgeVariant.Neutral -> WgoBlack.copy(alpha = 0.05f)
+        StatusBadgeVariant.Primary -> palette.primaryInk.copy(alpha = 0.1f)
+        StatusBadgeVariant.Neutral -> palette.ink.copy(alpha = 0.05f)
     }
 
     val contentColor = when (variant) {
-        StatusBadgeVariant.Primary -> WgoPrimary
-        StatusBadgeVariant.Neutral -> WgoBlack
+        StatusBadgeVariant.Primary -> palette.primaryInk
+        StatusBadgeVariant.Neutral -> palette.ink
     }
 
     Box(
