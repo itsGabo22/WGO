@@ -94,7 +94,7 @@ fun TurnCard(
             .height(66.dp)
             .background(background, shape)
             .border(1.5.dp, palette.ink, shape)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .padding(horizontal = 10.dp, vertical = 2.dp)
             .semantics(mergeDescendants = true) {
                 contentDescription = spoken
                 if (imminent) liveRegion = LiveRegionMode.Polite
