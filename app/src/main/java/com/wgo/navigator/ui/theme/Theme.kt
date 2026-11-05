@@ -29,14 +29,17 @@ fun WgoTheme(
 ) {
     val palette = if (isDarkMode) NightPalette else DaylightPalette
 
-    CompositionLocalProvider(
-        LocalWgoPalette provides palette,
-        LocalWgoReduceMotion provides rememberWgoReduceMotion()
-    ) {
-        MaterialTheme(
-            colors = palette.toWearColors(),
-            typography = WgoTypography,
-            content = content
-        )
+    // The responsive scale wraps everything below (Scaffold, transitions, previews).
+    WgoResponsive {
+        CompositionLocalProvider(
+            LocalWgoPalette provides palette,
+            LocalWgoReduceMotion provides rememberWgoReduceMotion()
+        ) {
+            MaterialTheme(
+                colors = palette.toWearColors(),
+                typography = WgoTypography,
+                content = content
+            )
+        }
     }
 }
