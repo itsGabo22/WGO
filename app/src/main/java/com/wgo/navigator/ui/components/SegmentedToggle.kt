@@ -30,11 +30,11 @@ import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoMotion
 import com.wgo.navigator.ui.theme.WgoType
 import com.wgo.navigator.ui.theme.orCut
+import com.wgo.navigator.ui.theme.wgoMinTouch
 import kotlin.math.roundToInt
 
 private val PillWidth = 156.dp
 private val PillHeight = 40.dp
-private val HitHeight = 48.dp
 private val KnobWidth = 75.dp
 private val KnobHeight = 34.dp
 private val KnobInset = 3.dp
@@ -65,7 +65,8 @@ fun SegmentedToggle(
 
     Box(
         modifier = modifier
-            .size(PillWidth, HitHeight)
+            .width(PillWidth)
+            .wgoMinTouch(height = 48.dp)
             .selectableGroup(),
         contentAlignment = Alignment.Center
     ) {
@@ -85,7 +86,7 @@ fun SegmentedToggle(
                     .background(palette.primary)
             )
         }
-        Row(modifier = Modifier.size(PillWidth, HitHeight).padding(horizontal = KnobInset)) {
+        Row(modifier = Modifier.matchParentSize().padding(horizontal = KnobInset)) {
             options.forEachIndexed { index, label ->
                 Box(
                     modifier = Modifier
