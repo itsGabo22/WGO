@@ -25,7 +25,7 @@ object WgoTileFilter {
     /** Night: invert luminance (a = -NIGHT_GAIN, b = NIGHT_GAIN) and tint between `map-ground` and `map-road-major`. */
     private const val NIGHT_GAIN = 2.0f
 
-    /** Luminance of a typical OSM land tile (about #F2EFE9): it becomes the style's PAPER color. */
+    /** Luminance of a typical OSM land tile (a light beige): it becomes the style's PAPER color. */
     private const val TILE_PAPER_LUMINANCE = 0.93f
 
     /**
