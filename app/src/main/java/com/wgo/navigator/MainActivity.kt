@@ -22,6 +22,7 @@ import com.wgo.navigator.ui.screens.ScreenSettings
 import com.wgo.navigator.ui.theme.DaylightPalette
 import com.wgo.navigator.ui.theme.NightPalette
 import com.wgo.navigator.ui.theme.WgoTheme
+import kotlinx.coroutines.runBlocking
 import org.osmdroid.config.Configuration
 
 enum class ScreenState {
@@ -29,10 +30,23 @@ enum class ScreenState {
 }
 
 class MainActivity : ComponentActivity() {
-    private val settingsViewModel: SettingsViewModel by viewModels()
+    private val settingsRepository by lazy { SettingsRepository(applicationContext) }
+
+    // Seeded from the one-time blocking read in onCreate (runs before the first frame).
+    private lateinit var initialSettings: WgoSettings
+
+    private val settingsViewModel: SettingsViewModel by viewModels {
+        SettingsViewModel.Factory(settingsRepository, initialSettings)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Blocking read of a tiny DataStore file so theme and language are right on the first frame
+        // (no flash between themes or languages). Cost: a few ms on the main thread at launch.
+        initialSettings = runBlocking { settingsRepository.load() }
+        val initialCanvas = (if (initialSettings.isDarkMode) NightPalette else DaylightPalette).canvas
+        window.setBackgroundDrawable(ColorDrawable(initialCanvas.toArgb()))
         
         // Initialize osmdroid configuration globally
         Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE))
