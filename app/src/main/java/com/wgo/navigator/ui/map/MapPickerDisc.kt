@@ -87,9 +87,15 @@ fun MapPickerDisc(styleId: MapStyleId, clock: WgoClock, modifier: Modifier = Mod
                 modifier = Modifier
                     .fillMaxSize()
                     .drawWithContent {
-                        val radius = MapPickerMath.irisRadius(hypot(size.width, size.height) / 2f, iris.value)
-                        val iris = Path().apply { addOval(Rect(center = size.center, radius = radius)) }
-                        clipPath(iris) { this@drawWithContent.drawContent() }
+                        val progress = iris.value
+                        if (progress >= 1f) {
+                            // Fully open: no clip at all (a non-rectangular clip every frame is expensive).
+                            this@drawWithContent.drawContent()
+                        } else {
+                            val radius = MapPickerMath.irisRadius(hypot(size.width, size.height) / 2f, progress)
+                            val iris = Path().apply { addOval(Rect(center = size.center, radius = radius)) }
+                            clipPath(iris) { this@drawWithContent.drawContent() }
+                        }
                     }
             )
         }
