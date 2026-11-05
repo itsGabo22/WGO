@@ -60,6 +60,8 @@ import com.wgo.navigator.ui.theme.WgoClock
 import com.wgo.navigator.ui.theme.WgoMotion
 import com.wgo.navigator.ui.theme.WgoType
 import com.wgo.navigator.ui.theme.rememberWgoClock
+import com.wgo.navigator.ui.theme.wgoMinTouch
+import com.wgo.navigator.ui.theme.wgoTouchSide
 import com.wgo.navigator.ui.theme.wgoRiseIn
 
 private const val REFERENCE_SIZE = 227f
@@ -188,12 +190,16 @@ fun ScreenListening(
             modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(92f)).wgoRiseIn(delayMs = WgoMotion.STAGGER)
         )
 
-        // CANCEL chip 104 x 32 @176 (48 dp touch box starts 8 dp above the visual).
+        // Hit boxes grow to 48 REAL dp around the visuals; centre them on the spec positions.
+        val sideExtra = (wgoTouchSide(40.dp) - 40.dp) / 2
+        val chipExtra = (wgoTouchSide(32.dp) - 32.dp) / 2
+
+        // CANCEL chip 104 x 32 @176.
         if (micState != MicState.Idle) {
             WgoChip(
                 label = string(StringKey.BTN_CANCEL),
                 onClick = onCancel,
-                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(176f) - 8.dp).wgoRiseIn()
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(176f) - chipExtra).wgoRiseIn()
             )
         }
 
@@ -201,11 +207,11 @@ fun ScreenListening(
         LanguageSwitch(
             language = language,
             onToggle = onToggleLanguage,
-            modifier = Modifier.align(Alignment.TopStart).offset(x = 8.dp, y = dial(94f) - 4.dp).wgoRiseIn(delayMs = 2 * WgoMotion.STAGGER)
+            modifier = Modifier.align(Alignment.TopStart).offset(x = 12.dp - sideExtra, y = dial(94f) - sideExtra).wgoRiseIn(delayMs = 2 * WgoMotion.STAGGER)
         )
         SettingsButton(
             onClick = onOpenSettings,
-            modifier = Modifier.align(Alignment.TopEnd).offset(x = (-8).dp, y = dial(94f) - 4.dp).wgoRiseIn(delayMs = 2 * WgoMotion.STAGGER)
+            modifier = Modifier.align(Alignment.TopEnd).offset(x = -(12.dp - sideExtra), y = dial(94f) - sideExtra).wgoRiseIn(delayMs = 2 * WgoMotion.STAGGER)
         )
     }
 }
@@ -220,7 +226,7 @@ private fun SettingsButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 
     Box(
         modifier = modifier
-            .size(48.dp)
+            .wgoMinTouch()
             .semantics { contentDescription = description }
             .clickable(interactionSource = interactionSource, indication = null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
