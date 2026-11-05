@@ -42,6 +42,7 @@ WGO is a **100% native Wear OS app** (Kotlin + Jetpack Compose for Wear OS; no w
 * All user-facing strings go through `ui/Strings.kt` (`StringKey`). Spanish (ES) is the default, English (EN) the second language.
 * Haptics are emitted from ViewModels, never from composables.
 * Map styles are original genre-inspired looks. Never use the name, logo, icon or art of any video game, in code, strings, comments or commit messages.
+* `mapas_extra/` holds local visual reference screenshots only. It is git-ignored: never commit, copy or trace them; take only general traits (palette mood, layout ideas) and re-draw them as original art.
 
 ## Target device
 
