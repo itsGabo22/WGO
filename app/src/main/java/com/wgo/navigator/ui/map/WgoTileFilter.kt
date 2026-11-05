@@ -19,10 +19,10 @@ object WgoTileFilter {
     private const val LB = 0.0722f
 
     /** Daylight: desaturate and lift the tiles toward `map-ground` (low contrast, the route dominates). */
-    private const val DAYLIGHT_GROUND_MIX = 0.55f
+    private const val DAYLIGHT_GROUND_MIX = 0.40f
 
     /** Night: invert luminance (a = -NIGHT_GAIN, b = NIGHT_GAIN) and tint between `map-ground` and `map-road-major`. */
-    private const val NIGHT_GAIN = 1.4f
+    private const val NIGHT_GAIN = 2.0f
 
     /** The filter for [style]. For now every style uses the COBALTO filter of the active theme. */
     fun filterFor(style: WgoMapStyle, dark: Boolean): ColorMatrixColorFilter {
