@@ -30,9 +30,6 @@ import com.wgo.navigator.ui.theme.WgoClock
 import com.wgo.navigator.ui.theme.WgoMapStyle
 import com.wgo.navigator.ui.theme.WgoType
 
-/** Strength of the `map-ground` wash over the tiles, so they never fight the route. */
-private const val WASH_ALPHA = 0.25f
-
 /**
  * Circular, heading-up radar minimap (docs/design section 6). From bottom to top: tiles, `map-ground` wash, range
  * rings, route, maneuver node, blips, user chevron + halo, radar sweep, optional north marker.
@@ -105,7 +102,7 @@ fun RadarMinimap(
         }
 
         // Wash so the tiles never fight the route.
-        Box(Modifier.fillMaxSize().background(style.palette.ground.copy(alpha = WASH_ALPHA)))
+        Box(Modifier.fillMaxSize().background(style.palette.ground.copy(alpha = style.id.washAlpha())))
 
         // Static style effects (hatch, scanlines, grid, vignette...): no clock read, so this layer is cached.
         Box(Modifier.fillMaxSize().drawBehind { drawMapFxStatic(style, 1.dp.toPx()) })
