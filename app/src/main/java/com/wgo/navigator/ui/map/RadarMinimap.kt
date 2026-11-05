@@ -122,6 +122,10 @@ fun RadarMinimap(
             clock = clock
         )
 
+        if (dark && style.id.dimsInNight()) {
+            Box(Modifier.fillMaxSize().background(palette.canvas.copy(alpha = NIGHT_DIM_ALPHA)))
+        }
+
         if (showNorth) {
             // North marker: 18 dp disc, left 12, top 104 (fractions of the 227 dp canvas).
             Box(

@@ -65,6 +65,11 @@ class MapAnim(private val millis: Long, private val stepped: Boolean) {
     }
 }
 
+/** The light styles are dimmed to 78% brightness in Night (a 22% black overlay above the whole radar). */
+fun MapStyleId.dimsInNight(): Boolean = this == MapStyleId.PERGAMINO || this == MapStyleId.PIXEL || this == MapStyleId.ISLA
+
+const val NIGHT_DIM_ALPHA = 0.22f
+
 /** Quantizes [value] 0..1 to [steps] levels; used by the sweep of stepped styles. */
 fun stepValue(value: Float, steps: Int): Float = floor(value * steps) / steps
 
