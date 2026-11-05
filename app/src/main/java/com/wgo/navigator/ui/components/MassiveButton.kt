@@ -37,6 +37,7 @@ import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoMotion
 import com.wgo.navigator.ui.theme.WgoType
+import com.wgo.navigator.ui.theme.wgoMinTouch
 
 enum class MassiveButtonVariant {
     Primary, Inverted, Secondary, Alert, Go
@@ -96,6 +97,7 @@ fun MassiveButton(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .wgoMinTouch(height = 48.dp)
             .height(HitMassive)
             .graphicsLayer {
                 scaleX = scale
