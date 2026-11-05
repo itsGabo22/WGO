@@ -178,7 +178,7 @@ fun WgoRealMap(
     val mapView = remember {
         MapView(context).apply {
             // Future extension point: 
-            // setTileSource(MyCustomGtaTileSource())
+            // setTileSource(customStyledTileSource)
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(false) // Disable multi-touch per instruction
             
