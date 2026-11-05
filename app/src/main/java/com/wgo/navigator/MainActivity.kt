@@ -145,7 +145,7 @@ class MainActivity : ComponentActivity() {
                             ScreenState.Settings -> {
                                 ScreenSettings(
                                     viewModel = settingsViewModel,
-                                    onClose = appViewModel::backToListening
+                                    onOpenMapPicker = appViewModel::openMapPicker
                                 )
                             }
                         }
