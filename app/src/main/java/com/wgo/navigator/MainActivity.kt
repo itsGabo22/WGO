@@ -99,9 +99,7 @@ class MainActivity : ComponentActivity() {
                             }
                             ScreenState.ModeSelection -> {
                                 ScreenModeSelection(
-                                    onSelectMode = { mode ->
-                                        appViewModel.selectMode(if (mode == "walk") TravelMode.Walk else TravelMode.Drive)
-                                    }
+                                    onSelectMode = appViewModel::selectMode
                                 )
                             }
                             ScreenState.Navigation -> {
