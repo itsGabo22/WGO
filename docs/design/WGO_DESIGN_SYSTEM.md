@@ -109,6 +109,23 @@ Elevation is made of crisp rings, never blur: `edge-control` for secondary contr
 
 Pill fit rule (pill width `w`, height `h`, center offset `y` from the dial center, R = 113.5): `sqrt((w/2 - h/2)^2 + y^2) + h/2 <= 104`. Verified placements (value = `top` in dp): badge 80x18 @16; CANCEL chip 104x32 @176; FINALIZAR 120x48 @160; RETRY 120x40 @166; HUD card 140x66 @22 (24 dp corners); bottom nav row (mute 34 + gap 8 + END 86x34) @172.
 
+### 4.1 Responsive scale (all round watches)
+
+Every geometry value in this document is written in **reference dp** on the 227 dp canvas. At runtime the whole UI is scaled uniformly:
+
+- `s = clamp(min(screenWidthDp, screenHeightDp) / 227, 0.8, 1.25)`, implemented by overriding `LocalDensity` once around the whole tree (`WgoResponsive`, called by `WgoTheme`): `density = base * s`, `fontScale = base * textS / s`. Every `dp`, `sp` and `toPx()` scales with no per-file changes; `LocalWgoScale` exposes `s`. `LocalConfiguration` is overridden with the matching dp sizes.
+- Exceptions: (1) hit areas are at least **48 REAL dp**: use `Modifier.wgoMinTouch()`, which grows the invisible box to `48 / s` reference dp without changing the visual; (2) text scales with `textS = clamp(s, 0.9, 1.1)` combined with the user's system font scale; (3) hairlines never go under 1 real dp (`Dp.atLeastRealDp()`).
+- The fit rule `sqrt((w/2 - h/2)^2 + y^2) + h/2 <= 104` is scale-invariant (w, h and y all scale by `s`), so a placement that fits at s = 1 fits at every size.
+
+| Device | Screen (dp) | s | Verified |
+|---|---|---|---|
+| Wear OS Small Round | 192 | 0.846 | previews and unit tests |
+| Samsung Galaxy Watch5 Pro (450 px, ~321 ppi) | about 225 | 0.991 | previews and unit tests |
+| Wear OS Large Round (reference) | 227 | 1.000 | previews and unit tests |
+| Large round sanity case | 240 | 1.057 | previews and unit tests |
+
+Runtime verification on devices is pending (no emulator was connected when this was written).
+
 ## 5. Motion
 
 | token | ms | use | Compose |
