@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -140,13 +141,15 @@ fun ScreenListening(
                         text = string(StringKey.LISTENING_LABEL),
                         color = palette.primaryInk,
                         style = WgoType.labelMd,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
                     )
                     MicState.Processing -> Text(
                         text = string(StringKey.TITLE_ROUTING),
                         color = palette.primaryInk,
                         style = WgoType.labelMd,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
                     )
                 }
             }
