@@ -32,11 +32,11 @@ import com.wgo.navigator.ui.screens.ScreenActiveNavigation
 import com.wgo.navigator.ui.screens.ScreenListening
 import com.wgo.navigator.ui.screens.ScreenModeSelection
 import com.wgo.navigator.ui.screens.ScreenSettings
+import com.wgo.navigator.ui.map.WgoMapConfig
 import com.wgo.navigator.ui.theme.DaylightPalette
 import com.wgo.navigator.ui.theme.NightPalette
 import com.wgo.navigator.ui.theme.WgoTheme
 import kotlinx.coroutines.runBlocking
-import org.osmdroid.config.Configuration
 
 enum class ScreenState {
     Listening, ModeSelection, Navigation, Settings
@@ -71,9 +71,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Initialize osmdroid configuration globally
-        Configuration.getInstance().load(applicationContext, getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE))
-        Configuration.getInstance().userAgentValue = packageName
+        // osmdroid: package User-Agent and a small cache in the app cache dir
+        WgoMapConfig.apply(applicationContext)
 
         setContent {
             val isDarkMode by settingsViewModel.isDarkMode.collectAsState()
