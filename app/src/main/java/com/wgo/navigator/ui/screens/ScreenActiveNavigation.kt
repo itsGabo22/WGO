@@ -18,7 +18,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -39,7 +38,6 @@ import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.string
 import com.wgo.navigator.ui.theme.WgoBlack
 import com.wgo.navigator.ui.theme.WgoPrimary
-import com.wgo.navigator.ui.theme.WgoWhite
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -149,11 +147,10 @@ fun ScreenActiveNavigation(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 12.dp)
         ) {
-            val isLight = MaterialTheme.colors.background == WgoWhite
             Chip(
                 onClick = onCancel,
                 colors = ChipDefaults.chipColors(
-                    backgroundColor = if (isLight) Color(0xFFF2F4F7) else Color(0xFF1E1E1E),
+                    backgroundColor = MaterialTheme.colors.surface,
                     contentColor = MaterialTheme.colors.onBackground
                 ),
                 label = {
