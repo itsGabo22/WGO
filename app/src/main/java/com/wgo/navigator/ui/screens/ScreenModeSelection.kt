@@ -280,14 +280,14 @@ private fun ModePad(
             ) {
                 Icon(imageVector = icon, contentDescription = null, tint = content, modifier = Modifier.size(24.dp))
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = label.uppercase(),
                 color = content,
                 style = WgoType.button.copy(fontSize = 13.sp, lineHeight = 16.sp, letterSpacing = 0.04.em),
                 maxLines = 1
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
