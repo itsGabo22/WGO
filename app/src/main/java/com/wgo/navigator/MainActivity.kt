@@ -10,6 +10,7 @@ import com.wgo.navigator.ui.components.MicState
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
@@ -88,6 +89,9 @@ class MainActivity : ComponentActivity() {
                     val micState by appViewModel.micState.collectAsState()
                     val selectedMode by appViewModel.selectedMode.collectAsState()
                     val reduceMotion = LocalWgoReduceMotion.current
+
+                    // Back leaves mode selection, navigation and settings for the listening screen.
+                    BackHandler(enabled = currentScreen != ScreenState.Listening) { appViewModel.backToListening() }
 
                     Scaffold(
                         timeText = { 
