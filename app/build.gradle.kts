@@ -59,6 +59,7 @@ dependencies {
     implementation("androidx.wear.compose:compose-foundation:1.3.0")
     implementation("androidx.wear.compose:compose-navigation:1.3.0")
     implementation("org.osmdroid:osmdroid-android:6.1.18")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
     
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
