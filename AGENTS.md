@@ -43,7 +43,16 @@ WGO is a **100% native Wear OS app** (Kotlin + Jetpack Compose for Wear OS; no w
 * Haptics are emitted from ViewModels, never from composables.
 * Map styles are original genre-inspired looks. Never use the name, logo, icon or art of any video game, in code, strings, comments or commit messages.
 
+## Target device
+
+* Primary target: **Samsung Galaxy Watch5 Pro** (round, 450 x 450 px, ~321 ppi, about 225 dp, Exynos W920, 1.5 GB RAM, Wear OS 3.5 = API 30). No rotating bezel and no crown: the app must be fully usable by touch and the two hardware buttons; a crown or bezel may only be an optional extra.
+* minSdk is 30: do not call APIs above 30 without a version guard (`Build.VERSION.SDK_INT`). Lint must show 0 `NewApi` findings.
+* Also supported: Wear OS Small Round (192 dp) and Large Round (227 dp); everything scales uniformly (see `docs/design/WGO_DESIGN_SYSTEM.md` section 4.1).
+
 ## UI conventions
+
+* Geometry is always written in reference dp (the 227 dp canvas) and never converted manually: `WgoResponsive` scales the density once. Never use raw pixels.
+* Hit areas use `Modifier.wgoMinTouch()` (48 REAL dp); hairlines use `Dp.atLeastRealDp()`.
 
 * One `WgoClock` (`rememberWgoClock()`) per screen, created at screen level and passed to every looping piece. Pieces read it only inside draw / `graphicsLayer` lambdas, so nothing recomposes per frame. Do not add `InfiniteTransition`s.
 * Respect reduce motion everywhere: read `LocalWgoReduceMotion` (provided by `WgoTheme`), use static states for loops and `orCut()` / 120 ms cuts for transitions.
