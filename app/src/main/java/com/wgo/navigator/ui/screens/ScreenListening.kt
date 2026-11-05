@@ -121,7 +121,7 @@ fun ScreenListening(
                 .align(Alignment.TopCenter)
                 .offset(y = dial(38f))
                 .width(dial(150f))
-                .height(48.dp)
+                .height(52.dp) // two headline-md lines at textS 0.9 on Small Round need 51 dp (box ends at 90, orb starts at 92)
                 .wgoRiseIn(delayMs = WgoMotion.STAGGER),
             contentAlignment = Alignment.TopCenter,
             label = "listeningTitle"
