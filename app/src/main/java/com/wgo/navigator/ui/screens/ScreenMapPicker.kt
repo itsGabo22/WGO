@@ -100,6 +100,8 @@ fun ScreenMapPicker(
     val scope = rememberCoroutineScope()
     val k = remember { Animatable(currentStyle.ordinal.toFloat()) }
     val explored by remember { derivedStateOf { MapStyleId.entries[MapPickerMath.activeIndex(k.value)] } }
+    // Only changes when the dial crosses to another style, so the rotation does not recompose the screen per frame.
+    val active by remember { derivedStateOf { MapPickerMath.activeIndex(k.value) } }
     val throttle = remember { StepThrottle() }
     val rotary = remember { RotaryAccumulator() }
     val pxPerStyle = with(LocalDensity.current) { DragPerStyle.toPx() }
@@ -201,7 +203,6 @@ fun ScreenMapPicker(
         )
 
         // Neighbour thumbnails 32 dp at x 14 / x 181, top 94, 60% alpha, tappable (48 real dp hit boxes).
-        val active = MapPickerMath.activeIndex(k.value)
         val hit = wgoTouchSide(32.dp)
         val extra = (hit - 32.dp) / 2
         Neighbour(
