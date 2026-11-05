@@ -24,7 +24,6 @@ import com.wgo.navigator.SettingsViewModel
 import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.string
 import com.wgo.navigator.ui.theme.WgoPrimary
-import com.wgo.navigator.ui.theme.WgoWhite
 
 @Composable
 fun ScreenSettings(
@@ -123,11 +122,10 @@ fun ScreenSettings(
         }
 
         item {
-            val isLight = MaterialTheme.colors.background == WgoWhite
             androidx.wear.compose.material.Chip(
                 onClick = onClose,
                 colors = androidx.wear.compose.material.ChipDefaults.chipColors(
-                    backgroundColor = if (isLight) androidx.compose.ui.graphics.Color(0xFFF2F4F7) else androidx.compose.ui.graphics.Color(0xFF1E1E1E),
+                    backgroundColor = MaterialTheme.colors.surface,
                     contentColor = MaterialTheme.colors.onBackground
                 ),
                 label = {
