@@ -19,7 +19,18 @@ enum class StringKey {
     TITLE_WHERE_TO, TITLE_ROUTING, BTN_CANCEL, BTN_DRIVE, BTN_WALK,
     DESTINATION_LONG, SETTINGS, THEME, LANGUAGE, LIGHT, DARK,
     SPANISH, ENGLISH, ACTIVATE_MIC, ZOOM_IN, ZOOM_OUT, VOICE_ON,
-    NAV_INSTRUCTION, GO_STRAIGHT
+    NAV_INSTRUCTION, GO_STRAIGHT,
+    // Settings and map styles
+    SETTINGS_HEADER, MAP_LABEL, USE,
+    LANGUAGE_SWITCH_TO_EN, LANGUAGE_SWITCH_TO_ES,
+    MAP_NAME_COBALTO, MAP_GENRE_COBALTO,
+    MAP_NAME_BARRIO, MAP_GENRE_BARRIO,
+    MAP_NAME_PERGAMINO, MAP_GENRE_PERGAMINO,
+    MAP_NAME_NEON, MAP_GENRE_NEON,
+    MAP_NAME_PIXEL, MAP_GENRE_PIXEL,
+    MAP_NAME_CIRCUITO, MAP_GENRE_CIRCUITO,
+    MAP_NAME_SONAR, MAP_GENRE_SONAR,
+    MAP_NAME_ISLA, MAP_GENRE_ISLA
 }
 
 private val es = mapOf(
@@ -41,7 +52,28 @@ private val es = mapOf(
     StringKey.ZOOM_OUT to "Alejar mapa",
     StringKey.VOICE_ON to "VOICE ON",
     StringKey.NAV_INSTRUCTION to "Gira a la derecha en Calle 18",
-    StringKey.GO_STRAIGHT to "Continuar recto"
+    StringKey.GO_STRAIGHT to "Continuar recto",
+    StringKey.SETTINGS_HEADER to "AJUSTES",
+    StringKey.MAP_LABEL to "MAPA",
+    StringKey.USE to "USAR",
+    StringKey.LANGUAGE_SWITCH_TO_EN to "Idioma: Español. Toca para cambiar a English",
+    StringKey.LANGUAGE_SWITCH_TO_ES to "Idioma: English. Toca para cambiar a Español",
+    StringKey.MAP_NAME_COBALTO to "COBALTO",
+    StringKey.MAP_GENRE_COBALTO to "WGO original",
+    StringKey.MAP_NAME_BARRIO to "BARRIO",
+    StringKey.MAP_GENRE_BARRIO to "Ciudad abierta",
+    StringKey.MAP_NAME_PERGAMINO to "PERGAMINO",
+    StringKey.MAP_GENRE_PERGAMINO to "Aventura clásica",
+    StringKey.MAP_NAME_NEON to "NEÓN",
+    StringKey.MAP_GENRE_NEON to "Arcade ciberpunk",
+    StringKey.MAP_NAME_PIXEL to "PÍXEL",
+    StringKey.MAP_GENRE_PIXEL to "Retro 8 bits",
+    StringKey.MAP_NAME_CIRCUITO to "CIRCUITO",
+    StringKey.MAP_GENRE_CIRCUITO to "Carreras",
+    StringKey.MAP_NAME_SONAR to "SONAR",
+    StringKey.MAP_GENRE_SONAR to "Sigilo submarino",
+    StringKey.MAP_NAME_ISLA to "ISLA",
+    StringKey.MAP_GENRE_ISLA to "Aventura tropical"
 )
 
 private val en = mapOf(
@@ -63,5 +95,26 @@ private val en = mapOf(
     StringKey.ZOOM_OUT to "Zoom out",
     StringKey.VOICE_ON to "VOICE ON",
     StringKey.NAV_INSTRUCTION to "Turn right on 18th Street",
-    StringKey.GO_STRAIGHT to "Go straight"
+    StringKey.GO_STRAIGHT to "Go straight",
+    StringKey.SETTINGS_HEADER to "SETTINGS",
+    StringKey.MAP_LABEL to "MAP",
+    StringKey.USE to "USE",
+    StringKey.LANGUAGE_SWITCH_TO_EN to "Language: Spanish. Tap to switch to English",
+    StringKey.LANGUAGE_SWITCH_TO_ES to "Language: English. Tap to switch to Español",
+    StringKey.MAP_NAME_COBALTO to "COBALT",
+    StringKey.MAP_GENRE_COBALTO to "WGO original",
+    StringKey.MAP_NAME_BARRIO to "DISTRICT",
+    StringKey.MAP_GENRE_BARRIO to "Open city",
+    StringKey.MAP_NAME_PERGAMINO to "PARCHMENT",
+    StringKey.MAP_GENRE_PERGAMINO to "Classic quest",
+    StringKey.MAP_NAME_NEON to "NEON",
+    StringKey.MAP_GENRE_NEON to "Cyber arcade",
+    StringKey.MAP_NAME_PIXEL to "PIXEL",
+    StringKey.MAP_GENRE_PIXEL to "Retro 8-bit",
+    StringKey.MAP_NAME_CIRCUITO to "CIRCUIT",
+    StringKey.MAP_GENRE_CIRCUITO to "Racing",
+    StringKey.MAP_NAME_SONAR to "SONAR",
+    StringKey.MAP_GENRE_SONAR to "Stealth ops",
+    StringKey.MAP_NAME_ISLA to "ISLAND",
+    StringKey.MAP_GENRE_ISLA to "Tropical quest"
 )
