@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
@@ -71,9 +72,10 @@ fun RadarSchematic(
     val sharedClock = if (animated) clock ?: rememberWgoClock() else null
     val look = mapLookFor(style.id)
 
-    // Two layers: the static scene (never reads the clock, so it is drawn once and cached) and the dynamic markers.
+    // Two layers, each promoted to its own render node: the static scene (never reads the clock, so its display list
+    // is recorded once and only replayed) and the dynamic markers (re-recorded per frame when live).
     Box(modifier = modifier.clearAndSetSemantics { }) {
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize().graphicsLayer()) {
             val u = size.width / crop.width
             fun p(x: Float, y: Float) = Offset((x - crop.left) * u, (y - crop.top) * u)
             val palette = style.palette
@@ -82,7 +84,7 @@ fun RadarSchematic(
             drawMapFxStatic(style, u)
         }
 
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize().graphicsLayer()) {
             val u = size.width / crop.width
             fun p(x: Float, y: Float) = Offset((x - crop.left) * u, (y - crop.top) * u)
             val palette = style.palette
