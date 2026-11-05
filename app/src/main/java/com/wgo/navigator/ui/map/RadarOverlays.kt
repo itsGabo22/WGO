@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
@@ -42,7 +43,7 @@ fun RadarOverlays(
     val look = mapLookFor(style.id)
     val palette = style.palette
 
-    Canvas(modifier = modifier.fillMaxSize().clearAndSetSemantics { }) {
+    Canvas(modifier = modifier.fillMaxSize().graphicsLayer().clearAndSetSemantics { }) {
         val u = 1.dp.toPx()
         val t = if (reduceMotion) 0L else clock.millis
         val anim = MapAnim(t, look.stepped)
