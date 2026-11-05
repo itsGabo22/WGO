@@ -90,9 +90,11 @@ class MainActivity : ComponentActivity() {
                         when (currentScreen) {
                             ScreenState.Listening -> {
                                 ScreenListening(
-                                    isListening = micState != MicState.Idle,
-                                    onToggleListen = appViewModel::onMicTapped,
-                                    onOpenSettings = appViewModel::openSettings
+                                    micState = micState,
+                                    onMicClick = appViewModel::onMicTapped,
+                                    onCancel = appViewModel::cancelListening,
+                                    onOpenSettings = appViewModel::openSettings,
+                                    onToggleLanguage = settingsViewModel::toggleLanguage
                                 )
                             }
                             ScreenState.ModeSelection -> {

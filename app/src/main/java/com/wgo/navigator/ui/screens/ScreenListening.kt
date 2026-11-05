@@ -1,207 +1,242 @@
 package com.wgo.navigator.ui.screens
 
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.wear.compose.material.Button
-import androidx.wear.compose.material.ButtonDefaults
-import androidx.wear.compose.material.Chip
-import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.Icon
-import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
+import com.wgo.navigator.Language
+import com.wgo.navigator.ui.LocalLanguage
 import com.wgo.navigator.ui.StringKey
+import com.wgo.navigator.ui.components.BezelGauge
+import com.wgo.navigator.ui.components.BezelStyle
+import com.wgo.navigator.ui.components.LanguageSwitch
+import com.wgo.navigator.ui.components.MicOrb
+import com.wgo.navigator.ui.components.MicState
 import com.wgo.navigator.ui.components.StatusBadge
 import com.wgo.navigator.ui.components.StatusBadgeVariant
+import com.wgo.navigator.ui.components.WgoChip
+import com.wgo.navigator.ui.components.WgoIcons
 import com.wgo.navigator.ui.string
-import com.wgo.navigator.ui.theme.WgoBlack
-import com.wgo.navigator.ui.theme.WgoPrimary
-import com.wgo.navigator.ui.theme.WgoWhite
+import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
+import com.wgo.navigator.ui.theme.Wgo
+import com.wgo.navigator.ui.theme.WgoClock
+import com.wgo.navigator.ui.theme.WgoMotion
+import com.wgo.navigator.ui.theme.WgoType
+import com.wgo.navigator.ui.theme.rememberWgoClock
+import com.wgo.navigator.ui.theme.wgoRiseIn
 
+private const val REFERENCE_SIZE = 227f
+
+/** What the title slot shows; a change of [language] with the same [state] rolls, anything else cross-fades. */
+private data class TitleState(val state: MicState, val language: Language)
+
+/**
+ * Screen 01. Positions follow the spec (`top` in dp on a 227 dp canvas) expressed as fractions of the actual
+ * screen so they also fit Small Round. One [WgoClock] is shared by every looping piece.
+ */
 @Composable
 fun ScreenListening(
-    isListening: Boolean,
-    onToggleListen: () -> Unit,
-    onOpenSettings: () -> Unit
+    micState: MicState,
+    onMicClick: () -> Unit,
+    onCancel: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onToggleLanguage: () -> Unit,
+    modifier: Modifier = Modifier,
+    transcript: String = "",
+    clock: WgoClock = rememberWgoClock()
 ) {
-    val statusText = if (isListening) string(StringKey.TITLE_ROUTING) else string(StringKey.TITLE_WHERE_TO)
+    val palette = Wgo.palette
+    val language = LocalLanguage.current
+    val reduceMotion = LocalWgoReduceMotion.current
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background)) {
-        Column(
+    BoxWithConstraints(modifier = modifier.fillMaxSize().background(palette.canvas)) {
+        val k = maxWidth.value / REFERENCE_SIZE
+        fun dial(value: Float): Dp = (value * k).dp
+
+        // Bezel ring: idle comet at rest, two comets while listening.
+        BezelGauge(
+            modifier = Modifier.wgoRiseIn(delayMs = 420, rise = 0.dp),
+            style = if (micState == MicState.Listening) BezelStyle.ListeningComets else BezelStyle.IdleComet,
+            clock = clock
+        )
+
+        // Header: badge @16, title / state label @38, transcript @54.
+        StatusBadge(
+            text = "WGO • NAV",
+            variant = StatusBadgeVariant.Neutral,
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(16f)).wgoRiseIn()
+        )
+
+        AnimatedContent(
+            targetState = TitleState(micState, language),
+            transitionSpec = {
+                when {
+                    reduceMotion -> fadeIn(tween(WgoMotion.SNAP)) togetherWith fadeOut(tween(WgoMotion.SNAP))
+                    initialState.state == targetState.state ->
+                        slideInVertically(spring(dampingRatio = 0.7f)) { it } togetherWith
+                            slideOutVertically(spring(dampingRatio = 0.7f)) { -it }
+                    else -> fadeIn(tween(WgoMotion.SNAP)) togetherWith fadeOut(tween(WgoMotion.SNAP))
+                }
+            },
             modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 28.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            // TOP ZONE
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .padding(bottom = 16.dp)
-            ) {
-                StatusBadge(text = "WGO • NAV", variant = StatusBadgeVariant.Neutral)
-                Spacer(modifier = Modifier.height(8.dp))
-                if (isListening) {
-                    Text(
-                        text = statusText,
-                        color = WgoPrimary,
-                        style = MaterialTheme.typography.caption1.copy(fontWeight = FontWeight.Bold),
-                        textAlign = TextAlign.Center
-                    )
-                } else {
-                    Text(
-                        text = statusText,
-                        color = MaterialTheme.colors.onBackground,
-                        style = MaterialTheme.typography.title3,
+                .align(Alignment.TopCenter)
+                .offset(y = dial(38f))
+                .width(dial(150f))
+                .height(48.dp)
+                .wgoRiseIn(delayMs = WgoMotion.STAGGER),
+            contentAlignment = Alignment.TopCenter,
+            label = "listeningTitle"
+        ) { title ->
+            // Resolve strings with the language of this state so the outgoing title keeps its old text while rolling.
+            CompositionLocalProvider(LocalLanguage provides title.language) {
+                when (title.state) {
+                    MicState.Idle -> Text(
+                        text = string(StringKey.TITLE_WHERE_TO),
+                        color = palette.ink,
+                        style = WgoType.headlineMd,
                         textAlign = TextAlign.Center,
                         maxLines = 2
                     )
+                    MicState.Listening -> Text(
+                        text = string(StringKey.LISTENING_LABEL),
+                        color = palette.primaryInk,
+                        style = WgoType.labelMd,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                    )
+                    MicState.Processing -> Text(
+                        text = string(StringKey.TITLE_ROUTING),
+                        color = palette.primaryInk,
+                        style = WgoType.labelMd,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                    )
                 }
             }
+        }
 
-            // CENTER ZONE (Mic)
-            Box(
-                contentAlignment = Alignment.Center
+        if (micState == MicState.Listening) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = dial(54f))
+                    .width(dial(150f)),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
             ) {
-                PrimaryMicButton(
-                    isListening = isListening,
-                    onClick = onToggleListen
+                if (transcript.isNotEmpty()) {
+                    Text(
+                        text = transcript,
+                        color = palette.ink,
+                        style = WgoType.bodyMd,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
+                // Caret blinks with hard steps (1 s period), read in the draw phase only.
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(14.dp)
+                        .graphicsLayer { alpha = if ((clock.millis / 500L) % 2L == 0L) 1f else 0f }
+                        .background(palette.primaryInk)
                 )
             }
         }
-        
-        // Settings Entry Point
-        Button(
-            onClick = onOpenSettings,
-            colors = ButtonDefaults.buttonColors(
-                backgroundColor = androidx.compose.ui.graphics.Color.Transparent,
-                contentColor = MaterialTheme.colors.onBackground
-            ),
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp).size(40.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Settings,
-                contentDescription = string(StringKey.SETTINGS),
-                modifier = Modifier.size(24.dp)
+
+        // Mic orb: 64 dp, top 92 (center y 124).
+        MicOrb(
+            state = micState,
+            onClick = onMicClick,
+            clock = clock,
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(92f)).wgoRiseIn(delayMs = WgoMotion.STAGGER)
+        )
+
+        // CANCEL chip 104 x 32 @176 (48 dp touch box starts 8 dp above the visual).
+        if (micState != MicState.Idle) {
+            WgoChip(
+                label = string(StringKey.BTN_CANCEL),
+                onClick = onCancel,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(176f) - 8.dp).wgoRiseIn()
             )
         }
+
+        // Mirrored side buttons: 40 dp visual, 12 dp from the edges, top 94 (48 dp touch boxes).
+        LanguageSwitch(
+            language = language,
+            onToggle = onToggleLanguage,
+            modifier = Modifier.align(Alignment.TopStart).offset(x = 8.dp, y = dial(94f) - 4.dp).wgoRiseIn(delayMs = 2 * WgoMotion.STAGGER)
+        )
+        SettingsButton(
+            onClick = onOpenSettings,
+            modifier = Modifier.align(Alignment.TopEnd).offset(x = (-8).dp, y = dial(94f) - 4.dp).wgoRiseIn(delayMs = 2 * WgoMotion.STAGGER)
+        )
     }
 }
 
+/** Ghost 40 dp button with a 22 dp gear, 48 dp touch area; pressing inverts instantly. */
 @Composable
-fun PrimaryMicButton(
-    isListening: Boolean,
-    onClick: () -> Unit
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "micAnimation")
-    
-    // Ring 1 animation
-    val ring1Scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring1Scale"
-    )
-    val ring1Alpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring1Alpha"
-    )
-
-    // Ring 2 animation (staggered by initialValue/targetValue manipulation or by using delayed start, but simple way is offsetting if possible. Actually tween doesn't support delay inside infiniteRepeatable in older versions smoothly without custom logic, so let's use a single infinite transition but offset the values if needed. Wait, in Compose we can use multiple animations with `StartOffset`!)
-
-    val ring2Scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-            initialStartOffset = StartOffset(1000)
-        ),
-        label = "ring2Scale"
-    )
-    val ring2Alpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-            initialStartOffset = StartOffset(1000)
-        ),
-        label = "ring2Alpha"
-    )
-
-    // Main mic button breathing scale
-    val micScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "micScale"
-    )
+private fun SettingsButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val palette = Wgo.palette
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val description = string(StringKey.SETTINGS)
 
     Box(
-        modifier = Modifier
-            .size(120.dp)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = "Activar micrófono" },
+        modifier = modifier
+            .size(48.dp)
+            .semantics { contentDescription = description }
+            .clickable(interactionSource = interactionSource, indication = null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (isListening) {
-            // Ring 1
-            Box(
-                modifier = Modifier
-                    .size(64.dp * ring1Scale)
-                    .clip(CircleShape)
-                    .background(WgoPrimary.copy(alpha = ring1Alpha))
-            )
-            // Ring 2
-            Box(
-                modifier = Modifier
-                    .size(64.dp * ring2Scale)
-                    .clip(CircleShape)
-                    .background(WgoPrimary.copy(alpha = ring2Alpha))
-            )
-        }
-
-        // Microphone Button
         Box(
             modifier = Modifier
-                .size(64.dp * (if (isListening) micScale else 1f))
+                .size(40.dp)
                 .clip(CircleShape)
-                .background(WgoPrimary),
+                .background(if (pressed) palette.ink else androidx.compose.ui.graphics.Color.Transparent),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Rounded.Mic,
+                imageVector = WgoIcons.Settings,
                 contentDescription = null,
-                tint = WgoWhite,
-                modifier = Modifier.size(32.dp)
+                tint = if (pressed) palette.inkInverse else palette.ink,
+                modifier = Modifier.size(22.dp)
             )
         }
     }
