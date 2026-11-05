@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
                     val currentScreen by appViewModel.screen.collectAsState()
                     val micState by appViewModel.micState.collectAsState()
                     val selectedMode by appViewModel.selectedMode.collectAsState()
+                    val mapStyleId by settingsViewModel.mapStyle.collectAsState()
                     val reduceMotion = LocalWgoReduceMotion.current
 
                     // Back leaves mode selection, navigation and settings for the listening screen.
@@ -124,7 +125,8 @@ class MainActivity : ComponentActivity() {
                             }
                             ScreenState.Navigation -> {
                                 ScreenActiveNavigation(
-                                    onCancel = appViewModel::backToListening
+                                    onCancel = appViewModel::backToListening,
+                                    mapStyleId = mapStyleId
                                 )
                             }
                             ScreenState.Settings -> {
