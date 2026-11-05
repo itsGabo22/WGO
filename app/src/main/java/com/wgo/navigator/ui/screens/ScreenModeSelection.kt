@@ -103,7 +103,7 @@ fun ScreenModeSelection(
             variant = StatusBadgeVariant.Soft,
             equalizer = true,
             clock = clock,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(16f)).wgoRiseIn()
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(19f)).wgoRiseIn()
         )
         Text(
             text = destination,
