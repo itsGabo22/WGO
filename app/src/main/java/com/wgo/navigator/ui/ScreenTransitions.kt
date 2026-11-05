@@ -44,8 +44,10 @@ fun wgoScreenTransition(
         from == ScreenState.ModeSelection && to == ScreenState.Navigation -> {
             val decel = tween<Float>(WgoMotion.ENTER, easing = WgoMotion.EmphasizedDecel)
             val origin = TransformOrigin(if (mode == TravelMode.Walk) 0.25f else 0.75f, PAD_CENTER_Y)
+            // The pressed pad stays visible (and inverted) under the zoom until the transition ends.
             (fadeIn(decel) + scaleIn(decel, initialScale = 0.85f, transformOrigin = origin)) togetherWith
-                ExitTransition.None
+                // (a near-opaque fade keeps the exiting screen alive for the whole 420 ms without visibly dimming it)
+                fadeOut(tween(WgoMotion.ENTER), targetAlpha = 0.99f)
         }
         else -> EnterTransition.None togetherWith fadeOut(tween(WgoMotion.SNAP))
     }
