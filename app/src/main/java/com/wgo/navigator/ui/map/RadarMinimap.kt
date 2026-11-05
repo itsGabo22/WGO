@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.onSizeChanged
@@ -105,7 +106,7 @@ fun RadarMinimap(
         Box(Modifier.fillMaxSize().background(style.palette.ground.copy(alpha = style.id.washAlpha())))
 
         // Static style effects (hatch, scanlines, grid, vignette...): no clock read, so this layer is cached.
-        Box(Modifier.fillMaxSize().drawBehind { drawMapFxStatic(style, 1.dp.toPx()) })
+        Box(Modifier.fillMaxSize().graphicsLayer().drawBehind { drawMapFxStatic(style, 1.dp.toPx()) })
 
         RadarOverlays(
             style = style,
