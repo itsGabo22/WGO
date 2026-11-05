@@ -180,7 +180,7 @@ fun DrawScope.drawMapClouds(style: WgoMapStyle, u: Float, anim: MapAnim?) {
     val x = -80f * u + travel * (anim?.phase(9000) ?: 0.3f)
     val y = size.height * 0.38f
     val color = style.palette.player
-    listOf(Triple(62f, 38f, 0.05f), Triple(48f, 30f, 0.06f), Triple(34f, 21f, 0.07f)).forEach { (rx, ry, a) ->
+    listOf(Triple(62f, 38f, 0.03f), Triple(48f, 30f, 0.035f), Triple(34f, 21f, 0.04f)).forEach { (rx, ry, a) ->
         drawOval(color.copy(alpha = a), Offset(x - rx * u, y - ry * u), Size(2 * rx * u, 2 * ry * u))
     }
 }

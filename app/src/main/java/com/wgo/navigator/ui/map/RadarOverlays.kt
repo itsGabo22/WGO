@@ -47,6 +47,9 @@ fun RadarOverlays(
         val t = if (reduceMotion) 0L else clock.millis
         val anim = MapAnim(t, look.stepped)
 
+        // Cloud shadow falls on the ground, under the rings and the route.
+        drawMapClouds(style, u, if (reduceMotion) null else anim)
+
         drawRings(palette, anchor, u, ringStroke.toPx(), look)
 
         if (route != null) drawRoute(route, palette, look, u, flow = if (reduceMotion) 0f else anim.phase(1000))
@@ -62,8 +65,6 @@ fun RadarOverlays(
         }
 
         drawUser(palette, look, anchor, u, pulse = if (reduceMotion) 0f else anim.ping(1800))
-
-        drawMapClouds(style, u, if (reduceMotion) null else anim)
 
         if (!reduceMotion) {
             val turn = (t % 3600L).toFloat() / 3600f
