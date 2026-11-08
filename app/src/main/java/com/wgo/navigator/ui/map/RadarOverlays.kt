@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import com.wgo.navigator.ui.theme.ClockRate
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
 import com.wgo.navigator.ui.theme.MapFx
 import com.wgo.navigator.ui.theme.WgoClock
@@ -49,6 +50,8 @@ fun RadarOverlays(
     val ringStroke = 1.2.dp.atLeastRealDp()
     val look = mapLookFor(style.id)
     val palette = style.palette
+    // Radar sweep, flow, halo and clouds are slow ambience: 30 fps is enough.
+    clock.Use(ClockRate.Ambience)
 
     Box(modifier = modifier.fillMaxSize().clearAndSetSemantics { }) {
         if (style.fx == MapFx.CLOUDS && !reduceMotion) {

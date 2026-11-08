@@ -55,6 +55,7 @@ import com.wgo.navigator.ui.components.StatusBadgeVariant
 import com.wgo.navigator.ui.components.WgoChip
 import com.wgo.navigator.ui.components.WgoIcons
 import com.wgo.navigator.ui.string
+import com.wgo.navigator.ui.theme.ClockRate
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoClock
@@ -156,6 +157,7 @@ fun ScreenListening(
         }
 
         if (micState == MicState.Listening) {
+            clock.Use(ClockRate.Ambience) // blinking caret
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)

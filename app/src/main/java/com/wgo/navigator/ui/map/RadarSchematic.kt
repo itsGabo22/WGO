@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.wgo.navigator.ui.theme.ClockRate
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
 import com.wgo.navigator.ui.theme.MapStyleId
 import com.wgo.navigator.ui.theme.NightPalette
@@ -72,6 +73,8 @@ fun RadarSchematic(
     val reduceMotion = LocalWgoReduceMotion.current
     val animated = live && !reduceMotion
     val sharedClock = if (animated) clock ?: rememberWgoClock() else null
+    // Live only in the picker disc, which the user is manipulating: full rate.
+    sharedClock?.Use(ClockRate.Full)
     val look = mapLookFor(style.id)
 
     // Two layers, each promoted to its own render node: the static scene (never reads the clock, so its display list

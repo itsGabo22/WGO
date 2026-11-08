@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.Text
+import com.wgo.navigator.ui.theme.ClockRate
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoClock
 import com.wgo.navigator.ui.theme.WgoType
@@ -77,6 +78,7 @@ fun StatusBadge(
 
 @Composable
 private fun Equalizer(color: androidx.compose.ui.graphics.Color, clock: WgoClock) {
+    clock.Use(ClockRate.Ambience)
     Canvas(modifier = Modifier.size(width = 12.dp, height = BarMaxHeight)) {
         val w = BarWidth.toPx()
         val maxH = BarMaxHeight.toPx()

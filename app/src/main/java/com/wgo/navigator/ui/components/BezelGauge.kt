@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import com.wgo.navigator.ui.theme.ClockRate
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoClock
 import com.wgo.navigator.ui.theme.rememberWgoClock
@@ -53,6 +54,8 @@ fun BezelGauge(
     val palette = Wgo.palette
     val animated = style != BezelStyle.Gauge
     val sharedClock = if (animated) clock ?: rememberWgoClock() else null
+    // Listening comets track the user's speech: full rate. The idle comet and the GPS search arc are ambience.
+    sharedClock?.Use(if (style == BezelStyle.ListeningComets) ClockRate.Full else ClockRate.Ambience)
 
     Canvas(modifier = modifier.fillMaxSize().clearAndSetSemantics { }) {
         val stroke = StrokeWidth.toPx()

@@ -42,6 +42,7 @@ import com.wgo.navigator.Language
 import com.wgo.navigator.ui.LocalLanguage
 import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.string
+import com.wgo.navigator.ui.theme.ClockRate
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoClock
@@ -71,6 +72,7 @@ fun TurnCard(
 ) {
     val palette = Wgo.palette
     val sharedClock = if (imminent) clock ?: rememberWgoClock() else null
+    sharedClock?.Use(ClockRate.Full)
     val background = if (imminent) palette.primary else palette.surface
     val iconColor = if (imminent) palette.onPrimary else palette.primaryInk
     val textColor = if (imminent) palette.onPrimary else palette.ink

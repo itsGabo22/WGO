@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.Icon
 import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.string
+import com.wgo.navigator.ui.theme.ClockRate
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoClock
 import com.wgo.navigator.ui.theme.atLeastRealDp
@@ -67,6 +68,7 @@ fun MicOrb(
     val palette = Wgo.palette
     val animated = state != MicState.Idle
     val sharedClock = if (animated) clock ?: rememberWgoClock() else null
+    sharedClock?.Use(ClockRate.Full)
 
     val label = string(StringKey.ACTIVATE_MIC)
     val stateLabel = string(
