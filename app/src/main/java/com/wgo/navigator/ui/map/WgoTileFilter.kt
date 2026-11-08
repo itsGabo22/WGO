@@ -38,7 +38,7 @@ object WgoTileFilter {
         return when (style.id) {
             MapStyleId.COBALTO -> cobalto(dark)
             MapStyleId.BARRIO -> duotone(map.ground, map.roadMajor, 0.85f)
-            MapStyleId.PERGAMINO -> duotone(map.ground, map.roadCasing, 0.70f)
+            MapStyleId.PERGAMINO -> duotone(map.ground, map.roadCasing, 0.55f)
             MapStyleId.NEON -> duotone(map.ground, map.roadMajor, 0.30f)
             MapStyleId.PIXEL -> duotone(map.ground, map.roadCasing, 0.60f)
             MapStyleId.CIRCUITO -> duotone(map.ground, map.roadMajor, 0.25f)

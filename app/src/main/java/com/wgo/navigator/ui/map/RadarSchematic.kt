@@ -124,7 +124,7 @@ fun RadarSchematic(
                     }
                     drawUser(palette, paint, pulse = anim?.ping(1800) ?: 0f)
 
-                    if (dark && style.id.dimsInNight()) drawRect(theme.canvas.copy(alpha = NIGHT_DIM_ALPHA))
+                    if (dark && style.id.dimsInNight()) drawRect(theme.canvas.copy(alpha = style.id.nightDimAlpha()))
                 }
             }
         )

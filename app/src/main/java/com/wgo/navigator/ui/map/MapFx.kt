@@ -65,10 +65,18 @@ class MapAnim(private val millis: Long, private val stepped: Boolean) {
     }
 }
 
-/** The light styles are dimmed to 78% brightness in Night (a 22% black overlay above the whole radar). */
+/** The light styles are dimmed in Night by a black overlay above the whole radar (see [nightDimAlpha]). */
 fun MapStyleId.dimsInNight(): Boolean = this == MapStyleId.PERGAMINO || this == MapStyleId.PIXEL || this == MapStyleId.ISLA
 
-const val NIGHT_DIM_ALPHA = 0.22f
+/**
+ * Strength of the Night dim overlay. PIXEL keeps 78% brightness; PERGAMINO and ISLA are dimmed less because their
+ * route already sits close to the 3.4:1 floor over the rendered tile (their paper effects darken the surroundings).
+ */
+fun MapStyleId.nightDimAlpha(): Float = when (this) {
+    MapStyleId.PERGAMINO -> 0.10f
+    MapStyleId.ISLA -> 0.14f
+    else -> 0.22f
+}
 
 /**
  * Strength of the `ground` wash over the tiles. The light styles use a stronger wash (their dark routes need a light

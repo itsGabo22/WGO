@@ -121,7 +121,7 @@ fun RadarMinimap(
         )
 
         if (dark && style.id.dimsInNight()) {
-            Box(Modifier.fillMaxSize().background(palette.canvas.copy(alpha = NIGHT_DIM_ALPHA)))
+            Box(Modifier.fillMaxSize().background(palette.canvas.copy(alpha = style.id.nightDimAlpha())))
         }
 
         if (showNorth) {
