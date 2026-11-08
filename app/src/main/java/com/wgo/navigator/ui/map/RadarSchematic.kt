@@ -2,9 +2,11 @@ package com.wgo.navigator.ui.map
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -84,31 +86,39 @@ fun RadarSchematic(
             drawMapFxStatic(style, u)
         }
 
-        Canvas(Modifier.fillMaxSize().graphicsLayer()) {
-            val u = size.width / crop.width
-            fun p(x: Float, y: Float) = Offset((x - crop.left) * u, (y - crop.top) * u)
-            val palette = style.palette
-            val anim = sharedClock?.let { MapAnim(it.millis, look.stepped) }
+        Spacer(
+            Modifier.fillMaxSize().graphicsLayer().drawWithCache {
+                // Built once per size/style: positions, the route path and every stroke/effect/shader (RadarPaint).
+                val u = size.width / crop.width
+                fun p(x: Float, y: Float) = Offset((x - crop.left) * u, (y - crop.top) * u)
+                val palette = style.palette
+                val paint = RadarPaint(palette, look, u, p(USER_X, USER_Y), 1.2f * u)
+                val node = p(USER_X, 70f)
+                val incidentAt = p(158f, 132f)
+                val poiAt = p(64f, 158f)
+                val route = Path().apply {
+                    val a = paint.anchor; val c = p(240f, 70f)
+                    moveTo(a.x, a.y); lineTo(node.x, node.y); lineTo(c.x, c.y)
+                }
+                onDrawBehind {
+                    val anim = sharedClock?.let { MapAnim(it.millis, look.stepped) }
 
-            drawMapClouds(style, u, anim)
+                    drawMapClouds(style, u, anim)
 
-            // Rings, route, node, blips, user: the same helpers the real radar uses.
-            val anchor = p(USER_X, USER_Y)
-            drawRings(palette, anchor, u, 1.2f * u, look)
-            val route = Path().apply {
-                val a = p(USER_X, USER_Y); val b = p(USER_X, 70f); val c = p(240f, 70f)
-                moveTo(a.x, a.y); lineTo(b.x, b.y); lineTo(c.x, c.y)
+                    // Rings, route, node, blips, user: the same helpers the real radar uses.
+                    drawRings(palette, paint)
+                    drawRoute(route, palette, paint, flow = anim?.phase(1000) ?: 0f)
+                    drawManeuverNode(palette, palette.ground, node, u, 1f, look)
+                    if (showBlips) {
+                        drawBlip(theme.alert, incidentAt, u, anim?.phase(2400), look)
+                        drawBlip(theme.go, poiAt, u, anim?.let { MapAnim(it.raw + 1200L, look.stepped).phase(2400) }, look)
+                    }
+                    drawUser(palette, paint, pulse = anim?.ping(1800) ?: 0f)
+
+                    if (dark && style.id.dimsInNight()) drawRect(theme.canvas.copy(alpha = NIGHT_DIM_ALPHA))
+                }
             }
-            drawRoute(route, palette, look, u, flow = anim?.phase(1000) ?: 0f)
-            drawManeuverNode(palette, palette.ground, p(USER_X, 70f), u, 1f, look)
-            if (showBlips) {
-                drawBlip(theme.alert, p(158f, 132f), u, anim?.phase(2400), look)
-                drawBlip(theme.go, p(64f, 158f), u, anim?.let { MapAnim(it.raw + 1200L, look.stepped).phase(2400) }, look)
-            }
-            drawUser(palette, look, anchor, u, pulse = anim?.ping(1800) ?: 0f)
-
-            if (dark && style.id.dimsInNight()) drawRect(theme.canvas.copy(alpha = NIGHT_DIM_ALPHA))
-        }
+        )
     }
 }
 

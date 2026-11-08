@@ -174,14 +174,21 @@ private fun DrawScope.compassTicks(color: Color, u: Float) {
 // Animated effect: ISLA cloud shadow (9 s loop), three stacked ellipses of decreasing alpha, no blur.
 // ---------------------------------------------------------------------------------------------------------------
 
+/** Cloud ellipses: radius x, radius y (reference dp) and alpha, largest first. */
+private val CloudRx = floatArrayOf(62f, 48f, 34f)
+private val CloudRy = floatArrayOf(38f, 30f, 21f)
+private val CloudAlpha = floatArrayOf(0.03f, 0.035f, 0.04f)
+
 fun DrawScope.drawMapClouds(style: WgoMapStyle, u: Float, anim: MapAnim?) {
     if (style.fx != MapFx.CLOUDS) return
     val travel = size.width + 160f * u
     val x = -80f * u + travel * (anim?.phase(9000) ?: 0.3f)
     val y = size.height * 0.38f
     val color = style.palette.player
-    listOf(Triple(62f, 38f, 0.03f), Triple(48f, 30f, 0.035f), Triple(34f, 21f, 0.04f)).forEach { (rx, ry, a) ->
-        drawOval(color.copy(alpha = a), Offset(x - rx * u, y - ry * u), Size(2 * rx * u, 2 * ry * u))
+    for (i in CloudRx.indices) {
+        val rx = CloudRx[i]
+        val ry = CloudRy[i]
+        drawOval(color, Offset(x - rx * u, y - ry * u), Size(2 * rx * u, 2 * ry * u), alpha = CloudAlpha[i])
     }
 }
 
@@ -189,30 +196,70 @@ fun DrawScope.drawMapClouds(style: WgoMapStyle, u: Float, anim: MapAnim?) {
 // Shared markers, used by the real radar overlays and by the schematic scene.
 // ---------------------------------------------------------------------------------------------------------------
 
-fun DrawScope.drawRings(palette: WgoMapPalette, anchor: Offset, u: Float, strokePx: Float, look: MapLook) {
-    val dash = PathEffect.dashPathEffect(floatArrayOf(4f * u, 4f * u))
-    listOf(38f, 76f, 114f).forEach { r ->
-        drawCircle(palette.rangeRing, r * u, anchor, style = Stroke(strokePx, cap = if (look.square) StrokeCap.Butt else StrokeCap.Round, pathEffect = dash))
+private val RingRadii = floatArrayOf(38f, 76f, 114f)
+private val GlowWidths = floatArrayOf(16f, 12f, 9f)
+private val GlowAlphas = floatArrayOf(0.10f, 0.16f, 0.26f)
+
+/**
+ * Every object the radar markers reuse per frame (strokes, dash effects, the chevron path, the sweep shader), built
+ * ONCE per size/style/anchor from a `drawWithCache` block so the per-frame draw allocates nothing native.
+ * The flow dashes use [FLOW_STEPS] precomputed phases (under 1 px apart on every supported screen).
+ */
+class RadarPaint(palette: WgoMapPalette, val look: MapLook, val u: Float, val anchor: Offset, ringStrokePx: Float) {
+    val ringStroke = Stroke(
+        ringStrokePx,
+        cap = if (look.square) StrokeCap.Butt else StrokeCap.Round,
+        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f * u, 4f * u))
+    )
+    val glowColors = Array(GlowAlphas.size) { palette.route.copy(alpha = GlowAlphas[it]) }
+    val glowStrokes = Array(GlowWidths.size) { Stroke(GlowWidths[it] * u + 6.5f * u, cap = look.cap, join = look.join) }
+    val haloStroke = Stroke(12f * u, cap = look.cap, join = look.join)
+    val lineStroke = Stroke(6.5f * u, cap = look.cap, join = look.join)
+    val flowStrokes: Array<Stroke> = run {
+        val on = 3f * u
+        val off = 12f * u
+        Array(FLOW_STEPS) { k ->
+            Stroke(
+                2.4f * u, cap = StrokeCap.Butt, join = look.join,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(on, off), -(k.toFloat() / FLOW_STEPS) * (on + off))
+            )
+        }
+    }
+    val haloColor = palette.route.copy(alpha = 0.24f)
+    val chevron = Path().apply {
+        moveTo(anchor.x, anchor.y - 13f * u)
+        lineTo(anchor.x + 10f * u, anchor.y + 11f * u)
+        lineTo(anchor.x, anchor.y + 6f * u)
+        lineTo(anchor.x - 10f * u, anchor.y + 11f * u)
+        close()
+    }
+    val chevronOutline = Stroke(2f * u, join = look.join)
+    val sweepBrush = Brush.sweepGradient(
+        0f to Color.Transparent,
+        0.7f to Color.Transparent,
+        1f to palette.route.copy(alpha = look.sweepAlpha),
+        center = anchor
+    )
+
+    companion object {
+        const val FLOW_STEPS = 32
     }
 }
 
-/** Halo 12 u under line 6.5 u, optional stacked-stroke glow (no blur), plus moving flow dashes. */
-fun DrawScope.drawRoute(route: Path, palette: WgoMapPalette, look: MapLook, u: Float, flow: Float) {
-    if (look.glow) {
+fun DrawScope.drawRings(palette: WgoMapPalette, paint: RadarPaint) {
+    for (r in RingRadii) drawCircle(palette.rangeRing, r * paint.u, paint.anchor, style = paint.ringStroke)
+}
+
+/** Halo 12 u under line 6.5 u, optional stacked-stroke glow (no blur), plus moving flow dashes ([flow] 0..1). */
+fun DrawScope.drawRoute(route: Path, palette: WgoMapPalette, paint: RadarPaint, flow: Float) {
+    if (paint.look.glow) {
         // glow: three wider strokes of decreasing alpha in the route color
-        listOf(16f to 0.10f, 12f to 0.16f, 9f to 0.26f).forEach { (w, a) ->
-            drawPath(route, palette.route.copy(alpha = a), style = Stroke(w * u + 6.5f * u, cap = look.cap, join = look.join))
-        }
+        for (i in paint.glowStrokes.indices) drawPath(route, paint.glowColors[i], style = paint.glowStrokes[i])
     }
-    drawPath(route, palette.routeHalo, style = Stroke(12f * u, cap = look.cap, join = look.join))
-    drawPath(route, palette.route, style = Stroke(6.5f * u, cap = look.cap, join = look.join))
-    val on = 3f * u
-    val off = 12f * u
-    drawPath(
-        route, palette.routeHalo,
-        style = Stroke(2.4f * u, cap = StrokeCap.Butt, join = look.join,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(on, off), -flow * (on + off)))
-    )
+    drawPath(route, palette.routeHalo, style = paint.haloStroke)
+    drawPath(route, palette.route, style = paint.lineStroke)
+    val k = (flow * RadarPaint.FLOW_STEPS).toInt().coerceIn(0, RadarPaint.FLOW_STEPS - 1)
+    drawPath(route, palette.routeHalo, style = paint.flowStrokes[k])
 }
 
 fun DrawScope.drawManeuverNode(palette: WgoMapPalette, fill: Color, at: Offset, u: Float, breathe: Float, look: MapLook) {
@@ -238,32 +285,20 @@ fun DrawScope.drawBlip(color: Color, at: Offset, u: Float, ping: Float?, look: M
     }
 }
 
-/** User chevron (never rotated) with its 15 u halo: pulse 0..1. */
-fun DrawScope.drawUser(palette: WgoMapPalette, look: MapLook, anchor: Offset, u: Float, pulse: Float) {
-    val haloColor = palette.route.copy(alpha = 0.24f)
-    val haloR = 15f * u * (1f + 0.2f * pulse)
-    if (look.square) drawRect(haloColor, Offset(anchor.x - haloR, anchor.y - haloR), Size(2 * haloR, 2 * haloR))
-    else drawCircle(haloColor, haloR, anchor)
-    val chevron = Path().apply {
-        moveTo(anchor.x, anchor.y - 13f * u)
-        lineTo(anchor.x + 10f * u, anchor.y + 11f * u)
-        lineTo(anchor.x, anchor.y + 6f * u)
-        lineTo(anchor.x - 10f * u, anchor.y + 11f * u)
-        close()
-    }
-    drawPath(chevron, palette.ground, style = Stroke(2f * u, join = look.join))
-    drawPath(chevron, palette.player)
+/** User chevron (never rotated) at the paint's anchor with its 15 u halo: pulse 0..1. */
+fun DrawScope.drawUser(palette: WgoMapPalette, paint: RadarPaint, pulse: Float) {
+    val anchor = paint.anchor
+    val haloR = 15f * paint.u * (1f + 0.2f * pulse)
+    if (paint.look.square) drawRect(paint.haloColor, Offset(anchor.x - haloR, anchor.y - haloR), Size(2 * haloR, 2 * haloR))
+    else drawCircle(paint.haloColor, haloR, anchor)
+    drawPath(paint.chevron, palette.ground, style = paint.chevronOutline)
+    drawPath(paint.chevron, palette.player)
 }
 
-/** Conic radar sweep from [anchor]; the leading edge rotates with [turn] (0..1). */
-fun DrawScope.drawSweep(palette: WgoMapPalette, look: MapLook, anchor: Offset, turn: Float) {
-    val brush = Brush.sweepGradient(
-        0f to Color.Transparent,
-        0.7f to Color.Transparent,
-        1f to palette.route.copy(alpha = look.sweepAlpha),
-        center = anchor
-    )
+/** Conic radar sweep from the paint's anchor; the leading edge rotates with [turn] (0..1). */
+fun DrawScope.drawSweep(paint: RadarPaint, turn: Float) {
+    val anchor = paint.anchor
     rotate(degrees = 360f * turn, pivot = anchor) {
-        drawCircle(brush, radius = size.width + size.height, center = anchor)
+        drawCircle(paint.sweepBrush, radius = size.width + size.height, center = anchor)
     }
 }
