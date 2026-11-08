@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,7 +28,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Icon
@@ -47,10 +50,11 @@ import com.wgo.navigator.ui.theme.wgoMinTouch
 /**
  * Settings row that opens the map picker: 132 x 44 pill (`surface` + `edge-control`), a 34 dp round schematic thumbnail
  * of the active style at 5 dp inset, a text column ("MAPA" over the style name) and a chevron. The thumbnail pops when
- * the style changes. The whole row is the touch target (48 real dp minimum height).
+ * the style changes. The whole row is the touch target (48 real dp minimum height, capped by [maxTouchHeight] where
+ * stacked controls would otherwise overlap).
  */
 @Composable
-fun MapRow(styleId: MapStyleId, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun MapRow(styleId: MapStyleId, onClick: () -> Unit, modifier: Modifier = Modifier, maxTouchHeight: Dp = Dp.Unspecified) {
     val palette = Wgo.palette
     val reduceMotion = LocalWgoReduceMotion.current
     val interactionSource = remember { MutableInteractionSource() }
@@ -72,6 +76,7 @@ fun MapRow(styleId: MapStyleId, onClick: () -> Unit, modifier: Modifier = Modifi
     Box(
         modifier = modifier
             .width(132.dp)
+            .then(if (maxTouchHeight.isSpecified) Modifier.heightIn(max = maxTouchHeight) else Modifier)
             .wgoMinTouch(height = 48.dp)
             .semantics(mergeDescendants = true) { contentDescription = "$mapLabel: $name" }
             .clickable(interactionSource = interactionSource, indication = null, role = Role.Button, onClick = onClick),

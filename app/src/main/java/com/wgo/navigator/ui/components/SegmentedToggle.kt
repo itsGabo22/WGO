@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,7 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.wear.compose.material.Text
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
 import com.wgo.navigator.ui.theme.Wgo
@@ -42,14 +45,16 @@ private val KnobInset = 3.dp
 /**
  * Two-option pill: 156 x 40 dp visual (48 dp touch height), knob 75 x 34 dp that slides with a spring.
  * The label color flips at mid-travel. Exposed as a selectable group (radio buttons) so TalkBack announces
- * the selected option.
+ * the selected option. [maxTouchHeight] caps the hit box where stacked controls would otherwise overlap (it is applied
+ * outside the 48 real dp minimum, so it wins).
  */
 @Composable
 fun SegmentedToggle(
     options: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    maxTouchHeight: Dp = Dp.Unspecified
 ) {
     require(options.size == 2) { "SegmentedToggle supports exactly two options" }
     val palette = Wgo.palette
@@ -66,6 +71,7 @@ fun SegmentedToggle(
     Box(
         modifier = modifier
             .width(PillWidth)
+            .then(if (maxTouchHeight.isSpecified) Modifier.heightIn(max = maxTouchHeight) else Modifier)
             .wgoMinTouch(height = 48.dp)
             .selectableGroup(),
         contentAlignment = Alignment.Center

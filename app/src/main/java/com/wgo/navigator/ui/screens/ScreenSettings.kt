@@ -24,10 +24,14 @@ import com.wgo.navigator.ui.theme.wgoTouchSide
 
 private const val REFERENCE_SIZE = 227f
 
+/** Centre-to-centre pitch of the three stacked controls: 48 real dp hit boxes (56.7 dp at s = 0.846) never overlap. */
+private const val ROW_PITCH = 57f
+
 /**
  * Settings, no scroll and no close button (leave with Back / swipe from the left edge). Positions are the spec's `top`
- * values on the 227 dp canvas: title @24, theme toggle @52, language toggle @104, map row @156.
- * Theme and language apply live and persist through [viewModel]; the map row opens the picker.
+ * values on the 227 dp canvas: title @18, theme toggle @40, language toggle @97, map row @152 (centres 57 dp apart).
+ * Every hit box is 48 real dp down to s = 0.846; below that (the 0.8 clamp) they are capped at the 57 dp pitch so
+ * they still never overlap. Theme and language apply live and persist through [viewModel]; the map row opens the picker.
  */
 @Composable
 fun ScreenSettings(
@@ -48,29 +52,35 @@ fun ScreenSettings(
             text = string(StringKey.SETTINGS_HEADER).uppercase(),
             color = palette.ink,
             style = WgoType.labelMd,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(24f))
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(18f))
         )
 
-        // Hit boxes grow to 48 real dp around the 40 / 44 dp visuals; keep the visuals on the spec positions.
-        val toggleExtra = (wgoTouchSide(40.dp) - 40.dp) / 2
+        // Hit boxes grow to 48 real dp around the 40 / 44 dp visuals (capped at the pitch); visuals stay on position.
+        val pitch = dial(ROW_PITCH)
+        val toggleTouch = minOf(wgoTouchSide(40.dp), pitch)
+        val toggleExtra = (toggleTouch - 40.dp) / 2
         SegmentedToggle(
             options = listOf(string(StringKey.LIGHT), string(StringKey.DARK)),
             selectedIndex = if (isDarkMode) 1 else 0,
             onSelect = { index -> if ((index == 1) != isDarkMode) viewModel.toggleTheme() },
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(52f) - toggleExtra)
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(40f) - toggleExtra),
+            maxTouchHeight = pitch
         )
         SegmentedToggle(
             options = listOf(string(StringKey.LANG_NAME_ES), string(StringKey.LANG_NAME_EN)),
             selectedIndex = if (language == Language.ES) 0 else 1,
             onSelect = { index -> if ((index == 0) != (language == Language.ES)) viewModel.toggleLanguage() },
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(104f) - toggleExtra)
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(97f) - toggleExtra),
+            maxTouchHeight = pitch
         )
 
-        val rowExtra = (wgoTouchSide(44.dp) - 44.dp) / 2
+        val rowTouch = minOf(wgoTouchSide(44.dp), pitch)
+        val rowExtra = (rowTouch - 44.dp) / 2
         MapRow(
             styleId = mapStyle,
             onClick = onOpenMapPicker,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(156f) - rowExtra)
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(152f) - rowExtra),
+            maxTouchHeight = pitch
         )
     }
 }
