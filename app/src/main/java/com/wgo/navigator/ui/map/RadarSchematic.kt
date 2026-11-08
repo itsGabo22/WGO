@@ -80,14 +80,20 @@ fun RadarSchematic(
     // Two layers, each promoted to its own render node: the static scene (never reads the clock, so its display list
     // is recorded once and only replayed) and the dynamic markers (re-recorded per frame when live).
     Box(modifier = modifier.clearAndSetSemantics { }) {
-        Canvas(Modifier.fillMaxSize().graphicsLayer()) {
-            val u = size.width / crop.width
-            fun p(x: Float, y: Float) = Offset((x - crop.left) * u, (y - crop.top) * u)
-            val palette = style.palette
-            drawRect(palette.ground)
-            drawScene(style.id, palette, look, u, ::p)
-            drawMapFxStatic(style, u)
-        }
+        Spacer(
+            Modifier.fillMaxSize().graphicsLayer().drawWithCache {
+                // The static scene is rasterised once per style/theme/size/crop and then only blitted.
+                val scene = SchematicSceneCache.get(style, dark, size, crop, this, layoutDirection) {
+                    val u = size.width / crop.width
+                    fun p(x: Float, y: Float) = Offset((x - crop.left) * u, (y - crop.top) * u)
+                    val palette = style.palette
+                    drawRect(palette.ground)
+                    drawScene(style.id, palette, look, u, ::p)
+                    drawMapFxStatic(style, u)
+                }
+                onDrawBehind { if (scene != null) drawImage(scene) }
+            }
+        )
 
         Spacer(
             Modifier.fillMaxSize().graphicsLayer().drawWithCache {
