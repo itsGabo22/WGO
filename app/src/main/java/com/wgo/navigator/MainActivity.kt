@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.wear.compose.material.Scaffold
 import com.wgo.navigator.ui.LocalLanguage
+import com.wgo.navigator.ui.wgoEdgeSwipeBack
 import com.wgo.navigator.ui.screens.ScreenActiveNavigation
 import com.wgo.navigator.ui.screens.ScreenListening
 import com.wgo.navigator.ui.screens.ScreenMapPicker
@@ -111,7 +112,10 @@ class MainActivity : ComponentActivity() {
                             transitionSpec = {
                                 wgoScreenTransition(initialState, targetState, selectedMode, reduceMotion)
                             },
-                            modifier = Modifier.fillMaxSize(),
+                            // Edge-only swipe-back on every screen = the same path as hardware Back.
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .wgoEdgeSwipeBack { onBackPressedDispatcher.onBackPressed() },
                             label = "screens"
                         ) { screen ->
                         when (screen) {
