@@ -6,6 +6,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.wgo.navigator.haptics.HapticPlayer
+import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.ui.components.MicState
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
@@ -71,6 +72,10 @@ class MainActivity : ComponentActivity() {
                 merge(appViewModel.haptics, settingsViewModel.haptics).collect { hapticPlayer.play(it) }
             }
         }
+
+        // Debug-only resource counters (no-op in release): frames per screen and a WGO_METRICS line every 30 s.
+        WgoMetrics.install(this, lifecycleScope)
+        lifecycleScope.launch { appViewModel.screen.collect { WgoMetrics.screen = it.name } }
 
         // osmdroid: package User-Agent and a small cache in the app cache dir
         WgoMapConfig.apply(applicationContext)

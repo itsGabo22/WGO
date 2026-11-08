@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.wgo.navigator.metrics.WgoMetrics
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.util.TileSystem
@@ -91,6 +92,7 @@ fun RadarMapView(
             .clip(CircleShape)
             .onSizeChanged { size = it },
         update = { map ->
+            WgoMetrics.inc(WgoMetrics.Counter.MAP_INVALIDATE)
             if (size.height > 0) {
                 // Offset of the map center from the view center: puts the user at (center x, 150/227 of the height).
                 val offsetY = (size.height * USER_ANCHOR_Y_FRACTION - size.height / 2f).roundToInt()
