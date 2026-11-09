@@ -28,3 +28,10 @@ interface VoiceInput {
     /** Ends the current session early and releases the microphone. Safe to call when idle. */
     fun cancel()
 }
+
+/** BCP-47 tag used for speech recognition: Colombian Spanish or US English. */
+val Language.speechTag: String
+    get() = when (this) {
+        Language.ES -> "es-CO"
+        Language.EN -> "en-US"
+    }
