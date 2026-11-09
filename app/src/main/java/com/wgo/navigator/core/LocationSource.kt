@@ -46,4 +46,10 @@ interface LocationSource {
     suspend fun once(timeoutMs: Long): Outcome<Fix>
 
     fun setProfile(profile: LocationProfile)
+
+    /**
+     * Navigation context for the adaptive NAVIGATING interval: distance to the next maneuver (null when unknown, e.g.
+     * before routing exists) and whether the current segment is a long straight. Default: ignored.
+     */
+    fun setNavigationHint(distanceToManeuverM: Double?, onLongStraight: Boolean) {}
 }

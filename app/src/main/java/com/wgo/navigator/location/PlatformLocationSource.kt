@@ -8,21 +8,13 @@ import android.os.CancellationSignal
 import android.os.Looper
 import android.os.SystemClock
 import com.wgo.navigator.core.Fix
-import com.wgo.navigator.core.LocationProfile
-import com.wgo.navigator.core.LocationSource
 import com.wgo.navigator.core.Outcome
 import com.wgo.navigator.core.WgoFailure
 import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.metrics.WgoMetrics.Counter
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -33,20 +25,11 @@ import kotlin.coroutines.resume
  * Same contract as [FusedLocationSource]: a request exists only while collected and needed; nothing throws.
  */
 @SuppressLint("MissingPermission") // every call is preceded by hasLocationPermission() and guarded by SecurityException
-@OptIn(ExperimentalCoroutinesApi::class)
-class PlatformLocationSource(context: Context) : LocationSource {
+class PlatformLocationSource(context: Context) : ProfiledLocationSource() {
     private val app = context.applicationContext
     private val manager: LocationManager? = app.getSystemService(LocationManager::class.java)
-    private val profile = MutableStateFlow(LocationProfile.IDLE)
 
-    override fun setProfile(profile: LocationProfile) {
-        this.profile.value = profile
-    }
-
-    override val fixes: Flow<Fix> = profile
-        .map { LocationProfiles.requestSpec(it) }
-        .distinctUntilChanged()
-        .flatMapLatest { spec -> if (spec == null || !app.hasLocationPermission()) emptyFlow() else updates(spec) }
+    override fun permitted() = app.hasLocationPermission()
 
     private fun providers(highAccuracy: Boolean): List<String> {
         val lm = manager ?: return emptyList()
@@ -61,7 +44,7 @@ class PlatformLocationSource(context: Context) : LocationSource {
         }
     }
 
-    private fun updates(spec: RequestSpec): Flow<Fix> = callbackFlow {
+    override fun updates(spec: RequestSpec): Flow<Fix> = callbackFlow {
         val lm = manager
         val providers = providers(spec.highAccuracy)
         val listener = LocationListener { location ->
