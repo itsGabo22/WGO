@@ -46,6 +46,10 @@ import com.wgo.navigator.ui.components.openAppPermissionSettings
 import com.wgo.navigator.core.permissions.PermissionBroker
 import com.wgo.navigator.core.permissions.WgoPermission
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.ActivityNotFoundException
+import com.wgo.navigator.core.WgoFailure
+import com.wgo.navigator.ui.StringKey
+import com.wgo.navigator.ui.components.PermissionDenied
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -53,6 +57,13 @@ import kotlinx.coroutines.runBlocking
 
 enum class ScreenState {
     Intro, Listening, ModeSelection, Navigation, Settings, MapPicker
+}
+
+/** The one-line message screen 01 shows after a failed voice session. */
+private fun voiceNotice(failure: WgoFailure): StringKey = when (failure) {
+    WgoFailure.Unavailable -> StringKey.ERR_VOICE_UNAVAILABLE
+    WgoFailure.Offline -> StringKey.ERR_OFFLINE
+    else -> StringKey.ERR_NOT_UNDERSTOOD
 }
 
 class MainActivity : ComponentActivity() {
@@ -75,6 +86,16 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             permissions.onResult(permission, granted, shouldShowRequestPermissionRationale(permission.manifest))
         }
+    }
+
+    // Fallback voice strategy: the system speech activity, launched for a result on the ViewModel's request.
+    private val speechDialogLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        appViewModel.voiceDialog.onResult(result.resultCode, result.data)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        appViewModel.onAppStopped()
     }
 
     /** Debug only: `am start -f 0x20000000 --ez wgo_replay_intro true` replays the intro for measurements. */
@@ -128,6 +149,20 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Voice: the interpreter uses the UI language; the system speech dialog (fallback) is launched from here.
+        appViewModel.language = { settingsViewModel.language.value }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                appViewModel.voiceDialog.requests.collect { intent ->
+                    try {
+                        speechDialogLauncher.launch(intent)
+                    } catch (e: ActivityNotFoundException) {
+                        appViewModel.voiceDialog.onUnavailable()
+                    }
+                }
+            }
+        }
+
         // Debug-only resource counters (no-op in release): frames per screen and a WGO_METRICS line every 30 s.
         WgoMetrics.install(this, lifecycleScope)
         lifecycleScope.launch { appViewModel.screen.collect { WgoMetrics.screen = it.name } }
@@ -149,11 +184,17 @@ class MainActivity : ComponentActivity() {
                     val introSkipped by appViewModel.introSkipped.collectAsState()
                     val reduceMotion = LocalWgoReduceMotion.current
 
+                    val micDenied by appViewModel.micDenied.collectAsState()
+
                     // Back skips the intro and leaves mode selection, navigation and settings for the listening screen.
-                    BackHandler(enabled = currentScreen != ScreenState.Listening) {
+                    // On screen 01 it ends a voice session (or closes the microphone-denied surface) before leaving.
+                    val listeningBusy = micState != MicState.Idle || micDenied
+                    BackHandler(enabled = currentScreen != ScreenState.Listening || listeningBusy) {
                         when (currentScreen) {
                             ScreenState.Intro -> appViewModel.skipIntro()
                             ScreenState.MapPicker -> appViewModel.backToSettings()
+                            ScreenState.Listening ->
+                                if (micDenied) appViewModel.dismissMicDenied() else appViewModel.cancelListening()
                             else -> appViewModel.backToListening()
                         }
                     }
@@ -184,13 +225,29 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             ScreenState.Listening -> {
-                                ScreenListening(
-                                    micState = micState,
-                                    onMicClick = appViewModel::onMicTapped,
-                                    onCancel = appViewModel::cancelListening,
-                                    onOpenSettings = appViewModel::openSettings,
-                                    onToggleLanguage = settingsViewModel::toggleLanguage
-                                )
+                                val transcript by appViewModel.transcript.collectAsState()
+                                val voiceFailure by appViewModel.voiceFailure.collectAsState()
+                                val micPermission by appViewModel.micPermission.collectAsState()
+                                if (micDenied) {
+                                    PermissionDenied(
+                                        permission = WgoPermission.MICROPHONE,
+                                        status = micPermission,
+                                        onRetry = appViewModel::onMicTapped,
+                                        onOpenSettings = { openAppPermissionSettings() }
+                                    )
+                                } else {
+                                    val level = appViewModel.voiceLevel
+                                    ScreenListening(
+                                        micState = micState,
+                                        onMicClick = appViewModel::onMicTapped,
+                                        onCancel = appViewModel::cancelListening,
+                                        onOpenSettings = appViewModel::openSettings,
+                                        onToggleLanguage = settingsViewModel::toggleLanguage,
+                                        transcript = transcript,
+                                        level = { level.value },
+                                        notice = voiceFailure?.let(::voiceNotice)
+                                    )
+                                }
                             }
                             ScreenState.ModeSelection -> {
                                 ScreenModeSelection(

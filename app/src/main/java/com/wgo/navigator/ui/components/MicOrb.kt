@@ -35,7 +35,8 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-enum class MicState { Idle, Listening, Processing }
+/** [Waiting]: the system speech dialog is showing (fallback strategy); static, no loop. */
+enum class MicState { Idle, Listening, Processing, Waiting }
 
 /** Idle inner border of the orb (docs/design spec: 1 dp #0038B8). Not a palette token, so it lives here. */
 private val OrbIdleBorder = Color(0xFF0038B8)
@@ -50,12 +51,14 @@ private const val RING_PERIOD_MS = 2400
 private const val BREATH_PERIOD_MS = 1100
 private const val SPIN_PERIOD_MS = 1100
 private const val PROCESSING_RADIUS_DP = 46f
+private const val WAITING_RING_RADIUS_DP = 38f
 
 /**
  * Microphone orb, 64 dp. [state] selects idle, listening (breathing, two pulse rings, 40 voice bars) or
  * processing (rotating arc). Everything animates in the draw phase from one shared [clock].
- * [amplitude] maps a bar index to 0..1 (wired to the real voice level later); the default is a synthetic wave
- * driven by the shared clock phase. Haptics belong to the ViewModel behind [onClick].
+ * [amplitude] maps a bar index to 0..1; without it, [level] (the live voice level, 0..1, read ONLY here in the draw
+ * phase) scales a wave driven by the shared clock phase; with neither, the bars run a synthetic wave.
+ * Haptics belong to the ViewModel behind [onClick].
  */
 @Composable
 fun MicOrb(
@@ -63,10 +66,11 @@ fun MicOrb(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     amplitude: ((Int) -> Float)? = null,
+    level: (() -> Float)? = null,
     clock: WgoClock? = null
 ) {
     val palette = Wgo.palette
-    val animated = state != MicState.Idle
+    val animated = state == MicState.Listening || state == MicState.Processing
     val sharedClock = if (animated) clock ?: rememberWgoClock() else null
     sharedClock?.Use(ClockRate.Full)
 
@@ -76,6 +80,7 @@ fun MicOrb(
             MicState.Idle -> StringKey.MIC_STATE_IDLE
             MicState.Listening -> StringKey.MIC_STATE_LISTENING
             MicState.Processing -> StringKey.MIC_STATE_PROCESSING
+            MicState.Waiting -> StringKey.MIC_STATE_WAITING
         }
     )
 
@@ -84,12 +89,17 @@ fun MicOrb(
             .wgoMinTouch()
             .size(OrbSize)
             .drawBehind {
+                if (state == MicState.Waiting) {
+                    // One static ring: the system dialog owns the microphone now.
+                    drawCircle(palette.primaryInk, WAITING_RING_RADIUS_DP.dp.toPx(), center, style = Stroke(2.dp.toPx()))
+                    return@drawBehind
+                }
                 val t = sharedClock ?: return@drawBehind
                 when (state) {
                     MicState.Listening -> {
                         drawPulseRing(palette.primaryInk, t, 0)
                         drawPulseRing(palette.auraDeep, t, RING_PERIOD_MS / 2)
-                        drawVoiceBars(palette.primaryInk, palette.auraDeep, t, amplitude)
+                        drawVoiceBars(palette.primaryInk, palette.auraDeep, t, amplitude, level?.invoke())
                     }
                     MicState.Processing -> {
                         val r = PROCESSING_RADIUS_DP.dp.toPx()
@@ -103,7 +113,7 @@ fun MicOrb(
                             style = Stroke(4.dp.toPx(), cap = StrokeCap.Round)
                         )
                     }
-                    MicState.Idle -> Unit
+                    MicState.Idle, MicState.Waiting -> Unit
                 }
             }
             .semantics(mergeDescendants = true) {
@@ -150,17 +160,19 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPulseRing(color
     )
 }
 
-/** All 40 bars in a single pass with a single phase. */
+/** All 40 bars in a single pass with a single phase; [level] (0..1, live voice) scales the wave when given. */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawVoiceBars(
-    primaryInk: Color, auraDeep: Color, t: WgoClock, amplitude: ((Int) -> Float)?
+    primaryInk: Color, auraDeep: Color, t: WgoClock, amplitude: ((Int) -> Float)?, level: Float?
 ) {
     val phase = t.phase(BREATH_PERIOD_MS * 2)
     val base = BAR_BASE_RADIUS_DP.dp.toPx()
     val extent = BAR_EXTENT_DP.dp.toPx()
     val width = 2.dp.toPx()
     for (i in 0 until BAR_COUNT) {
+        val wave = 0.5f + 0.5f * sin(2.0 * PI * (phase * 2f + i * 0.17f)).toFloat()
         val raw = amplitude?.invoke(i)
-            ?: (0.5f + 0.5f * sin(2.0 * PI * (phase * 2f + i * 0.17f)).toFloat())
+            ?: level?.let { it.coerceIn(0f, 1f) * (0.55f + 0.45f * wave) }
+            ?: wave
         val a = BAR_MIN_AMPLITUDE + (1f - BAR_MIN_AMPLITUDE) * raw.coerceIn(0f, 1f)
         val angle = (2.0 * PI * i / BAR_COUNT) - PI / 2.0
         val cx = cos(angle).toFloat()

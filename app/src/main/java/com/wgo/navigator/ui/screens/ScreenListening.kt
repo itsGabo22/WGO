@@ -69,11 +69,13 @@ import com.wgo.navigator.ui.theme.wgoRiseIn
 private const val REFERENCE_SIZE = 227f
 
 /** What the title slot shows; a change of [language] with the same [state] rolls, anything else cross-fades. */
-private data class TitleState(val state: MicState, val language: Language)
+private data class TitleState(val state: MicState, val language: Language, val notice: StringKey?)
 
 /**
  * Screen 01. Positions follow the spec (`top` in dp on a 227 dp canvas) expressed as fractions of the actual
  * screen so they also fit Small Round. One [WgoClock] is shared by every looping piece.
+ * [transcript] is the live (partial, then final) transcript, one line at @54 per spec section 7; [level] is the live
+ * voice level read only in the orb's draw phase; [notice] replaces the idle title after a failed session.
  */
 @Composable
 fun ScreenListening(
@@ -84,6 +86,8 @@ fun ScreenListening(
     onToggleLanguage: () -> Unit,
     modifier: Modifier = Modifier,
     transcript: String = "",
+    level: (() -> Float)? = null,
+    notice: StringKey? = null,
     clock: WgoClock = rememberWgoClock()
 ) {
     val palette = Wgo.palette
@@ -109,7 +113,7 @@ fun ScreenListening(
         )
 
         AnimatedContent(
-            targetState = TitleState(micState, language),
+            targetState = TitleState(micState, language, if (micState == MicState.Idle) notice else null),
             transitionSpec = {
                 when {
                     reduceMotion -> fadeIn(tween(WgoMotion.SNAP)) togetherWith fadeOut(tween(WgoMotion.SNAP))
@@ -132,11 +136,21 @@ fun ScreenListening(
             CompositionLocalProvider(LocalLanguage provides title.language) {
                 when (title.state) {
                     MicState.Idle -> Text(
-                        text = string(StringKey.TITLE_WHERE_TO),
+                        text = string(title.notice ?: StringKey.TITLE_WHERE_TO),
                         color = palette.ink,
                         style = WgoType.headlineMd,
                         textAlign = TextAlign.Center,
-                        maxLines = 2
+                        maxLines = 2,
+                        modifier = if (title.notice != null) {
+                            Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
+                        } else Modifier
+                    )
+                    MicState.Waiting -> Text(
+                        text = string(StringKey.LISTENING_SYSTEM),
+                        color = palette.primaryInk,
+                        style = WgoType.labelMd,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
                     )
                     MicState.Listening -> Text(
                         text = string(StringKey.LISTENING_LABEL),
@@ -156,8 +170,9 @@ fun ScreenListening(
             }
         }
 
-        if (micState == MicState.Listening) {
-            clock.Use(ClockRate.Ambience) // blinking caret
+        val listening = micState == MicState.Listening
+        if (listening || (micState == MicState.Processing && transcript.isNotEmpty())) {
+            if (listening) clock.Use(ClockRate.Ambience) // blinking caret
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -176,12 +191,14 @@ fun ScreenListening(
                         modifier = Modifier.weight(1f, fill = false)
                     )
                 }
-                // Caret blinks with hard steps (1 s period), read in the draw phase only.
-                Box(
+                // Caret blinks with hard steps (1 s period), read in the draw phase only; static with reduce motion.
+                if (listening) Box(
                     modifier = Modifier
                         .width(2.dp)
                         .height(14.dp)
-                        .graphicsLayer { alpha = if ((clock.millis / 500L) % 2L == 0L) 1f else 0f }
+                        .graphicsLayer {
+                            alpha = if (reduceMotion || (clock.millis / 500L) % 2L == 0L) 1f else 0f
+                        }
                         .background(palette.primaryInk)
                 )
             }
@@ -191,6 +208,7 @@ fun ScreenListening(
         MicOrb(
             state = micState,
             onClick = onMicClick,
+            level = level,
             clock = clock,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(92f)).wgoRiseIn(delayMs = WgoMotion.STAGGER)
         )

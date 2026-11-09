@@ -13,7 +13,15 @@ import com.wgo.navigator.core.permissions.WgoPermission
 import com.wgo.navigator.haptics.HapticEvent
 import com.wgo.navigator.haptics.HapticSource
 import com.wgo.navigator.location.LocationSources
+import com.wgo.navigator.core.VoiceEvent
+import com.wgo.navigator.core.WgoFailure
+import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.ui.components.MicState
+import com.wgo.navigator.voice.DebugUtterances
+import com.wgo.navigator.voice.SystemVoiceDialog
+import com.wgo.navigator.voice.VoiceInputChain
+import com.wgo.navigator.voice.VoiceLevel
+import com.wgo.navigator.voice.VoiceStrategy
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -31,8 +39,7 @@ enum class TravelMode { Walk, Drive }
 
 /**
  * Owns the screen state machine and the haptic events tied to its state changes.
- * Speech recognition is still simulated: a tap listens, then "routes", and after the same 2 s as before
- * the destination is understood and the mode selection opens.
+ * A mic tap runs one real voice session ([VoiceInputChain]); the final transcript is handed to [onTranscript].
  */
 class AppViewModel(application: Application) : AndroidViewModel(application), HapticSource {
     // The intro plays once per process: a configuration change keeps this ViewModel, and a relaunch in the same
@@ -85,13 +92,96 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         _screen.value = ScreenState.Listening
     }
 
+    // ---- Voice (one session per tap; created on demand and destroyed on every end) ----
+
+    private val permissions = PermissionBroker.get(application)
+    private val voice = VoiceInputChain(application)
+
+    /** True while a recognizer session is running (from start until its flow completes). */
+    @Volatile
+    private var sessionActive = false
+
+    /** The system speech dialog requests, launched by the Activity (fallback strategy). */
+    val voiceDialog: SystemVoiceDialog get() = voice.dialog
+
+    /** Live voice level, written here and read only in the MicOrb draw phase. */
+    val voiceLevel = VoiceLevel()
+
+    private val _transcript = MutableStateFlow("")
+    val transcript: StateFlow<String> = _transcript.asStateFlow()
+
+    /** Why the last voice session failed (shown on screen 01); null when there is nothing to report. */
+    private val _voiceFailure = MutableStateFlow<WgoFailure?>(null)
+    val voiceFailure: StateFlow<WgoFailure?> = _voiceFailure.asStateFlow()
+
+    val micPermission: StateFlow<PermissionStatus> = permissions.status
+        .map { it.getValue(WgoPermission.MICROPHONE) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, permissions.status.value.getValue(WgoPermission.MICROPHONE))
+
+    /** True while the microphone-denied surface replaces screen 01. */
+    private val _micDenied = MutableStateFlow(false)
+    val micDenied: StateFlow<Boolean> = _micDenied.asStateFlow()
+
+    /** The UI language, provided by the Activity (owned by the settings). */
+    var language: () -> Language = { Language.ES }
+
     fun onMicTapped() {
-        if (_micState.value != MicState.Idle) return
-        _micState.value = MicState.Listening
-        _haptics.tryEmit(HapticEvent.Tick)
+        if (_micState.value != MicState.Idle || listenJob?.isActive == true) return
+        _voiceFailure.value = null
+        _transcript.value = ""
         listenJob = viewModelScope.launch {
-            delay(LISTENING_MS)
-            _micState.value = MicState.Processing
+            // RECORD_AUDIO is asked lazily, and only for the in-app recognizer (the system dialog records by itself).
+            if (voice.strategy() == VoiceStrategy.InApp) {
+                val status = permissions.ensure(WgoPermission.MICROPHONE)
+                if (status != PermissionStatus.Granted) {
+                    _micDenied.value = true
+                    return@launch
+                }
+            }
+            _micDenied.value = false
+            sessionActive = true
+            try {
+                voice.listen(language()).collect(::onVoiceEvent)
+            } finally {
+                sessionActive = false
+            }
+        }
+    }
+
+    private fun onVoiceEvent(event: VoiceEvent) {
+        when (event) {
+            VoiceEvent.Ready -> {
+                _micState.value = MicState.Listening
+                _haptics.tryEmit(HapticEvent.Tick) // spec section 8: starts listening
+            }
+            VoiceEvent.AwaitingSystem -> {
+                _micState.value = MicState.Waiting
+                _haptics.tryEmit(HapticEvent.Tick)
+            }
+            is VoiceEvent.Level -> voiceLevel.value = event.value
+            is VoiceEvent.Partial -> _transcript.value = event.text
+            is VoiceEvent.Final -> onTranscript(event.text, null)
+            is VoiceEvent.Failed -> {
+                voiceLevel.value = 0f
+                _micState.value = MicState.Idle
+                when (event.failure) {
+                    WgoFailure.Cancelled -> Unit
+                    WgoFailure.NoPermission -> _micDenied.value = true
+                    else -> _voiceFailure.value = event.failure
+                }
+            }
+        }
+    }
+
+    /**
+     * A final transcript (from the microphone or, in debug builds, injected): the hand-off to the pipeline.
+     * [spokenLanguage] overrides the UI language for interpretation (debug injection only).
+     */
+    fun onTranscript(text: String, spokenLanguage: Language?) {
+        voiceLevel.value = 0f
+        _transcript.value = text
+        _micState.value = MicState.Processing
+        listenJob = viewModelScope.launch {
             delay(PROCESSING_MS)
             _micState.value = MicState.Idle
             _screen.value = ScreenState.ModeSelection
@@ -99,9 +189,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         }
     }
 
+    /** CANCEL, Back, or the app going to the background: ends the session now and releases the microphone. */
     fun cancelListening() {
         listenJob?.cancel()
+        voice.cancel()
+        voiceLevel.value = 0f
+        _transcript.value = ""
         _micState.value = MicState.Idle
+    }
+
+    /** Back from the microphone-denied surface. */
+    fun dismissMicDenied() {
+        _micDenied.value = false
+    }
+
+    /**
+     * Activity onStop: never keep the microphone in the background. Not while the system speech dialog is showing (it
+     * is what stopped us), and not while the permission dialog is up (no session has started yet).
+     */
+    fun onAppStopped() {
+        if (sessionActive && _micState.value != MicState.Waiting) cancelListening()
     }
 
     fun selectMode(mode: TravelMode) {
@@ -120,8 +227,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
     // ---- Location (lazy permission, ORIGIN one-shot, then NAVIGATING; IDLE everywhere else) ----
 
-    private val permissions = PermissionBroker.get(application)
-
     /** Real source: fused when Play services is present, else the platform LocationManager. */
     val locationSource: LocationSource = LocationSources.create(application)
 
@@ -139,6 +244,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     private var navigatingStarted = false
 
     init {
+        // Debug builds only: utterances injected through adb enter the pipeline exactly like a final transcript.
+        if (BuildConfig.DEBUG) viewModelScope.launch {
+            DebugUtterances.utterances.collect { u ->
+                if (_screen.value != ScreenState.Listening) return@collect
+                cancelListening()
+                _micDenied.value = false
+                _voiceFailure.value = null
+                WgoMetrics.event("voice_strategy=Injected")
+                onTranscript(u.text, u.language)
+            }
+        }
         // A permission granted outside the dialog (system settings after "don't ask again") arrives through the
         // broker's refresh on start: restart the trip's location if navigation is showing and never got going.
         viewModelScope.launch {
@@ -200,8 +316,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     }
 
     private companion object {
-        const val LISTENING_MS = 1200L
-        const val PROCESSING_MS = 800L // listening + processing = the previous 2000 ms
+        const val PROCESSING_MS = 800L
         const val ORIGIN_TIMEOUT_MS = 8_000L
 
         /** Process-wide: true until the first AppViewModel of this process consumes it. */
