@@ -47,23 +47,30 @@ import com.wgo.navigator.core.permissions.PermissionBroker
 import com.wgo.navigator.core.permissions.WgoPermission
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ActivityNotFoundException
-import com.wgo.navigator.core.WgoFailure
-import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.components.PermissionDenied
+import com.wgo.navigator.ui.map.GeoCoord
+import com.wgo.navigator.ui.map.PastoCentre
+import com.wgo.navigator.ui.map.RadarProjection
+import com.wgo.navigator.ui.minutesOf
+import com.wgo.navigator.ui.screens.ScreenConfirmPlace
+import com.wgo.navigator.ui.screens.ScreenError
+import com.wgo.navigator.ui.screens.ScreenWorking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 
 enum class ScreenState {
-    Intro, Listening, ModeSelection, Navigation, Settings, MapPicker
+    Intro, Listening, Working, ConfirmPlace, ModeSelection, Navigation, Error, Settings, MapPicker
 }
 
-/** The one-line message screen 01 shows after a failed voice session. */
-private fun voiceNotice(failure: WgoFailure): StringKey = when (failure) {
-    WgoFailure.Unavailable -> StringKey.ERR_VOICE_UNAVAILABLE
-    WgoFailure.Offline -> StringKey.ERR_OFFLINE
-    else -> StringKey.ERR_NOT_UNDERSTOOD
+/**
+ * Rough per-mode minutes for the mode pads, from the straight-line distance (no extra route request): walking at
+ * 1.25 m/s over a 1.3x detour, driving at 6.5 m/s (about 23 km/h in town) over a 1.4x detour plus one minute.
+ */
+private fun etaMinutes(from: GeoCoord?, to: GeoCoord): Pair<Int, Int> {
+    val crow = RadarProjection.distanceMeters(from ?: PastoCentre, to)
+    return minutesOf(crow * 1.3 / 1.25) to minutesOf(crow * 1.4 / 6.5 + 60)
 }
 
 class MainActivity : ComponentActivity() {
@@ -195,6 +202,8 @@ class MainActivity : ComponentActivity() {
                             ScreenState.MapPicker -> appViewModel.backToSettings()
                             ScreenState.Listening ->
                                 if (micDenied) appViewModel.dismissMicDenied() else appViewModel.cancelListening()
+                            ScreenState.Working, ScreenState.ConfirmPlace, ScreenState.ModeSelection, ScreenState.Error ->
+                                appViewModel.backInPipeline()
                             else -> appViewModel.backToListening()
                         }
                     }
@@ -226,7 +235,6 @@ class MainActivity : ComponentActivity() {
                             }
                             ScreenState.Listening -> {
                                 val transcript by appViewModel.transcript.collectAsState()
-                                val voiceFailure by appViewModel.voiceFailure.collectAsState()
                                 val micPermission by appViewModel.micPermission.collectAsState()
                                 if (micDenied) {
                                     PermissionDenied(
@@ -244,17 +252,57 @@ class MainActivity : ComponentActivity() {
                                         onOpenSettings = appViewModel::openSettings,
                                         onToggleLanguage = settingsViewModel::toggleLanguage,
                                         transcript = transcript,
-                                        level = { level.value },
-                                        notice = voiceFailure?.let(::voiceNotice)
+                                        level = { level.value }
+                                    )
+                                }
+                            }
+                            ScreenState.Working -> {
+                                val stage by appViewModel.stage.collectAsState()
+                                val transcript by appViewModel.transcript.collectAsState()
+                                val detail = if (stage == WorkStage.Routing) appViewModel.currentPlace?.name.orEmpty() else transcript
+                                ScreenWorking(stage = stage, detail = detail, onCancel = appViewModel::backInPipeline)
+                            }
+                            ScreenState.ConfirmPlace -> {
+                                val places by appViewModel.places.collectAsState()
+                                val index by appViewModel.placeIndex.collectAsState()
+                                val near by appViewModel.near.collectAsState()
+                                places.getOrNull(index)?.let { place ->
+                                    ScreenConfirmPlace(
+                                        place = place,
+                                        distanceM = near?.let { RadarProjection.distanceMeters(it, place.coord) },
+                                        index = index,
+                                        count = places.size,
+                                        onGo = appViewModel::onGo,
+                                        onOther = appViewModel::onOtherPlace
                                     )
                                 }
                             }
                             ScreenState.ModeSelection -> {
-                                ScreenModeSelection(
-                                    onSelectMode = appViewModel::selectMode,
-                                    // The chosen pad stays inverted until the zoom transition finishes.
-                                    pressedMode = selectedMode
-                                )
+                                val near by appViewModel.near.collectAsState()
+                                val place = appViewModel.currentPlace
+                                if (place != null) {
+                                    val (walk, drive) = etaMinutes(near, place.coord)
+                                    ScreenModeSelection(
+                                        onSelectMode = appViewModel::selectMode,
+                                        destination = place.name,
+                                        address = place.address,
+                                        walkMinutes = walk,
+                                        driveMinutes = drive,
+                                        pressedMode = selectedMode
+                                    )
+                                }
+                            }
+                            ScreenState.Error -> {
+                                val error by appViewModel.error.collectAsState()
+                                val locationPermission by appViewModel.locationPermission.collectAsState()
+                                error?.let {
+                                    ScreenError(
+                                        error = it,
+                                        onRetry = appViewModel::retry,
+                                        permissionStatus = locationPermission,
+                                        onOpenSettings = { openAppPermissionSettings() }
+                                    )
+                                }
                             }
                             ScreenState.Navigation -> {
                                 val locationPermission by appViewModel.locationPermission.collectAsState()

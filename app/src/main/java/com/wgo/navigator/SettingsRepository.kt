@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -47,10 +48,36 @@ class SettingsRepository(context: Context) {
         store.edit { it[MAP_STYLE] = value.name }
     }
 
+    /**
+     * The active destination and mode (the language is already persisted above). Written when navigation starts and
+     * cleared when it ends; never read at launch, so nothing auto-resumes.
+     */
+    suspend fun saveTrip(name: String, lat: Double, lon: Double, mode: TravelMode) {
+        store.edit {
+            it[TRIP_NAME] = name
+            it[TRIP_LAT] = lat
+            it[TRIP_LON] = lon
+            it[TRIP_MODE] = mode.name
+        }
+    }
+
+    suspend fun clearTrip() {
+        store.edit {
+            it.remove(TRIP_NAME)
+            it.remove(TRIP_LAT)
+            it.remove(TRIP_LON)
+            it.remove(TRIP_MODE)
+        }
+    }
+
     private companion object {
         val DARK_MODE = booleanPreferencesKey("dark_mode")
         val LANGUAGE = stringPreferencesKey("language")
         val MAP_STYLE = stringPreferencesKey("map_style")
+        val TRIP_NAME = stringPreferencesKey("trip_name")
+        val TRIP_LAT = doublePreferencesKey("trip_lat")
+        val TRIP_LON = doublePreferencesKey("trip_lon")
+        val TRIP_MODE = stringPreferencesKey("trip_mode")
     }
 }
 

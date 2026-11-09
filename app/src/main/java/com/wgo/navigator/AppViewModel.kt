@@ -22,8 +22,16 @@ import com.wgo.navigator.voice.SystemVoiceDialog
 import com.wgo.navigator.voice.VoiceInputChain
 import com.wgo.navigator.voice.VoiceLevel
 import com.wgo.navigator.voice.VoiceStrategy
+import com.wgo.navigator.ai.TieredInterpreter
+import com.wgo.navigator.core.IntentKind
+import com.wgo.navigator.core.Place
+import com.wgo.navigator.core.Route
+import com.wgo.navigator.geo.NominatimGeocoder
+import com.wgo.navigator.net.HttpClient
+import com.wgo.navigator.net.WgoUserAgent
+import com.wgo.navigator.route.OsrmRouter
+import com.wgo.navigator.ui.map.GeoCoord
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -110,10 +118,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     private val _transcript = MutableStateFlow("")
     val transcript: StateFlow<String> = _transcript.asStateFlow()
 
-    /** Why the last voice session failed (shown on screen 01); null when there is nothing to report. */
-    private val _voiceFailure = MutableStateFlow<WgoFailure?>(null)
-    val voiceFailure: StateFlow<WgoFailure?> = _voiceFailure.asStateFlow()
-
     val micPermission: StateFlow<PermissionStatus> = permissions.status
         .map { it.getValue(WgoPermission.MICROPHONE) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, permissions.status.value.getValue(WgoPermission.MICROPHONE))
@@ -127,7 +131,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
     fun onMicTapped() {
         if (_micState.value != MicState.Idle || listenJob?.isActive == true) return
-        _voiceFailure.value = null
         _transcript.value = ""
         listenJob = viewModelScope.launch {
             // RECORD_AUDIO is asked lazily, and only for the in-app recognizer (the system dialog records by itself).
@@ -167,7 +170,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 when (event.failure) {
                     WgoFailure.Cancelled -> Unit
                     WgoFailure.NoPermission -> _micDenied.value = true
-                    else -> _voiceFailure.value = event.failure
+                    WgoFailure.Unavailable -> fail(PipelineError.VoiceUnavailable, Step.Listen)
+                    WgoFailure.Offline -> fail(PipelineError.Offline, Step.Listen)
+                    else -> fail(PipelineError.NotUnderstood, Step.Listen)
                 }
             }
         }
@@ -179,14 +184,212 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      */
     fun onTranscript(text: String, spokenLanguage: Language?) {
         voiceLevel.value = 0f
+        _micState.value = MicState.Idle
         _transcript.value = text
-        _micState.value = MicState.Processing
-        listenJob = viewModelScope.launch {
-            delay(PROCESSING_MS)
-            _micState.value = MicState.Idle
-            _screen.value = ScreenState.ModeSelection
-            _haptics.tryEmit(HapticEvent.Click) // destination understood
+        pipelineLanguage = spokenLanguage ?: language()
+        runStep(Step.Interpret)
+    }
+
+    // ---- Voice-to-route pipeline: Interpreting -> Resolving -> ConfirmPlace -> (ModeSelection) -> Routing ----
+
+    /** Pipeline steps, for retry and for Back ("one step back"). */
+    private enum class Step { Listen, Interpret, Resolve, Route }
+
+    private val tripStore = SettingsRepository(application)
+    private val interpreter = TieredInterpreter.create(application, WgoUserAgent.plain)
+    private val geocoder = NominatimGeocoder(HttpClient(WgoUserAgent.identifying))
+    private val router = OsrmRouter(HttpClient(WgoUserAgent.identifying))
+
+    private var pipelineJob: Job? = null
+    private var pipelineLanguage = Language.ES
+    private var placeQuery: String? = null
+    private var failedStep = Step.Listen
+
+    /** True when the travel mode came from the utterance: mode selection is skipped. */
+    private var modeSpoken = false
+
+    private val _stage = MutableStateFlow(WorkStage.Interpreting)
+    val stage: StateFlow<WorkStage> = _stage.asStateFlow()
+
+    private val _error = MutableStateFlow<PipelineError?>(null)
+    val error: StateFlow<PipelineError?> = _error.asStateFlow()
+
+    /** Up to three geocoding results and the one shown (OTHER cycles locally: no extra request). */
+    private val _places = MutableStateFlow<List<Place>>(emptyList())
+    val places: StateFlow<List<Place>> = _places.asStateFlow()
+    private val _placeIndex = MutableStateFlow(0)
+    val placeIndex: StateFlow<Int> = _placeIndex.asStateFlow()
+
+    /** The fix the place distances were measured from (the last known one; null when there is none). */
+    private val _near = MutableStateFlow<GeoCoord?>(null)
+    val near: StateFlow<GeoCoord?> = _near.asStateFlow()
+
+    private val _route = MutableStateFlow<Route?>(null)
+    val route: StateFlow<Route?> = _route.asStateFlow()
+
+    val currentPlace: Place? get() = _places.value.getOrNull(_placeIndex.value)
+
+    private fun runStep(step: Step) {
+        pipelineJob?.cancel()
+        _error.value = null
+        pipelineJob = viewModelScope.launch {
+            when (step) {
+                Step.Listen -> {
+                    _screen.value = ScreenState.Listening
+                    onMicTapped()
+                }
+                Step.Interpret -> interpret()
+                Step.Resolve -> placeQuery?.let { resolve(it) } ?: fail(PipelineError.NotUnderstood, Step.Listen)
+                Step.Route -> _selectedMode.value?.let { routeTo(it) } ?: run { _screen.value = ScreenState.ModeSelection }
+            }
         }
+    }
+
+    private suspend fun interpret() {
+        _stage.value = WorkStage.Interpreting
+        _screen.value = ScreenState.Working
+        val text = _transcript.value
+        val result = interpreter.interpret(text, pipelineLanguage)
+        WgoMetrics.event("pipeline interpreted tier=${interpreter.lastTier} kind=${result.kind} mode=${result.mode}")
+        when (result.kind) {
+            IntentKind.Navigate -> {
+                val query = result.placeQuery ?: return fail(PipelineError.NotUnderstood, Step.Listen)
+                placeQuery = query
+                modeSpoken = result.mode != null
+                _selectedMode.value = result.mode
+                resolve(query)
+            }
+            IntentKind.Cancel, IntentKind.Repeat -> goHome()
+            IntentKind.ChangeMode, IntentKind.Unknown ->
+                fail(if (interpreter.lastRemoteFailed) PipelineError.AiUnavailable else PipelineError.NotUnderstood, Step.Listen)
+        }
+    }
+
+    private suspend fun resolve(query: String) {
+        _stage.value = WorkStage.Resolving
+        _screen.value = ScreenState.Working
+        val near = locationSource.lastKnown()?.let { GeoCoord(it.lat, it.lon) }
+        _near.value = near
+        when (val found = geocoder.search(query, near, pipelineLanguage, PLACE_RESULTS)) {
+            is Outcome.Ok -> {
+                _places.value = found.value
+                _placeIndex.value = 0
+                _screen.value = ScreenState.ConfirmPlace
+                _haptics.tryEmit(HapticEvent.Click) // spec section 8: destination understood
+            }
+            is Outcome.Err -> fail(
+                if (found.failure == WgoFailure.NotFound) PipelineError.PlaceNotFound else PipelineError.Offline,
+                Step.Resolve
+            )
+        }
+    }
+
+    /** OTHER: the next of the (up to three) results, no request. */
+    fun onOtherPlace() {
+        val n = _places.value.size
+        if (n > 1) _placeIndex.value = (_placeIndex.value + 1) % n
+    }
+
+    /** GO on the confirm surface: route at once when the utterance gave the mode, else ask for it. */
+    fun onGo() {
+        val mode = _selectedMode.value
+        if (modeSpoken && mode != null) {
+            _haptics.tryEmit(HapticEvent.HeavyClick) // spec section 8: mode chosen
+            runStep(Step.Route)
+        } else {
+            _screen.value = ScreenState.ModeSelection
+        }
+    }
+
+    private suspend fun routeTo(mode: TravelMode) {
+        val place = currentPlace ?: return goHome()
+        _stage.value = WorkStage.Routing
+        _screen.value = ScreenState.Working
+        if (permissions.ensure(WgoPermission.LOCATION) != PermissionStatus.Granted) {
+            return fail(PipelineError.LocationPermission, Step.Route)
+        }
+        locationSource.setProfile(LocationProfile.ORIGIN)
+        val originStart = System.nanoTime()
+        val fresh = locationSource.once(ORIGIN_TIMEOUT_MS)
+        val fix = (fresh as? Outcome.Ok)?.value ?: locationSource.lastKnown()
+        WgoMetrics.event(
+            "origin fresh=${fresh is Outcome.Ok} fallback_last=${fresh !is Outcome.Ok && fix != null} " +
+                "ms=${(System.nanoTime() - originStart) / 1_000_000}"
+        )
+        if (fix == null) {
+            locationSource.setProfile(LocationProfile.IDLE)
+            return fail(PipelineError.RouteUnavailable, Step.Route)
+        }
+        when (val r = router.route(GeoCoord(fix.lat, fix.lon), place.coord, mode)) {
+            is Outcome.Ok -> {
+                _route.value = r.value
+                _origin.value = fix
+                WgoMetrics.event(
+                    "pipeline routed mode=$mode m=${r.value.distanceM.toInt()} s=${r.value.durationS.toInt()} " +
+                        "steps=${r.value.steps.size} points=${r.value.polyline.size} snapshot=${WgoMetrics.snapshot()}"
+                )
+                tripStore.saveTrip(place.name, place.coord.lat, place.coord.lon, mode)
+                _screen.value = ScreenState.Navigation
+                locationSource.setProfile(LocationProfile.NAVIGATING)
+                navigatingStarted = true
+            }
+            is Outcome.Err -> {
+                locationSource.setProfile(LocationProfile.IDLE)
+                fail(
+                    when (r.failure) {
+                        WgoFailure.Offline, WgoFailure.Timeout -> PipelineError.Offline
+                        else -> PipelineError.RouteUnavailable
+                    },
+                    Step.Route
+                )
+            }
+        }
+    }
+
+    private fun fail(error: PipelineError, step: Step) {
+        failedStep = step
+        _error.value = error
+        _screen.value = ScreenState.Error
+        WgoMetrics.event("pipeline error=$error step=$step")
+    }
+
+    /** The single retry action of the error surface. */
+    fun retry() {
+        when (_error.value) {
+            PipelineError.MicPermission, PipelineError.VoiceUnavailable, PipelineError.NotUnderstood,
+            PipelineError.PlaceNotFound, PipelineError.AiUnavailable, null -> runStep(Step.Listen)
+            PipelineError.LocationPermission, PipelineError.RouteUnavailable -> runStep(Step.Route)
+            PipelineError.Offline -> runStep(failedStep)
+        }
+    }
+
+    /**
+     * Back inside the pipeline: Working cancels the in-flight request and goes one step back (routing returns to the
+     * place or mode choice, earlier stages to screen 01); ConfirmPlace and Error go to screen 01; ModeSelection returns
+     * to ConfirmPlace.
+     */
+    fun backInPipeline() {
+        when (_screen.value) {
+            ScreenState.Working -> {
+                pipelineJob?.cancel()
+                if (_stage.value == WorkStage.Routing) {
+                    locationSource.setProfile(LocationProfile.IDLE)
+                    _screen.value = if (modeSpoken) ScreenState.ConfirmPlace else ScreenState.ModeSelection
+                } else goHome()
+            }
+            ScreenState.ModeSelection -> _screen.value = ScreenState.ConfirmPlace
+            else -> goHome()
+        }
+    }
+
+    private fun goHome() {
+        pipelineJob?.cancel()
+        _error.value = null
+        _transcript.value = ""
+        _places.value = emptyList()
+        _selectedMode.value = null
+        modeSpoken = false
+        _screen.value = ScreenState.Listening
     }
 
     /** CANCEL, Back, or the app going to the background: ends the session now and releases the microphone. */
@@ -213,16 +416,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
     fun selectMode(mode: TravelMode) {
         _selectedMode.value = mode
-        _haptics.tryEmit(HapticEvent.HeavyClick)
-        _screen.value = ScreenState.Navigation
-        startLocation()
+        _haptics.tryEmit(HapticEvent.HeavyClick) // spec section 8: mode chosen
+        runStep(Step.Route)
     }
 
-    /** Back/cancel from mode selection or navigation. */
+    /** Back/cancel from navigation, settings or the picker's parent: ends the trip (nothing auto-resumes later). */
     fun backToListening() {
         stopLocation()
-        _selectedMode.value = null
-        _screen.value = ScreenState.Listening
+        _route.value = null
+        viewModelScope.launch { tripStore.clearTrip() }
+        goHome()
     }
 
     // ---- Location (lazy permission, ORIGIN one-shot, then NAVIGATING; IDLE everywhere else) ----
@@ -247,10 +450,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         // Debug builds only: utterances injected through adb enter the pipeline exactly like a final transcript.
         if (BuildConfig.DEBUG) viewModelScope.launch {
             DebugUtterances.utterances.collect { u ->
-                if (_screen.value != ScreenState.Listening) return@collect
+                if (_screen.value !in INJECTABLE_SCREENS) return@collect
                 cancelListening()
                 _micDenied.value = false
-                _voiceFailure.value = null
                 WgoMetrics.event("voice_strategy=Injected")
                 onTranscript(u.text, u.language)
             }
@@ -316,8 +518,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     }
 
     private companion object {
-        const val PROCESSING_MS = 800L
         const val ORIGIN_TIMEOUT_MS = 8_000L
+        const val PLACE_RESULTS = 3
+
+        /** Debug injections are accepted where a new request makes sense (never mid-navigation or in settings). */
+        val INJECTABLE_SCREENS = setOf(
+            ScreenState.Listening, ScreenState.Working, ScreenState.ConfirmPlace, ScreenState.ModeSelection, ScreenState.Error
+        )
 
         /** Process-wide: true until the first AppViewModel of this process consumes it. */
         @Volatile
