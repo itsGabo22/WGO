@@ -31,6 +31,16 @@ class WgoScaleTest {
         assertEquals(56.7f, wgoMinTouchRefDp(0.846f), 0.05f)
     }
 
+    /** The runtime helper reproduces the fit values written in the spec. */
+    @Test fun fitHelperMatchesSpecPlacements() {
+        assertEquals(102.97f, wgoFit(96f, 18f, 19f), 0.01f) // VOICE ON badge @19
+        assertEquals(102.36f, wgoFit(104f, 32f, 176f), 0.01f) // CANCEL chip @176
+        assert(wgoFits(96f, 18f, 19f))
+        assert(!wgoFits(140f, 40f, 180f))
+        // a box taller than wide is a circle: fit = |y| + h/2
+        assertEquals(40f + 24f, wgoFit(20f, 48f, 113.5f + 40f - 24f), eps)
+    }
+
     /** The round-dial fit rule is scale invariant: scaling w, h and y by the same factor scales the result too. */
     @Test fun fitRuleIsScaleInvariant() {
         fun fit(w: Float, h: Float, y: Float) = sqrt((w / 2 - h / 2) * (w / 2 - h / 2) + y * y) + h / 2
