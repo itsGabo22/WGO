@@ -79,6 +79,17 @@ class InterpreterHttpTest {
         assertEquals(1, server.requests.size)
     }
 
+    @Test fun remoteCannotInventATravelMode() = runBlocking {
+        server.respond = { Triple(200, chat("{\"kind\":\"Navigate\",\"placeQuery\":\"Universidad de Nariño\",\"mode\":\"Walk\",\"confidence\":0.9}"), 0L) }
+        val t = tiered()
+        val r = t.interpret("quiero ir a esa universidad pública grande que queda en Torobajo", Language.ES)
+        assertEquals(InterpreterTier.Remote, t.lastTier)
+        assertEquals("Universidad de Nariño", r.placeQuery)
+        assertEquals(null, r.mode)
+        val spoken = t.interpret("quiero ir en carro a esa universidad que queda en Torobajo", Language.ES)
+        assertEquals(com.wgo.navigator.TravelMode.Drive, spoken.mode)
+    }
+
     @Test fun malformedJsonFallsBackToLocal() = runBlocking {
         server.respond = { Triple(200, chat("this is not json at all"), 0L) }
         val t = tiered()
