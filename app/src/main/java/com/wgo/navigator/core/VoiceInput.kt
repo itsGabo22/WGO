@@ -19,6 +19,9 @@ sealed interface VoiceEvent {
 
     /** The session ended without a transcript. */
     data class Failed(val failure: WgoFailure) : VoiceEvent
+
+    /** The system speech dialog is showing (fallback strategy); its result arrives as [Final] or [Failed]. */
+    data object AwaitingSystem : VoiceEvent
 }
 
 /** Speech to text. One session at a time; collecting [listen] starts it, cancelling the collection stops it. */
