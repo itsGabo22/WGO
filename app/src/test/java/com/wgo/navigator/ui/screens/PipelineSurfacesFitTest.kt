@@ -27,7 +27,7 @@ class PipelineSurfacesFitTest {
         Box("confirm subtitle", 160f, 18f, 86f),
         Box("confirm GO (s=1)", 120f, 52f, 134f - 26f),
         Box("confirm GO (s=0.846)", 120f, wgoMinTouchRefDp(0.846f), 134f - wgoMinTouchRefDp(0.846f) / 2),
-        Box("confirm attribution", 110f, 12f, 164f),
+        Box("confirm attribution", 130f, 12f, 164f),
         Box("confirm other", 104f, 32f, 176f)
     )
 

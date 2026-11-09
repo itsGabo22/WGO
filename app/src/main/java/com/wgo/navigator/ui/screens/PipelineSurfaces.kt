@@ -129,7 +129,7 @@ fun ScreenWorking(
  * CONFIRM PLACE. Badge (soft, "DESTINO", widest EN label about 96) @22 (100.3); name `headline-sm` 2 lines 150x40
  * @44 (94.0, live region); "a 1,8 km · street" `body-md` one line 160x18 @86 (82.4); GO MassiveButton 120 wide
  * centred at 134 (65.7 at s = 1, 66.1 with the 56.7 dp touch height of s = 0.846); "© OPENSTREETMAP" `label-sm`
- * 110x12 @164 (80.8); OTHER chip "OTRO 1/3" 104x32 @176 (102.4), shown only with more than one result. The GO and
+ * 130x12 @164 (87.7, one line, no wrap); OTHER chip "OTRO 1/3" 104x32 @176 (102.4), shown only with more than one result. The GO and
  * OTHER hit boxes never overlap (105.6-162.4 and 163.6-220.3 at s = 0.846). Static: no clock.
  * Values are checked by PipelineSurfacesFitTest.
  */
@@ -199,7 +199,8 @@ fun ScreenConfirmPlace(
             style = WgoType.labelSm,
             textAlign = TextAlign.Center,
             maxLines = 1,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = 164.dp).width(110.dp)
+            softWrap = false,
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = 164.dp).width(130.dp)
         )
         if (count > 1) {
             val chipTouch = wgoTouchSide(32.dp)
