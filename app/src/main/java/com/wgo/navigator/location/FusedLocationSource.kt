@@ -43,6 +43,8 @@ class FusedLocationSource(context: Context) : ProfiledLocationSource() {
             .setMinUpdateIntervalMillis(spec.intervalMs)
             .setMinUpdateDistanceMeters(spec.minDistanceM)
             .setMaxUpdateDelayMillis(0) // no batching: navigation needs every fix as it comes
+            // The builder defaults to waiting for an accurate first fix; the radar shows "searching" for coarse ones.
+            .setWaitForAccurateLocation(false)
             .build()
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
