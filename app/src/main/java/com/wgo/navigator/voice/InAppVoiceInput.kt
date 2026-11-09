@@ -40,6 +40,9 @@ class InAppVoiceInput(
     @Volatile
     private var session: ProducerScope<VoiceEvent>? = null
 
+    /** Languages whose offline model turned out to be missing: later sessions go online at once (saves ~2 s). */
+    private val noOfflineModel = java.util.Collections.synchronizedSet(HashSet<Language>())
+
     override fun cancel() {
         session?.close()
     }
@@ -49,7 +52,9 @@ class InAppVoiceInput(
         val started = now()
         val smoother = LevelSmoother()
         var recognizer: SpeechRecognizer? = null
-        var online = false
+        var online = language in noOfflineModel
+        var instances = 0
+        WgoMetrics.inc(WgoMetrics.Counter.RECOGNIZER_SESSION)
         var ready = false
         var speechStarted = false
         var lastVoice = started
@@ -67,7 +72,7 @@ class InAppVoiceInput(
         fun begin() {
             recognizer?.destroy()
             val r = SpeechRecognizer.createSpeechRecognizer(app)
-            WgoMetrics.inc(WgoMetrics.Counter.RECOGNIZER_SESSION)
+            instances++
             r.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
                     if (!ready) trySend(VoiceEvent.Ready)
@@ -102,6 +107,7 @@ class InAppVoiceInput(
                     when {
                         !online && error in LANGUAGE_MODEL_ERRORS -> {
                             online = true
+                            noOfflineModel += language
                             begin()
                         }
                         error in NO_SPEECH_ERRORS && !lastPartial.isNullOrBlank() -> finish(VoiceEvent.Final(lastPartial!!))
@@ -147,7 +153,9 @@ class InAppVoiceInput(
             recognizer?.destroy()
             recognizer = null
             if (session === this) session = null
-            WgoMetrics.event("voice_destroyed session_ms=${t0 - started} destroy_ms=${now() - t0}")
+            WgoMetrics.event(
+                "voice_destroyed session_ms=${t0 - started} destroy_ms=${now() - t0} instances=$instances online=$online"
+            )
         }
     }.flowOn(Dispatchers.Main.immediate) // SpeechRecognizer must be created and driven on the main thread
 
