@@ -7,12 +7,12 @@ import com.wgo.navigator.Language
 val LocalLanguage = compositionLocalOf { Language.ES }
 
 @Composable
-fun string(key: StringKey): String {
-    val language = LocalLanguage.current
-    return when (language) {
-        Language.ES -> es[key] ?: key.name
-        Language.EN -> en[key] ?: key.name
-    }
+fun string(key: StringKey): String = stringFor(key, LocalLanguage.current)
+
+/** Non-composable lookup (ViewModels, formatting helpers, tests). */
+fun stringFor(key: StringKey, language: Language): String = when (language) {
+    Language.ES -> es[key] ?: key.name
+    Language.EN -> en[key] ?: key.name
 }
 
 /**
@@ -41,6 +41,9 @@ enum class StringKey {
     UNIT_M, UNIT_KM, MIC_STATE_IDLE, MIC_STATE_LISTENING, MIC_STATE_PROCESSING, TURN_IMMINENT,
     // Voice
     MIC_STATE_WAITING, LISTENING_SYSTEM, ERR_NOT_UNDERSTOOD, ERR_VOICE_UNAVAILABLE, ERR_OFFLINE,
+    // Maneuvers (built from OSRM type/modifier, never from server text)
+    MAN_DEPART, MAN_STRAIGHT, MAN_SLIGHT_LEFT, MAN_LEFT, MAN_SHARP_LEFT, MAN_SLIGHT_RIGHT, MAN_RIGHT, MAN_SHARP_RIGHT,
+    MAN_UTURN, MAN_ROUNDABOUT, MAN_ROUNDABOUT_EXIT, MAN_ARRIVE, MAN_ONTO,
     LANGUAGE_SWITCH_TO_EN, LANGUAGE_SWITCH_TO_ES,
     MAP_NAME_COBALTO, MAP_GENRE_COBALTO,
     MAP_NAME_BARRIO, MAP_GENRE_BARRIO,
@@ -100,6 +103,19 @@ private val es = mapOf(
     StringKey.ERR_NOT_UNDERSTOOD to "No te entendí",
     StringKey.ERR_VOICE_UNAVAILABLE to "Voz no disponible",
     StringKey.ERR_OFFLINE to "Sin internet",
+    StringKey.MAN_DEPART to "Inicia la ruta",
+    StringKey.MAN_STRAIGHT to "Sigue recto",
+    StringKey.MAN_SLIGHT_LEFT to "Gira levemente a la izquierda",
+    StringKey.MAN_LEFT to "Gira a la izquierda",
+    StringKey.MAN_SHARP_LEFT to "Gira cerrado a la izquierda",
+    StringKey.MAN_SLIGHT_RIGHT to "Gira levemente a la derecha",
+    StringKey.MAN_RIGHT to "Gira a la derecha",
+    StringKey.MAN_SHARP_RIGHT to "Gira cerrado a la derecha",
+    StringKey.MAN_UTURN to "Da la vuelta en U",
+    StringKey.MAN_ROUNDABOUT to "Entra a la glorieta",
+    StringKey.MAN_ROUNDABOUT_EXIT to "En la glorieta, toma la salida %d",
+    StringKey.MAN_ARRIVE to "Llegas a tu destino",
+    StringKey.MAN_ONTO to "%s por %s",
     StringKey.SETTINGS_HEADER to "AJUSTES",
     StringKey.MAP_LABEL to "MAPA",
     StringKey.USE to "USAR",
@@ -171,6 +187,19 @@ private val en = mapOf(
     StringKey.ERR_NOT_UNDERSTOOD to "I didn't catch that",
     StringKey.ERR_VOICE_UNAVAILABLE to "Voice not available",
     StringKey.ERR_OFFLINE to "No internet",
+    StringKey.MAN_DEPART to "Start the route",
+    StringKey.MAN_STRAIGHT to "Go straight",
+    StringKey.MAN_SLIGHT_LEFT to "Bear left",
+    StringKey.MAN_LEFT to "Turn left",
+    StringKey.MAN_SHARP_LEFT to "Turn sharp left",
+    StringKey.MAN_SLIGHT_RIGHT to "Bear right",
+    StringKey.MAN_RIGHT to "Turn right",
+    StringKey.MAN_SHARP_RIGHT to "Turn sharp right",
+    StringKey.MAN_UTURN to "Make a U-turn",
+    StringKey.MAN_ROUNDABOUT to "Enter the roundabout",
+    StringKey.MAN_ROUNDABOUT_EXIT to "At the roundabout, take exit %d",
+    StringKey.MAN_ARRIVE to "You arrive at your destination",
+    StringKey.MAN_ONTO to "%s onto %s",
     StringKey.SETTINGS_HEADER to "SETTINGS",
     StringKey.MAP_LABEL to "MAP",
     StringKey.USE to "USE",
