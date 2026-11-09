@@ -32,7 +32,7 @@ class FakeVoiceInput(private val events: List<VoiceEvent> = listOf(VoiceEvent.Fa
 }
 
 /** Interpreter fake: a fixed answer (default: nothing understood). */
-class FakeIntentInterpreter(private val answer: Outcome<DestinationIntent> = Outcome.Err(WgoFailure.NotFound)) : IntentInterpreter {
+class FakeIntentInterpreter(private val answer: Interpretation = Interpretation.Unknown) : IntentInterpreter {
     override suspend fun interpret(transcript: String, language: Language) = answer
 }
 

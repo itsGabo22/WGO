@@ -14,7 +14,7 @@ class CoreFakesTest {
     private val pasto = GeoCoord(1.2136, -77.2811)
 
     @Test fun defaultFakesReturnTypedFailures() = runBlocking {
-        assertEquals(Outcome.Err(WgoFailure.NotFound), FakeIntentInterpreter().interpret("x", Language.ES))
+        assertEquals(IntentKind.Unknown, FakeIntentInterpreter().interpret("x", Language.ES).kind)
         assertEquals(Outcome.Err(WgoFailure.Offline), FakeGeocoder().search("x", pasto))
         assertEquals(Outcome.Err(WgoFailure.Server(503)), FakeRouter().route(pasto, pasto, TravelMode.Walk))
         assertEquals(Outcome.Err(WgoFailure.Unavailable), FakeLocationSource().once(1000))
