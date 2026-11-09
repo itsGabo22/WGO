@@ -28,6 +28,7 @@ object IntroWords {
 
 enum class StringKey {
     INTRO_TAGLINE,
+    PERM_LOCATION_TITLE, PERM_MIC_TITLE, PERM_LOCATION_WHY, PERM_MIC_WHY, PERM_BLOCKED_HINT, PERM_RETRY, PERM_OPEN_SETTINGS,
     TITLE_WHERE_TO, TITLE_ROUTING, BTN_CANCEL, BTN_DRIVE, BTN_WALK,
     DESTINATION_LONG, SETTINGS, THEME, LANGUAGE, LIGHT, DARK,
     SPANISH, ENGLISH, ACTIVATE_MIC, ZOOM_IN, ZOOM_OUT, VOICE_ON,
@@ -51,6 +52,13 @@ enum class StringKey {
 
 private val es = mapOf(
     StringKey.INTRO_TAGLINE to "¿A dónde vamos?",
+    StringKey.PERM_LOCATION_TITLE to "Sin permiso de ubicación",
+    StringKey.PERM_MIC_TITLE to "Sin permiso de micrófono",
+    StringKey.PERM_LOCATION_WHY to "WGO necesita tu ubicación para guiarte.",
+    StringKey.PERM_MIC_WHY to "WGO necesita el micrófono para escucharte.",
+    StringKey.PERM_BLOCKED_HINT to "Bloqueado: actívalo en Ajustes > Apps > WGO.",
+    StringKey.PERM_RETRY to "REINTENTAR",
+    StringKey.PERM_OPEN_SETTINGS to "AJUSTES",
     StringKey.TITLE_WHERE_TO to "¿A dónde vamos?",
     StringKey.TITLE_ROUTING to "TRAZANDO RUTA...",
     StringKey.BTN_CANCEL to "CANCELAR",
@@ -110,6 +118,13 @@ private val es = mapOf(
 
 private val en = mapOf(
     StringKey.INTRO_TAGLINE to "Where are we headed?",
+    StringKey.PERM_LOCATION_TITLE to "Location not allowed",
+    StringKey.PERM_MIC_TITLE to "Microphone not allowed",
+    StringKey.PERM_LOCATION_WHY to "WGO needs your location to guide you.",
+    StringKey.PERM_MIC_WHY to "WGO needs the microphone to hear you.",
+    StringKey.PERM_BLOCKED_HINT to "Blocked: turn it on in Settings > Apps > WGO.",
+    StringKey.PERM_RETRY to "RETRY",
+    StringKey.PERM_OPEN_SETTINGS to "SETTINGS",
     StringKey.TITLE_WHERE_TO to "Where to?",
     StringKey.TITLE_ROUTING to "ROUTING...",
     StringKey.BTN_CANCEL to "CANCEL",

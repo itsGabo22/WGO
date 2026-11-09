@@ -41,6 +41,10 @@ import com.wgo.navigator.ui.theme.DaylightPalette
 import com.wgo.navigator.ui.theme.NightPalette
 import com.wgo.navigator.ui.theme.WgoTheme
 import com.wgo.navigator.ui.screens.ScreenIntro
+import com.wgo.navigator.core.permissions.PermissionBroker
+import com.wgo.navigator.core.permissions.WgoPermission
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -59,6 +63,16 @@ class MainActivity : ComponentActivity() {
 
     private val settingsViewModel: SettingsViewModel by viewModels {
         SettingsViewModel.Factory(settingsRepository, initialSettings)
+    }
+
+    private val permissions by lazy { PermissionBroker.get(applicationContext) }
+
+    // One launcher per permission, registered at construction, so a result delivered to a recreated Activity still
+    // knows which permission it answers.
+    private val permissionLaunchers = WgoPermission.entries.associateWith { permission ->
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            permissions.onResult(permission, granted, shouldShowRequestPermissionRationale(permission.manifest))
+        }
     }
 
     /** Debug only: `am start -f 0x20000000 --ez wgo_replay_intro true` replays the intro for measurements. */
@@ -91,6 +105,18 @@ class MainActivity : ComponentActivity() {
             val player = hapticPlayer.await()
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 merge(appViewModel.haptics, settingsViewModel.haptics).collect { player.play(it) }
+            }
+        }
+
+        // Lazy runtime permissions: features call PermissionBroker.ensure(); the system dialog is shown from here, never
+        // while the intro plays. Statuses are refreshed on every start (grants made in the system settings).
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                WgoPermission.entries.forEach { permissions.refresh(it, shouldShowRequestPermissionRationale(it.manifest)) }
+                permissions.requests.collect { permission ->
+                    appViewModel.screen.first { it != ScreenState.Intro }
+                    permissionLaunchers.getValue(permission).launch(permission.manifest)
+                }
             }
         }
 

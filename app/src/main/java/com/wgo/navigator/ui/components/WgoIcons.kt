@@ -54,6 +54,12 @@ object WgoIcons {
         "M12 2.5v3.5 M12 18v3.5 M2.5 12H6 M18 12h3.5",
         "M5.3 5.3l2.5 2.5 M16.2 16.2l2.5 2.5 M5.3 18.7l2.5-2.5 M16.2 7.8l2.5-2.5"
     )
+    /** Map pin: teardrop outline with a centre ring. */
+    val LocationPin = icon(
+        "LocationPin",
+        "M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z",
+        "M12 7.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"
+    )
     val ChevronRight = icon("ChevronRight", "M9 6l6 6-6 6")
     val Check = icon("Check", "M5 12.5l4.5 4.5L19 7")
     val Close = icon("Close", "M6 6l12 12", "M18 6L6 18")
