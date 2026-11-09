@@ -240,7 +240,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 }
                 Step.Interpret -> interpret()
                 Step.Resolve -> placeQuery?.let { resolve(it) } ?: fail(PipelineError.NotUnderstood, Step.Listen)
-                Step.Route -> _selectedMode.value?.let { routeTo(it) } ?: run { _screen.value = ScreenState.ModeSelection }
+                Step.Route -> {
+                    // (A plain null check: `StateFlow.value?.let {}` crashes the Compose lint detector on Kotlin 2.1.)
+                    val mode = _selectedMode.value
+                    if (mode != null) routeTo(mode) else _screen.value = ScreenState.ModeSelection
+                }
             }
         }
     }
