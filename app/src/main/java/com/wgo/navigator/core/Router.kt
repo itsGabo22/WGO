@@ -11,7 +11,9 @@ data class RouteStep(
     /** Street name after the maneuver; may be empty. Turn text is built from this in the UI language. */
     val street: String,
     val location: GeoCoord,
-    val distanceM: Double
+    val distanceM: Double,
+    /** Roundabout exit number (1-based) for [Maneuver.ROUNDABOUT]; null otherwise or when unknown. */
+    val exit: Int? = null
 )
 
 data class Route(
