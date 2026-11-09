@@ -15,8 +15,9 @@ import kotlinx.coroutines.flow.update
 val PastoCentre = GeoCoord(1.2136, -77.2811)
 
 /**
- * Radar data from the real [LocationSource]: the user's position, heading and accuracy. No simulated blips and, until
- * routing exists, no route. Good fixes move the user; inaccurate ones only flag [RadarState.searching]; stale ones
+ * Radar data from the real [LocationSource]: the user's position, heading and accuracy, plus the trip's [route]
+ * polyline and the first [maneuver] point when a route exists (drawn whole; progress along it is not tracked yet).
+ * No simulated blips. Good fixes move the user; inaccurate ones only flag [RadarState.searching]; stale ones
  * (older than 10 s) are ignored. The heading comes from GPS while moving at >= 1.5 m/s (bearing of the fix, or the
  * direction from the previous good fix) and is otherwise kept, so the map does not spin while standing still.
  *
@@ -26,10 +27,15 @@ class LiveRadarSource(
     private val source: LocationSource,
     private val mode: TravelMode?,
     initial: GeoCoord?,
+    private val route: List<GeoCoord> = emptyList(),
+    private val maneuver: GeoCoord? = null,
     private val nowNanos: () -> Long = { SystemClock.elapsedRealtimeNanos() }
 ) : RadarSource {
     private val _state = MutableStateFlow(
-        RadarState(initial ?: PastoCentre, 0f, emptyList(), emptyList(), null, searching = true)
+        RadarState(
+            initial ?: route.firstOrNull() ?: PastoCentre,
+            initialBearing(route), route, emptyList(), maneuver, searching = true
+        )
     )
     override val state: StateFlow<RadarState> = _state.asStateFlow()
 
@@ -52,9 +58,9 @@ class LiveRadarSource(
                 _state.value = RadarState(
                     location = GeoCoord(fix.lat, fix.lon),
                     bearing = bearing,
-                    route = emptyList(),
+                    route = route,
                     blips = emptyList(),
-                    maneuver = null,
+                    maneuver = maneuver,
                     accuracyM = fix.accuracyM,
                     searching = false
                 )
@@ -65,6 +71,10 @@ class LiveRadarSource(
     companion object {
         const val MIN_HEADING_SPEED_MPS = 1.5f
         private const val MIN_MOVE_FOR_HEADING_M = 2.0
+
+        /** Before any movement the map faces along the route's first segment (north without a route). */
+        fun initialBearing(route: List<GeoCoord>): Float =
+            if (route.size >= 2) RadarProjection.bearingBetween(route[0], route[1]).toFloat() else 0f
 
         /** Heading for [fix]: GPS-derived while moving fast enough, else [previous]. */
         fun nextBearing(previous: Float, last: Fix?, fix: Fix): Float {

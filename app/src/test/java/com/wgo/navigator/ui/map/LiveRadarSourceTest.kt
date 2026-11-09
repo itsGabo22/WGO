@@ -54,6 +54,18 @@ class LiveRadarSourceTest {
         assertEquals("standing still keeps the last heading", 90f, r.state.value.bearing)
     }
 
+    @Test fun routeAndManeuverAreKeptAcrossFixes() {
+        val route = listOf(GeoCoord(1.2120, -77.2830), GeoCoord(1.2120, -77.2808), GeoCoord(1.2142, -77.2808))
+        val r = LiveRadarSource(FakeLocationSource(), TravelMode.Walk, null, route, route[1]) { now }
+        val start = r.state.value
+        assertEquals(route, start.route)
+        assertEquals(route[0], start.location)
+        assertEquals("faces the first segment (east)", 90f, start.bearing, 0.5f)
+        r.onFix(fix(lat = 1.2121, lon = -77.2829, accuracyM = 8f, elapsedNanos = now))
+        assertEquals(route, r.state.value.route)
+        assertEquals(route[1], r.state.value.maneuver)
+    }
+
     @Test fun headingIsDerivedFromMovementWhenTheFixHasNone() {
         val start = fix(lat = 1.2120, lon = -77.2830, speedMps = Float.NaN, elapsedNanos = now - 2_000_000_000L)
         // about 24 m north in 2 s = 12 m/s, no bearing in the fix
