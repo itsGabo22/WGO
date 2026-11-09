@@ -1,6 +1,7 @@
 package com.wgo.navigator.core.permissions
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
@@ -126,6 +127,8 @@ class PermissionBroker(context: Context) {
     private fun rationaleKey(p: WgoPermission) = "rationale_${p.name}"
 
     companion object {
+        // Holds only the application context (taken in the constructor), which lives as long as the process.
+        @SuppressLint("StaticFieldLeak")
         @Volatile
         private var instance: PermissionBroker? = null
 
