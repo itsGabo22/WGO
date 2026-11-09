@@ -1,7 +1,21 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// Optional service keys from the git-ignored local.properties (see local.properties.example). Missing keys become
+// empty strings, so the build never needs them. Values are never printed or logged.
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.isFile) file.inputStream().use { load(it) }
+}
+
+fun localStringField(key: String): String {
+    val value = localProperties.getProperty(key).orEmpty().trim()
+    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }
 
 android {
@@ -17,6 +31,11 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        buildConfigField("String", "LLM_API_KEY", localStringField("LLM_API_KEY"))
+        buildConfigField("String", "LLM_BASE_URL", localStringField("LLM_BASE_URL"))
+        buildConfigField("String", "LLM_MODEL", localStringField("LLM_MODEL"))
+        buildConfigField("String", "WGO_CONTACT", localStringField("WGO_CONTACT"))
     }
 
     buildTypes {
