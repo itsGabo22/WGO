@@ -58,12 +58,12 @@ private const val WAITING_RING_RADIUS_DP = 38f
  * processing (rotating arc). Everything animates in the draw phase from one shared [clock].
  * [amplitude] maps a bar index to 0..1; without it, [level] (the live voice level, 0..1, read ONLY here in the draw
  * phase) scales a wave driven by the shared clock phase; with neither, the bars run a synthetic wave.
- * Haptics belong to the ViewModel behind [onClick].
+ * Haptics belong to the ViewModel behind [onClick]; a null [onClick] makes a display-only orb (no button role).
  */
 @Composable
 fun MicOrb(
     state: MicState,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     amplitude: ((Int) -> Float)? = null,
     level: (() -> Float)? = null,
@@ -120,7 +120,7 @@ fun MicOrb(
                 contentDescription = label
                 stateDescription = stateLabel
             }
-            .clickable(role = Role.Button, onClick = onClick),
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center
     ) {
         Box(
