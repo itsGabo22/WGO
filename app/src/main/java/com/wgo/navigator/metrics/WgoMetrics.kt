@@ -51,7 +51,12 @@ object WgoMetrics {
 
     /** One-off debug event line (for example which voice strategy ran). Never pass secrets or transcripts here. */
     fun event(text: String) {
-        if (BuildConfig.DEBUG) Log.i(TAG, "event $text")
+        if (!BuildConfig.DEBUG) return
+        try {
+            Log.i(TAG, "event $text")
+        } catch (e: RuntimeException) {
+            // JVM unit tests: android.util.Log is a stub there.
+        }
     }
 
     fun get(counter: Counter): Long = counters.get(counter.ordinal)

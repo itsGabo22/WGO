@@ -22,7 +22,9 @@ class LlmInterpreter(
     private val apiKey: String,
     baseUrl: String,
     val model: String,
-    private val http: HttpClient
+    private val http: HttpClient,
+    private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
+    private val readTimeoutMs: Int = READ_TIMEOUT_MS
 ) {
     private val endpoint = baseUrl.trimEnd('/') + "/chat/completions"
 
@@ -39,8 +41,8 @@ class LlmInterpreter(
         val response = http.request(
             kind = WgoMetrics.Net.AI,
             url = endpoint,
-            connectTimeoutMs = CONNECT_TIMEOUT_MS,
-            readTimeoutMs = READ_TIMEOUT_MS,
+            connectTimeoutMs = connectTimeoutMs,
+            readTimeoutMs = readTimeoutMs,
             method = "POST",
             headers = mapOf("Authorization" to "Bearer $apiKey", "Content-Type" to "application/json"),
             body = requestBody(model, transcript, language)

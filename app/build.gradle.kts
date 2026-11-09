@@ -90,6 +90,8 @@ dependencies {
     }
 
     testImplementation("junit:junit:4.13.2")
+    // JVM unit tests only: the reference org.json (the android.jar copy is a stub that throws). Not in the APK.
+    testImplementation("org.json:json:20231013")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
