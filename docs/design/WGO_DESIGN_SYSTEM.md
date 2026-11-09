@@ -63,6 +63,7 @@ Font: **Space Grotesk**, file `res/font/space_grotesk.ttf` is a **variable font 
 
 | style | size / line | weight | tracking | usage |
 |---|---|---|---|---|
+| `display-xl` | 40px / 44px | 700 | -0.03em | Brand moment only: the cold-start intro (WHERE / WE / GO? -> WGO lockup). Never in running UI. |
 | `numeral-xl` | 34px / 34px | 700 | -0.03em | Distancia héroe en llegada y giros inminentes. Cifras tabulares (tnum). |
 | `numeral-lg` | 28px / 30px | 700 | -0.03em | Contador de distancia del HUD con efecto odómetro. Cifras tabulares (tnum). |
 | `headline-lg` | 24px / 28px | 700 | -0.02em | Mensaje de estado principal (llegada, sin señal). |

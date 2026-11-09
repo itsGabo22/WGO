@@ -28,6 +28,11 @@ private const val TABULAR = "tnum"
 
 /** Type scale from docs/design/tokens.json (type.groups). Uppercase is applied at the call site. */
 object WgoType {
+    /** Brand moment only (the cold-start WGO intro); never for running UI. */
+    val displayXl = TextStyle(
+        fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold,
+        fontSize = 40.sp, lineHeight = 44.sp, letterSpacing = (-0.03).em
+    )
     val numeralXl = TextStyle(
         fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold,
         fontSize = 34.sp, lineHeight = 34.sp, letterSpacing = (-0.03).em, fontFeatureSettings = TABULAR
