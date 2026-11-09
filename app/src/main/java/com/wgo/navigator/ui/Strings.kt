@@ -15,7 +15,19 @@ fun string(key: StringKey): String {
     }
 }
 
+/**
+ * The cold-start brand moment (ScreenIntro). English in both languages on purpose: it spells the wordmark
+ * W(here) W(e) G(o), so it is never translated. The tagline under the lockup is [StringKey.INTRO_TAGLINE].
+ */
+object IntroWords {
+    const val WHERE = "WHERE"
+    const val WE = "WE"
+    const val GO = "GO"
+    const val MARK = "?"
+}
+
 enum class StringKey {
+    INTRO_TAGLINE,
     TITLE_WHERE_TO, TITLE_ROUTING, BTN_CANCEL, BTN_DRIVE, BTN_WALK,
     DESTINATION_LONG, SETTINGS, THEME, LANGUAGE, LIGHT, DARK,
     SPANISH, ENGLISH, ACTIVATE_MIC, ZOOM_IN, ZOOM_OUT, VOICE_ON,
@@ -38,6 +50,7 @@ enum class StringKey {
 }
 
 private val es = mapOf(
+    StringKey.INTRO_TAGLINE to "¿A dónde vamos?",
     StringKey.TITLE_WHERE_TO to "¿A dónde vamos?",
     StringKey.TITLE_ROUTING to "TRAZANDO RUTA...",
     StringKey.BTN_CANCEL to "CANCELAR",
@@ -96,6 +109,7 @@ private val es = mapOf(
 )
 
 private val en = mapOf(
+    StringKey.INTRO_TAGLINE to "Where are we headed?",
     StringKey.TITLE_WHERE_TO to "Where to?",
     StringKey.TITLE_ROUTING to "ROUTING...",
     StringKey.BTN_CANCEL to "CANCEL",
