@@ -169,13 +169,40 @@ class GeoRouteParsingTest {
 
             server.respond = { Triple(200, "[]", 0L) }
             assertEquals(Outcome.Err(WgoFailure.NotFound), g.search("qwxzzq", null, Language.ES))
+            assertEquals("nothing anywhere: one local retry, then NotFound", 3, server.requests.size)
+            assertTrue(server.requests.last().query!!.endsWith("bounded=1"))
             server.respond = { Triple(429, "", 0L) }
             assertEquals(Outcome.Err(WgoFailure.Server(429)), g.search("otro", null, Language.ES))
             assertEquals(Outcome.Err(WgoFailure.NotFound), g.search("   ", null, Language.ES))
-            assertEquals(3, server.requests.size)
+            assertEquals(4, server.requests.size)
         }
         assertTrue(NominatimGeocoder(HttpClient("x"), "http://127.0.0.1:1", RateLimiter(0))
             .search("x", null, Language.ES).let { it == Outcome.Err(WgoFailure.Offline) })
+    }
+
+    @Test fun farOnlyResultsTriggerOneLocalRetryWithSpanishCategories() = runBlocking {
+        val far = "[{\"name\":\"Bus terminal\",\"display_name\":\"Bus terminal, Calle 5, Cali\",\"lat\":\"3.45\",\"lon\":\"-76.53\"}]"
+        FakeHttpServer { req ->
+            if (req.query!!.contains("bounded=1")) Triple(200, resource("nominatim_terminal.json"), 0L) else Triple(200, far, 0L)
+        }.use { server ->
+            val g = NominatimGeocoder(HttpClient("WGO-test"), server.baseUrl, RateLimiter(0))
+            val r = (g.search("bus terminal", null, Language.EN) as Outcome.Ok).value
+            assertEquals(2, server.requests.size)
+            assertTrue(server.requests[1].query!!.startsWith("q=terminal+de+transportes&"))
+            assertTrue(r.all { RadarProjection.distanceMeters(it.coord, PastoCentre) < 50_000 })
+        }
+        // A local first answer needs no retry, and far extras are listed after the local ones.
+        FakeHttpServer { Triple(200, resource("nominatim_terminal.json"), 0L) }.use { server ->
+            NominatimGeocoder(HttpClient("WGO-test"), server.baseUrl, RateLimiter(0)).search("Terminal", null, Language.ES)
+            assertEquals(1, server.requests.size)
+        }
+    }
+
+    @Test fun glossaryTranslatesCategoriesOnly() {
+        assertEquals("terminal de transportes", PlaceGlossary.toSpanish("bus terminal"))
+        assertEquals("centro comercial unicentro", PlaceGlossary.toSpanish("shopping mall Unicentro"))
+        assertEquals("universidad of narino", PlaceGlossary.toSpanish("University of Nariño"))
+        assertNull(PlaceGlossary.toSpanish("Unicentro"))
     }
 
     @Test fun rateLimiterSpacesRequests() = runBlocking {
