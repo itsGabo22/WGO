@@ -1,5 +1,6 @@
 package com.wgo.navigator
 
+import android.content.Intent
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.lifecycle.Lifecycle
@@ -39,10 +40,13 @@ import com.wgo.navigator.ui.map.WgoMapConfig
 import com.wgo.navigator.ui.theme.DaylightPalette
 import com.wgo.navigator.ui.theme.NightPalette
 import com.wgo.navigator.ui.theme.WgoTheme
+import com.wgo.navigator.ui.screens.ScreenIntro
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 
 enum class ScreenState {
-    Listening, ModeSelection, Navigation, Settings, MapPicker
+    Intro, Listening, ModeSelection, Navigation, Settings, MapPicker
 }
 
 class MainActivity : ComponentActivity() {
@@ -57,6 +61,16 @@ class MainActivity : ComponentActivity() {
         SettingsViewModel.Factory(settingsRepository, initialSettings)
     }
 
+    /** Debug only: `am start -f 0x20000000 --ez wgo_replay_intro true` replays the intro for measurements. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_REPLAY_INTRO, false)) appViewModel.replayIntroForDebug()
+    }
+
+    private companion object {
+        const val EXTRA_REPLAY_INTRO = "wgo_replay_intro"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -66,20 +80,23 @@ class MainActivity : ComponentActivity() {
         val initialCanvas = (if (initialSettings.isDarkMode) NightPalette else DaylightPalette).canvas
         window.setBackgroundDrawable(ColorDrawable(initialCanvas.toArgb()))
         
+        // Background warm-up while the intro plays (nothing here needs a permission): the haptic player with its
+        // predefined effects, and osmdroid's configuration plus its tile cache database.
+        val appContext = applicationContext
+        val hapticPlayer = lifecycleScope.async(Dispatchers.Default) { HapticPlayer(appContext) }
+        lifecycleScope.launch(Dispatchers.IO) { WgoMapConfig.warmUp(appContext) }
+
         // Haptics: ViewModels emit events, only the Activity touches the vibrator.
-        val hapticPlayer = HapticPlayer(applicationContext)
         lifecycleScope.launch {
+            val player = hapticPlayer.await()
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                merge(appViewModel.haptics, settingsViewModel.haptics).collect { hapticPlayer.play(it) }
+                merge(appViewModel.haptics, settingsViewModel.haptics).collect { player.play(it) }
             }
         }
 
         // Debug-only resource counters (no-op in release): frames per screen and a WGO_METRICS line every 30 s.
         WgoMetrics.install(this, lifecycleScope)
         lifecycleScope.launch { appViewModel.screen.collect { WgoMetrics.screen = it.name } }
-
-        // osmdroid: package User-Agent and a small cache in the app cache dir
-        WgoMapConfig.apply(applicationContext)
 
         setContent {
             val isDarkMode by settingsViewModel.isDarkMode.collectAsState()
@@ -95,11 +112,16 @@ class MainActivity : ComponentActivity() {
                     val micState by appViewModel.micState.collectAsState()
                     val selectedMode by appViewModel.selectedMode.collectAsState()
                     val mapStyleId by settingsViewModel.mapStyle.collectAsState()
+                    val introSkipped by appViewModel.introSkipped.collectAsState()
                     val reduceMotion = LocalWgoReduceMotion.current
 
-                    // Back leaves mode selection, navigation and settings for the listening screen.
+                    // Back skips the intro and leaves mode selection, navigation and settings for the listening screen.
                     BackHandler(enabled = currentScreen != ScreenState.Listening) {
-                        if (currentScreen == ScreenState.MapPicker) appViewModel.backToSettings() else appViewModel.backToListening()
+                        when (currentScreen) {
+                            ScreenState.Intro -> appViewModel.skipIntro()
+                            ScreenState.MapPicker -> appViewModel.backToSettings()
+                            else -> appViewModel.backToListening()
+                        }
                     }
 
                     Scaffold(
@@ -110,7 +132,7 @@ class MainActivity : ComponentActivity() {
                         AnimatedContent(
                             targetState = currentScreen,
                             transitionSpec = {
-                                wgoScreenTransition(initialState, targetState, selectedMode, reduceMotion)
+                                wgoScreenTransition(initialState, targetState, selectedMode, reduceMotion, introSkipped)
                             },
                             // Edge-only swipe-back on every screen = the same path as hardware Back.
                             modifier = Modifier
@@ -119,6 +141,14 @@ class MainActivity : ComponentActivity() {
                             label = "screens"
                         ) { screen ->
                         when (screen) {
+                            ScreenState.Intro -> {
+                                ScreenIntro(
+                                    onLockup = appViewModel::onIntroLockup,
+                                    onFinished = appViewModel::finishIntro,
+                                    onSkip = appViewModel::skipIntro,
+                                    skipped = introSkipped
+                                )
+                            }
                             ScreenState.Listening -> {
                                 ScreenListening(
                                     micState = micState,

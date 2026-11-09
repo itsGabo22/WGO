@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.ui.graphics.TransformOrigin
 import com.wgo.navigator.ScreenState
 import com.wgo.navigator.TravelMode
+import com.wgo.navigator.ui.screens.IntroTimeline
 import com.wgo.navigator.ui.theme.WgoMotion
 
 /** Vertical center of the mode pads on the 227 dp canvas: (102 + 70) / 227. */
@@ -28,8 +29,18 @@ fun wgoScreenTransition(
     from: ScreenState,
     to: ScreenState,
     mode: TravelMode?,
-    reduceMotion: Boolean
+    reduceMotion: Boolean,
+    introSkipped: Boolean = false
 ): ContentTransform {
+    // Intro -> screen 01: a plain cross-dissolve (200 ms, 160 ms when skipped, a 120 ms cut with reduce motion).
+    if (from == ScreenState.Intro) {
+        val ms = when {
+            reduceMotion -> WgoMotion.SNAP
+            introSkipped -> IntroTimeline.SKIP_DISSOLVE_MS
+            else -> IntroTimeline.DISSOLVE_MS
+        }
+        return fadeIn(tween(ms)) togetherWith fadeOut(tween(ms))
+    }
     val involvesSettings = from == ScreenState.Settings || to == ScreenState.Settings
     val involvesPicker = from == ScreenState.MapPicker || to == ScreenState.MapPicker
     if (from == to || (involvesSettings && !involvesPicker)) {

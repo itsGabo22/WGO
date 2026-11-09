@@ -53,6 +53,7 @@ fun RadarMapView(
     var size by remember { mutableStateOf(IntSize.Zero) }
 
     val mapView = remember {
+        WgoMapConfig.ensure(context) // no-op after the intro warm-up
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(false)

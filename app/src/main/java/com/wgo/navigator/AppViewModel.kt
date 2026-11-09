@@ -23,8 +23,16 @@ enum class TravelMode { Walk, Drive }
  * the destination is understood and the mode selection opens.
  */
 class AppViewModel : ViewModel(), HapticSource {
-    private val _screen = MutableStateFlow(ScreenState.Listening)
+    // The intro plays once per process: a configuration change keeps this ViewModel, and a relaunch in the same
+    // process (after Back left the app, or returning from the background) finds the flag already consumed.
+    private val _screen = MutableStateFlow(if (consumeColdStart()) ScreenState.Intro else ScreenState.Listening)
     val screen: StateFlow<ScreenState> = _screen.asStateFlow()
+
+    /** True once the user skipped the intro (tap or Back): the intro draws the static lockup and dissolves fast. */
+    private val _introSkipped = MutableStateFlow(false)
+    val introSkipped: StateFlow<Boolean> = _introSkipped.asStateFlow()
+
+    private var introLockupFired = false
 
     private val _micState = MutableStateFlow(MicState.Idle)
     val micState: StateFlow<MicState> = _micState.asStateFlow()
@@ -36,6 +44,34 @@ class AppViewModel : ViewModel(), HapticSource {
     override val haptics: SharedFlow<HapticEvent> = _haptics.asSharedFlow()
 
     private var listenJob: Job? = null
+
+    /** The WGO lockup formed: one Click, never one per word. */
+    fun onIntroLockup() {
+        if (introLockupFired) return
+        introLockupFired = true
+        _haptics.tryEmit(HapticEvent.Click)
+    }
+
+    /** The intro timeline ended (or the reduce-motion hold elapsed): show screen 01. */
+    fun finishIntro() {
+        if (_screen.value == ScreenState.Intro) _screen.value = ScreenState.Listening
+    }
+
+    /** Debug builds only: replays the intro in a warm process so it can be measured without cold-start noise. */
+    fun replayIntroForDebug() {
+        if (!BuildConfig.DEBUG) return
+        introLockupFired = false
+        _introSkipped.value = false
+        _screen.value = ScreenState.Intro
+    }
+
+    /** Tap or Back during the intro: jump to the lockup, then straight to screen 01. */
+    fun skipIntro() {
+        if (_screen.value != ScreenState.Intro) return
+        _introSkipped.value = true
+        onIntroLockup()
+        _screen.value = ScreenState.Listening
+    }
 
     fun onMicTapped() {
         if (_micState.value != MicState.Idle) return
@@ -84,5 +120,12 @@ class AppViewModel : ViewModel(), HapticSource {
     private companion object {
         const val LISTENING_MS = 1200L
         const val PROCESSING_MS = 800L // listening + processing = the previous 2000 ms
+
+        /** Process-wide: true until the first AppViewModel of this process consumes it. */
+        @Volatile
+        private var coldStart = true
+
+        @Synchronized
+        fun consumeColdStart(): Boolean = coldStart.also { coldStart = false }
     }
 }
