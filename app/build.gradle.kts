@@ -68,6 +68,8 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("com.google.android.gms:play-services-wearable:18.1.0")
+    // Fused location (GPS/Wi-Fi/cell fusion runs in the Play services process; falls back to LocationManager).
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation(platform("androidx.compose:compose-bom:2024.02.01"))
