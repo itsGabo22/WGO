@@ -29,6 +29,7 @@ class VoiceLevelTest {
         assertEquals(WgoFailure.NotFound, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_NO_MATCH))
         assertEquals(WgoFailure.NotFound, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_SPEECH_TIMEOUT))
         assertEquals(WgoFailure.Offline, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_NETWORK))
+        assertEquals(WgoFailure.Offline, InAppVoiceInput.failureFor(11))
         assertEquals(WgoFailure.NoPermission, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS))
         assertEquals(WgoFailure.Unavailable, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_CLIENT))
     }

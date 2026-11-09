@@ -187,6 +187,8 @@ class InAppVoiceInput(
         fun failureFor(error: Int): WgoFailure = when (error) {
             SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> WgoFailure.NotFound
             SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> WgoFailure.Offline
+            // SERVER_DISCONNECTED (API 31): seen live right after the network came back; transient, so "no internet".
+            11 -> WgoFailure.Offline
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> WgoFailure.NoPermission
             SpeechRecognizer.ERROR_SERVER -> WgoFailure.Server(0)
             10 -> WgoFailure.Server(429) // TOO_MANY_REQUESTS (API 31)
