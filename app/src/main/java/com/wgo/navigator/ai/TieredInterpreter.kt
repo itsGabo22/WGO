@@ -20,7 +20,8 @@ enum class InterpreterTier { Local, Remote }
  */
 class TieredInterpreter(
     private val remote: LlmInterpreter?,
-    private val online: () -> Boolean
+    private val online: () -> Boolean,
+    private val budget: AiCallBudget? = null
 ) : IntentInterpreter {
     @Volatile
     var lastTier: InterpreterTier = InterpreterTier.Local
@@ -39,8 +40,18 @@ class TieredInterpreter(
             WgoMetrics.event("interpret tier=Local kind=${local.kind} conf=${local.confidence}")
             return local
         }
+        if (budget != null && !budget.tryAcquire()) {
+            lastRemoteFailed = true
+            return local
+        }
         return when (val r = remote.interpret(transcript, language)) {
             is LlmInterpreter.Result.Ok -> merge(local, r.value)
+            LlmInterpreter.Result.RateLimited -> {
+                budget?.onRateLimited()
+                lastRemoteFailed = true
+                WgoMetrics.event("interpret tier=Local reason=rate_limited")
+                local
+            }
             else -> {
                 lastRemoteFailed = true
                 WgoMetrics.event("interpret tier=Local reason=remote_failed")
@@ -71,7 +82,7 @@ class TieredInterpreter(
                 http = HttpClient(userAgent)
             )
             WgoMetrics.event("interpreter remote=${remote != null}")
-            return TieredInterpreter(remote) { isOnline(app) }
+            return TieredInterpreter(remote, { isOnline(app) }, AiCallBudget(DataStoreAiCounterStore(app)))
         }
     }
 }
