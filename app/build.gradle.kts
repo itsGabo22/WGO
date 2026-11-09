@@ -83,6 +83,12 @@ dependencies {
     implementation("org.osmdroid:osmdroid-android:6.1.18")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     
+    constraints {
+        // Play services still pulls androidx.fragment 1.0.0 transitively; registerForActivityResult needs >= 1.3.0
+        // (lint InvalidFragmentVersionForActivityResult). This only raises the transitive version, it adds nothing.
+        implementation("androidx.fragment:fragment:1.6.2")
+    }
+
     testImplementation("junit:junit:4.13.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
