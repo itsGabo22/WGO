@@ -135,6 +135,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
     private var locationJob: Job? = null
 
+    /** True once the current trip reached NAVIGATING (cleared when leaving navigation). */
+    private var navigatingStarted = false
+
+    init {
+        // A permission granted outside the dialog (system settings after "don't ask again") arrives through the
+        // broker's refresh on start: restart the trip's location if navigation is showing and never got going.
+        viewModelScope.launch {
+            locationPermission.collect { status ->
+                val idleTrip = !navigatingStarted && locationJob?.isActive != true
+                if (status == PermissionStatus.Granted && _screen.value == ScreenState.Navigation && idleTrip) startLocation()
+            }
+        }
+    }
+
     /**
      * The user committed to a trip: ask for location the first time (system dialog, never during the intro), take one
      * ORIGIN fix, then keep NAVIGATING updates while the navigation screen collects them.
@@ -146,7 +160,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
             locationSource.setProfile(LocationProfile.ORIGIN)
             val origin = locationSource.once(ORIGIN_TIMEOUT_MS)
             if (origin is Outcome.Ok) _origin.value = origin.value
-            if (_screen.value == ScreenState.Navigation) locationSource.setProfile(LocationProfile.NAVIGATING)
+            if (_screen.value == ScreenState.Navigation) {
+                locationSource.setProfile(LocationProfile.NAVIGATING)
+                navigatingStarted = true
+            }
         }
     }
 
@@ -155,6 +172,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
     private fun stopLocation() {
         locationJob?.cancel()
+        navigatingStarted = false
         locationSource.setProfile(LocationProfile.IDLE)
         _origin.value = null
     }
