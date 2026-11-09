@@ -307,7 +307,9 @@ class MainActivity : ComponentActivity() {
                             ScreenState.Navigation -> {
                                 val locationPermission by appViewModel.locationPermission.collectAsState()
                                 val origin by appViewModel.origin.collectAsState()
+                                val route by appViewModel.route.collectAsState()
                                 ScreenActiveNavigation(
+                                    route = route,
                                     onCancel = appViewModel::backToListening,
                                     mapStyleId = mapStyleId,
                                     locationSource = appViewModel.locationSource,

@@ -51,9 +51,22 @@ import com.wgo.navigator.ui.theme.MapStyleId
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.rememberWgoClock
 import com.wgo.navigator.ui.theme.wgoMapStyle
+import androidx.compose.ui.graphics.graphicsLayer
+import com.wgo.navigator.core.Maneuver
+import com.wgo.navigator.core.Route
+import com.wgo.navigator.route.ManeuverText
+import com.wgo.navigator.ui.LocalLanguage
+import com.wgo.navigator.ui.components.WgoIcons
+import com.wgo.navigator.ui.formatDistance
+import com.wgo.navigator.ui.minutesOf
+
+private val STRAIGHT_LIKE = setOf(Maneuver.STRAIGHT, Maneuver.DEPART, Maneuver.ARRIVE)
+private val LEFT_LIKE = setOf(Maneuver.SLIGHT_LEFT, Maneuver.LEFT, Maneuver.SHARP_LEFT, Maneuver.U_TURN)
 
 /**
- * Screen 03. With a [locationSource] the radar follows live fixes ([LiveRadarSource]: user only, no blips, no route
+ * Screen 03. The real [route] (when given) is drawn on the radar, and the HUD shows the first maneuver after the
+ * departure (icon, distance, instruction translated through Strings) plus the trip totals. Progress along the route is
+ * not tracked yet. With a [locationSource] the radar follows live fixes ([LiveRadarSource]: user only, no blips, no route
  * until routing exists), collected only while the app is STARTED so updates stop in the background and with the
  * screen off. Without one (previews) it shows [DemoRadarSource]. A refused location permission replaces the screen
  * with the [PermissionDenied] surface (retry, or the app settings after "don't ask again").
@@ -67,7 +80,8 @@ fun ScreenActiveNavigation(
     origin: Fix? = null,
     locationPermission: PermissionStatus = PermissionStatus.Granted,
     onRetryLocation: () -> Unit = {},
-    onOpenLocationSettings: () -> Unit = {}
+    onOpenLocationSettings: () -> Unit = {},
+    route: Route? = null
 ) {
     if (locationSource != null &&
         (locationPermission == PermissionStatus.Denied || locationPermission == PermissionStatus.PermanentlyDenied)
@@ -88,9 +102,16 @@ fun ScreenActiveNavigation(
         // Z-Layer 0: RADAR MINIMAP (osmdroid tiles + Compose overlays). One clock for every looping element.
         val clock = rememberWgoClock()
         val scope = rememberCoroutineScope()
-        val radarSource: RadarSource = remember(locationSource, travelMode) {
+        // The first maneuver after the departure (or the arrival on a one-step route) and the distance to it.
+        val nextStep = route?.steps?.let { it.getOrNull(1) ?: it.lastOrNull() }
+        val toNextM = route?.steps?.firstOrNull()?.distanceM
+        val radarSource: RadarSource = remember(locationSource, travelMode, route) {
             if (locationSource == null) DemoRadarSource(scope)
-            else LiveRadarSource(locationSource, travelMode, origin?.let { GeoCoord(it.lat, it.lon) })
+            else LiveRadarSource(
+                locationSource, travelMode, origin?.let { GeoCoord(it.lat, it.lon) },
+                route = route?.polyline.orEmpty(),
+                maneuver = nextStep?.location
+            )
         }
         if (radarSource is LiveRadarSource) {
             LaunchedEffect(radarSource, origin) { origin?.let(radarSource::seed) }
@@ -132,26 +153,43 @@ fun ScreenActiveNavigation(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
+                    val language = LocalLanguage.current
+                    val maneuver = nextStep?.maneuver
                     Icon(
-                        imageVector = Icons.Rounded.ArrowUpward,
-                        contentDescription = string(StringKey.GO_STRAIGHT),
+                        imageVector = if (maneuver == null || maneuver in STRAIGHT_LIKE) Icons.Rounded.ArrowUpward else WgoIcons.TurnRight,
+                        contentDescription = null,
                         tint = WgoPrimary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier
+                            .size(24.dp)
+                            // Left turns mirror the right-turn glyph.
+                            .graphicsLayer { scaleX = if (maneuver in LEFT_LIKE) -1f else 1f }
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "200m",
+                        text = toNextM?.let { formatDistance(it, language) } ?: "200m",
                         color = MaterialTheme.colors.onSurface,
                         style = MaterialTheme.typography.title3.copy(fontWeight = FontWeight.Bold)
                     )
                 }
+                val language = LocalLanguage.current
                 Text(
-                    text = string(StringKey.NAV_INSTRUCTION),
+                    text = nextStep?.let { ManeuverText.instruction(it, language) } ?: string(StringKey.NAV_INSTRUCTION),
                     color = MaterialTheme.colors.onSurface,
                     style = MaterialTheme.typography.caption2.copy(fontWeight = FontWeight.Medium),
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (route != null) Text(
+                    // Trip totals: real route distance and duration.
+                    text = String.format(
+                        string(StringKey.NAV_TOTALS), formatDistance(route.distanceM, language), minutesOf(route.durationS)
+                    ),
+                    color = MaterialTheme.colors.onSurface,
+                    style = MaterialTheme.typography.caption3,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
