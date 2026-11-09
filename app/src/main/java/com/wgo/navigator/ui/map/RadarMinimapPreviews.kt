@@ -18,7 +18,7 @@ private fun RadarPreview(dark: Boolean, styleId: MapStyleId = MapStyleId.COBALTO
     WgoTheme(isDarkMode = dark) {
         val style = wgoMapStyle(styleId, Wgo.palette)
         // 70 m into the demo route, heading east just before the first turn.
-        val radar = SimulatedRadarSource.stateAt(70.0)
+        val radar = DemoRadarSource.stateAt(70.0)
         RadarMinimap(
             style = style,
             userLocation = radar.location,

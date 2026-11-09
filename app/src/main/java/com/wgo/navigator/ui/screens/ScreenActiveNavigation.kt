@@ -33,17 +33,53 @@ import com.wgo.navigator.ui.string
 import com.wgo.navigator.ui.theme.WgoBlack
 import com.wgo.navigator.ui.theme.WgoPrimary
 import com.wgo.navigator.ui.map.RadarMinimap
-import com.wgo.navigator.ui.map.SimulatedRadarSource
+import com.wgo.navigator.ui.map.DemoRadarSource
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.wgo.navigator.TravelMode
+import com.wgo.navigator.core.Fix
+import com.wgo.navigator.core.LocationSource
+import com.wgo.navigator.core.permissions.PermissionStatus
+import com.wgo.navigator.core.permissions.WgoPermission
+import com.wgo.navigator.ui.components.PermissionDenied
+import com.wgo.navigator.ui.map.GeoCoord
+import com.wgo.navigator.ui.map.LiveRadarSource
+import com.wgo.navigator.ui.map.RadarSource
 import com.wgo.navigator.ui.theme.MapStyleId
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.rememberWgoClock
 import com.wgo.navigator.ui.theme.wgoMapStyle
 
+/**
+ * Screen 03. With a [locationSource] the radar follows live fixes ([LiveRadarSource]: user only, no blips, no route
+ * until routing exists), collected only while the app is STARTED so updates stop in the background and with the
+ * screen off. Without one (previews) it shows [DemoRadarSource]. A refused location permission replaces the screen
+ * with the [PermissionDenied] surface (retry, or the app settings after "don't ask again").
+ */
 @Composable
 fun ScreenActiveNavigation(
     onCancel: () -> Unit,
-    mapStyleId: MapStyleId = MapStyleId.COBALTO
+    mapStyleId: MapStyleId = MapStyleId.COBALTO,
+    locationSource: LocationSource? = null,
+    travelMode: TravelMode? = null,
+    origin: Fix? = null,
+    locationPermission: PermissionStatus = PermissionStatus.Granted,
+    onRetryLocation: () -> Unit = {},
+    onOpenLocationSettings: () -> Unit = {}
 ) {
+    if (locationSource != null &&
+        (locationPermission == PermissionStatus.Denied || locationPermission == PermissionStatus.PermanentlyDenied)
+    ) {
+        PermissionDenied(
+            permission = WgoPermission.LOCATION,
+            status = locationPermission,
+            onRetry = onRetryLocation,
+            onOpenSettings = onOpenLocationSettings
+        )
+        return
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -52,8 +88,18 @@ fun ScreenActiveNavigation(
         // Z-Layer 0: RADAR MINIMAP (osmdroid tiles + Compose overlays). One clock for every looping element.
         val clock = rememberWgoClock()
         val scope = rememberCoroutineScope()
-        // Simulated route/location source until P5 plugs in the real one (see RadarSource).
-        val radarSource = remember { SimulatedRadarSource(scope) }
+        val radarSource: RadarSource = remember(locationSource, travelMode) {
+            if (locationSource == null) DemoRadarSource(scope)
+            else LiveRadarSource(locationSource, travelMode, origin?.let { GeoCoord(it.lat, it.lon) })
+        }
+        if (radarSource is LiveRadarSource) {
+            LaunchedEffect(radarSource, origin) { origin?.let(radarSource::seed) }
+            val lifecycle = LocalLifecycleOwner.current.lifecycle
+            val granted = locationPermission == PermissionStatus.Granted
+            LaunchedEffect(radarSource, lifecycle, granted) {
+                if (granted) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { radarSource.track() }
+            }
+        }
         val radar by radarSource.state.collectAsState()
         var zoom by remember { mutableDoubleStateOf(17.0) }
 

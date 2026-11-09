@@ -71,27 +71,27 @@ class RadarProjectionTest {
     }
 
     @Test fun demoRouteStartsHeadingEastThenTurnsNorth() {
-        val start = SimulatedRadarSource.stateAt(0.0)
+        val start = DemoRadarSource.stateAt(0.0)
         assertEquals(90f, start.bearing, 0.5f)
-        assertEquals(SimulatedRadarSource.DemoRoute.first().lat, start.location.lat, 1e-6)
+        assertEquals(DemoRadarSource.DemoRoute.first().lat, start.location.lat, 1e-6)
 
-        val firstSegment = RadarProjection.distanceMeters(SimulatedRadarSource.DemoRoute[0], SimulatedRadarSource.DemoRoute[1])
-        val afterTurn = SimulatedRadarSource.stateAt(firstSegment + 5.0)
+        val firstSegment = RadarProjection.distanceMeters(DemoRadarSource.DemoRoute[0], DemoRadarSource.DemoRoute[1])
+        val afterTurn = DemoRadarSource.stateAt(firstSegment + 5.0)
         assertEquals(0f, afterTurn.bearing, 0.5f)
     }
 
     @Test fun routeStartsAtTheUserAndShrinksAsTheUserAdvances() {
-        val early = SimulatedRadarSource.stateAt(10.0)
-        val late = SimulatedRadarSource.stateAt(400.0)
+        val early = DemoRadarSource.stateAt(10.0)
+        val late = DemoRadarSource.stateAt(400.0)
         assertEquals(early.location, early.route.first())
         assertTrue(late.route.size < early.route.size)
         assertTrue(early.maneuver != null)
     }
 
     @Test fun walkingWrapsAroundAtTheEndOfTheRoute() {
-        val total = polylineLength(SimulatedRadarSource.DemoRoute)
-        val wrapped = SimulatedRadarSource.stateAt(total + 20.0)
-        val early = SimulatedRadarSource.stateAt(20.0)
+        val total = polylineLength(DemoRadarSource.DemoRoute)
+        val wrapped = DemoRadarSource.stateAt(total + 20.0)
+        val early = DemoRadarSource.stateAt(20.0)
         assertEquals(early.location.lat, wrapped.location.lat, 1e-6)
         assertEquals(early.location.lon, wrapped.location.lon, 1e-6)
     }

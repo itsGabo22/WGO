@@ -41,6 +41,8 @@ import com.wgo.navigator.ui.theme.DaylightPalette
 import com.wgo.navigator.ui.theme.NightPalette
 import com.wgo.navigator.ui.theme.WgoTheme
 import com.wgo.navigator.ui.screens.ScreenIntro
+import com.wgo.navigator.core.LocationProfile
+import com.wgo.navigator.ui.components.openAppPermissionSettings
 import com.wgo.navigator.core.permissions.PermissionBroker
 import com.wgo.navigator.core.permissions.WgoPermission
 import androidx.activity.result.contract.ActivityResultContracts
@@ -78,11 +80,17 @@ class MainActivity : ComponentActivity() {
     /** Debug only: `am start -f 0x20000000 --ez wgo_replay_intro true` replays the intro for measurements. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_REPLAY_INTRO, false)) appViewModel.replayIntroForDebug()
+        if (!BuildConfig.DEBUG) return
+        if (intent.getBooleanExtra(EXTRA_REPLAY_INTRO, false)) appViewModel.replayIntroForDebug()
+        intent.getStringExtra(EXTRA_LOCATION_PROFILE)
+            ?.let { name -> LocationProfile.entries.firstOrNull { it.name == name } }
+            ?.let(appViewModel::debugSetLocationProfile)
     }
 
     private companion object {
         const val EXTRA_REPLAY_INTRO = "wgo_replay_intro"
+        /** Debug only: `--es wgo_location_profile AMBIENT` forces a location profile for measurements. */
+        const val EXTRA_LOCATION_PROFILE = "wgo_location_profile"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -192,9 +200,17 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             ScreenState.Navigation -> {
+                                val locationPermission by appViewModel.locationPermission.collectAsState()
+                                val origin by appViewModel.origin.collectAsState()
                                 ScreenActiveNavigation(
                                     onCancel = appViewModel::backToListening,
-                                    mapStyleId = mapStyleId
+                                    mapStyleId = mapStyleId,
+                                    locationSource = appViewModel.locationSource,
+                                    travelMode = selectedMode,
+                                    origin = origin,
+                                    locationPermission = locationPermission,
+                                    onRetryLocation = appViewModel::retryLocation,
+                                    onOpenLocationSettings = { openAppPermissionSettings() }
                                 )
                             }
                             ScreenState.MapPicker -> {

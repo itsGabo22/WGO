@@ -1,18 +1,30 @@
 package com.wgo.navigator
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.wgo.navigator.core.Fix
+import com.wgo.navigator.core.LocationProfile
+import com.wgo.navigator.core.LocationSource
+import com.wgo.navigator.core.Outcome
+import com.wgo.navigator.core.permissions.PermissionBroker
+import com.wgo.navigator.core.permissions.PermissionStatus
+import com.wgo.navigator.core.permissions.WgoPermission
 import com.wgo.navigator.haptics.HapticEvent
 import com.wgo.navigator.haptics.HapticSource
+import com.wgo.navigator.location.LocationSources
 import com.wgo.navigator.ui.components.MicState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class TravelMode { Walk, Drive }
@@ -22,7 +34,7 @@ enum class TravelMode { Walk, Drive }
  * Speech recognition is still simulated: a tap listens, then "routes", and after the same 2 s as before
  * the destination is understood and the mode selection opens.
  */
-class AppViewModel : ViewModel(), HapticSource {
+class AppViewModel(application: Application) : AndroidViewModel(application), HapticSource {
     // The intro plays once per process: a configuration change keeps this ViewModel, and a relaunch in the same
     // process (after Back left the app, or returning from the background) finds the flag already consumed.
     private val _screen = MutableStateFlow(if (consumeColdStart()) ScreenState.Intro else ScreenState.Listening)
@@ -96,12 +108,64 @@ class AppViewModel : ViewModel(), HapticSource {
         _selectedMode.value = mode
         _haptics.tryEmit(HapticEvent.HeavyClick)
         _screen.value = ScreenState.Navigation
+        startLocation()
     }
 
     /** Back/cancel from mode selection or navigation. */
     fun backToListening() {
+        stopLocation()
         _selectedMode.value = null
         _screen.value = ScreenState.Listening
+    }
+
+    // ---- Location (lazy permission, ORIGIN one-shot, then NAVIGATING; IDLE everywhere else) ----
+
+    private val permissions = PermissionBroker.get(application)
+
+    /** Real source: fused when Play services is present, else the platform LocationManager. */
+    val locationSource: LocationSource = LocationSources.create(application)
+
+    val locationPermission: StateFlow<PermissionStatus> = permissions.status
+        .map { it.getValue(WgoPermission.LOCATION) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, permissions.status.value.getValue(WgoPermission.LOCATION))
+
+    /** The one-shot ORIGIN fix of the current trip (null until it arrives). */
+    private val _origin = MutableStateFlow<Fix?>(null)
+    val origin: StateFlow<Fix?> = _origin.asStateFlow()
+
+    private var locationJob: Job? = null
+
+    /**
+     * The user committed to a trip: ask for location the first time (system dialog, never during the intro), take one
+     * ORIGIN fix, then keep NAVIGATING updates while the navigation screen collects them.
+     */
+    private fun startLocation() {
+        locationJob?.cancel()
+        locationJob = viewModelScope.launch {
+            if (permissions.ensure(WgoPermission.LOCATION) != PermissionStatus.Granted) return@launch
+            locationSource.setProfile(LocationProfile.ORIGIN)
+            val origin = locationSource.once(ORIGIN_TIMEOUT_MS)
+            if (origin is Outcome.Ok) _origin.value = origin.value
+            if (_screen.value == ScreenState.Navigation) locationSource.setProfile(LocationProfile.NAVIGATING)
+        }
+    }
+
+    /** Retry chip of the denied surface. */
+    fun retryLocation() = startLocation()
+
+    private fun stopLocation() {
+        locationJob?.cancel()
+        locationSource.setProfile(LocationProfile.IDLE)
+        _origin.value = null
+    }
+
+    /** Debug builds only: force a location profile (to measure AMBIENT, which has no ambient-mode trigger yet). */
+    fun debugSetLocationProfile(profile: LocationProfile) {
+        if (BuildConfig.DEBUG) locationSource.setProfile(profile)
+    }
+
+    override fun onCleared() {
+        locationSource.setProfile(LocationProfile.IDLE)
     }
 
     fun openSettings() {
@@ -120,6 +184,7 @@ class AppViewModel : ViewModel(), HapticSource {
     private companion object {
         const val LISTENING_MS = 1200L
         const val PROCESSING_MS = 800L // listening + processing = the previous 2000 ms
+        const val ORIGIN_TIMEOUT_MS = 8_000L
 
         /** Process-wide: true until the first AppViewModel of this process consumes it. */
         @Volatile

@@ -23,19 +23,23 @@ data class RadarState(
     val route: List<GeoCoord>,
     val blips: List<RadarBlip>,
     /** Where the next maneuver happens, if any. */
-    val maneuver: GeoCoord?
+    val maneuver: GeoCoord?,
+    /** Accuracy radius of the last fix in meters; NaN when unknown (demo data). */
+    val accuracyM: Float = Float.NaN,
+    /** True while there is no usable fix yet (or only coarse ones): the position shown is not trustworthy. */
+    val searching: Boolean = false
 )
 
-/** The radar's data input. P5 plugs the real location + routing source in here. */
+/** The radar's data input: [LiveRadarSource] in the app, [DemoRadarSource] in previews and demos. */
 interface RadarSource {
     val state: StateFlow<RadarState>
 }
 
 /**
- * Simulated provider (there is no real location or routing yet): walks a point along a hard-coded polyline near
- * Pasto (1.2136, -77.2811) once per [tickMs], looping, so the radar animates. Replace with a real [RadarSource] in P5.
+ * Demo provider for previews and debug demos only (never in live mode): walks a point along a hard-coded polyline
+ * near Pasto (1.2136, -77.2811) once per [tickMs], looping, with a demo route and blips.
  */
-class SimulatedRadarSource(
+class DemoRadarSource(
     scope: CoroutineScope,
     private val speedMps: Double = 14.0,
     private val tickMs: Long = 1000L
