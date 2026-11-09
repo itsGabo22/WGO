@@ -1,5 +1,6 @@
 package com.wgo.navigator.core
 
+import com.wgo.navigator.Language
 import com.wgo.navigator.ui.map.GeoCoord
 
 /** A geocoding hit. */
@@ -12,9 +13,9 @@ data class Place(
 )
 
 /**
- * Text to places, biased toward [near] (the user's position or the Pasto centre). Named after the role, not the
- * platform class `android.location.Geocoder`. Never throws.
+ * Text to places, biased toward [near] (the user's position or the Pasto centre), names in [language]. Named after the
+ * role, not the platform class `android.location.Geocoder`. Never throws; no hit is [WgoFailure.NotFound].
  */
 interface Geocoder {
-    suspend fun search(query: String, near: GeoCoord?, limit: Int = 3): Outcome<List<Place>>
+    suspend fun search(query: String, near: GeoCoord?, language: Language = Language.ES, limit: Int = 3): Outcome<List<Place>>
 }

@@ -38,7 +38,7 @@ class FakeIntentInterpreter(private val answer: Interpretation = Interpretation.
 
 /** Geocoder fake: a fixed answer (default: offline). */
 class FakeGeocoder(private val answer: Outcome<List<Place>> = Outcome.Err(WgoFailure.Offline)) : Geocoder {
-    override suspend fun search(query: String, near: GeoCoord?, limit: Int) = answer
+    override suspend fun search(query: String, near: GeoCoord?, language: Language, limit: Int) = answer
 }
 
 /** Router fake: a fixed answer (default: server error). */
