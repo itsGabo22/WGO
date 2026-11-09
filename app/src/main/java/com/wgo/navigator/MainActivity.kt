@@ -47,6 +47,7 @@ import com.wgo.navigator.core.permissions.PermissionBroker
 import com.wgo.navigator.core.permissions.WgoPermission
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ActivityNotFoundException
+import android.os.SystemClock
 import com.wgo.navigator.ui.components.PermissionDenied
 import com.wgo.navigator.ui.map.GeoCoord
 import com.wgo.navigator.ui.map.PastoCentre
@@ -91,9 +92,14 @@ class MainActivity : ComponentActivity() {
     // knows which permission it answers.
     private val permissionLaunchers = WgoPermission.entries.associateWith { permission ->
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val elapsed = SystemClock.elapsedRealtime() - (permissionAskedAt[permission] ?: 0L)
+            WgoMetrics.event("permission_result ${permission.name} granted=$granted ms=$elapsed")
             permissions.onResult(permission, granted, shouldShowRequestPermissionRationale(permission.manifest))
         }
     }
+
+    /** When each permission dialog was launched (debug timing only). */
+    private val permissionAskedAt = HashMap<WgoPermission, Long>()
 
     // Fallback voice strategy: the system speech activity, launched for a result on the ViewModel's request.
     private val speechDialogLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -151,6 +157,7 @@ class MainActivity : ComponentActivity() {
                 WgoPermission.entries.forEach { permissions.refresh(it, shouldShowRequestPermissionRationale(it.manifest)) }
                 permissions.requests.collect { permission ->
                     appViewModel.screen.first { it != ScreenState.Intro }
+                    permissionAskedAt[permission] = SystemClock.elapsedRealtime()
                     permissionLaunchers.getValue(permission).launch(permission.manifest)
                 }
             }

@@ -87,9 +87,16 @@ class PermissionBroker(context: Context) {
         return deferred.await()
     }
 
-    /** Called by the Activity with the dialog result and its current rationale flag. */
+    /**
+     * Called by the Activity with the dialog result and its current rationale flag. Two denials in a row with no
+     * rationale also count as "don't ask again": that is what the system answers when the permission was fixed from
+     * the settings (or its coarse half was), without showing any dialog; the settings page is then the only way.
+     */
     fun onResult(permission: WgoPermission, granted: Boolean, showRationale: Boolean) {
         prefs.edit().putBoolean(askedKey(permission), true).apply()
+        val bareDenials = if (granted || showRationale) 0 else prefs.getInt(bareDenialsKey(permission), 0) + 1
+        prefs.edit().putInt(bareDenialsKey(permission), bareDenials).apply()
+        if (bareDenials >= 2) prefs.edit().putBoolean(rationaleKey(permission), true).apply()
         val status = update(permission, granted || isGranted(permission), showRationale)
         synchronized(pending) { pending.remove(permission) }?.complete(status)
     }
@@ -101,7 +108,7 @@ class PermissionBroker(context: Context) {
 
     private fun update(permission: WgoPermission, granted: Boolean, showRationale: Boolean): PermissionStatus {
         if (showRationale) prefs.edit().putBoolean(rationaleKey(permission), true).apply()
-        if (granted) prefs.edit().remove(rationaleKey(permission)).apply()
+        if (granted) prefs.edit().remove(rationaleKey(permission)).remove(bareDenialsKey(permission)).apply()
         val status = permissionStatus(
             granted = granted,
             askedBefore = prefs.getBoolean(askedKey(permission), false),
@@ -125,6 +132,7 @@ class PermissionBroker(context: Context) {
 
     private fun askedKey(p: WgoPermission) = "asked_${p.name}"
     private fun rationaleKey(p: WgoPermission) = "rationale_${p.name}"
+    private fun bareDenialsKey(p: WgoPermission) = "bare_denials_${p.name}"
 
     companion object {
         // Holds only the application context (taken in the constructor), which lives as long as the process.
