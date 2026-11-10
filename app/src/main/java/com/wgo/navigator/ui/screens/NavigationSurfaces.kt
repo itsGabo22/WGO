@@ -216,7 +216,7 @@ fun GpsLostOverlay(
 /**
  * LOST ROUTE: three reroutes failed in a row; ask instead of looping. Same grid as the confirm surface: badge
  * (alert, about 76x18) @22 (100.3); title `headline-sm` 150x40 @44 (94.0, live region); hint `body-md` 160x18 @86
- * (82.4); RETRY MassiveButton 120 centred at 134 (65.7); END chip 104x32 @176 (102.4). Static: no clock.
+ * (82.4); RETRY MassiveButton 150 centred at 134 (79.1); END chip 104x32 @176 (102.4). Static: no clock.
  */
 @Composable
 fun ScreenLostRoute(onRetry: () -> Unit, onEnd: () -> Unit, modifier: Modifier = Modifier) {
@@ -236,7 +236,7 @@ fun ScreenLostRoute(onRetry: () -> Unit, onEnd: () -> Unit, modifier: Modifier =
 
 /**
  * END NAVIGATION? confirm (Back or CANCEL during navigation): title `headline-sm` 150x40 @44 (94.0, live region);
- * destination `body-md` 160x18 @86 (82.4); END MassiveButton (alert, close icon) 120 centred at 134 (65.7); KEEP chip
+ * destination `body-md` 160x18 @86 (82.4); END MassiveButton (alert, close icon) 150 centred at 134 (79.1; 120 clipped TERMINAR + icon); KEEP chip
  * 104x32 @176 (102.4). Back on this surface means KEEP. Static: no clock.
  */
 @Composable
@@ -307,7 +307,7 @@ private fun QuestionSurface(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = topAt(134f, buttonTouch))
-                .width(120.dp)
+                .width(150.dp)
                 .wgoRiseIn(delayMs = 2 * WgoMotion.STAGGER)
         )
         val chipTouch = wgoTouchSide(32.dp)

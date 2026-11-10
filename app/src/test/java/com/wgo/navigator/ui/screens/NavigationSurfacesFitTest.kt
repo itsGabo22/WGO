@@ -36,8 +36,8 @@ class NavigationSurfacesFitTest {
         Box("question badge", 96f, 18f, 22f),
         Box("question title", 150f, 40f, 44f),
         Box("question subtitle", 160f, 18f, 86f),
-        Box("question primary (s=1)", 120f, 52f, 134f - 26f),
-        Box("question primary (s=0.846)", 120f, touchSmall, 134f - touchSmall / 2),
+        Box("question primary (s=1)", 150f, 52f, 134f - 26f),
+        Box("question primary (s=0.846)", 150f, touchSmall, 134f - touchSmall / 2),
         Box("question secondary", 104f, 32f, 176f)
     )
 
