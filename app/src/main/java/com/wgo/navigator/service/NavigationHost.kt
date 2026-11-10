@@ -13,6 +13,8 @@ import com.wgo.navigator.core.LocationSource
 import com.wgo.navigator.core.Maneuver
 import com.wgo.navigator.core.Place
 import com.wgo.navigator.core.Route
+import com.wgo.navigator.haptics.HapticEvent
+import com.wgo.navigator.haptics.HapticPlayer
 import com.wgo.navigator.location.LocationSources
 import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.nav.NavClock
@@ -125,7 +127,15 @@ class NavigationHost private constructor(context: Context) {
             // Debug builds only: the active route as `lat,lon` lines (tools/sim_drive.ps1 -FromLogcat replays it).
             launch { s.route.collect { WgoMetrics.route(it.polyline) } }
             launch { s.state.collect(::onNavState) }
-            launch { s.events.collect { WgoMetrics.event("nav event=${it.javaClass.simpleName}"); _events.tryEmit(it) } }
+            // The ONE collector of the trip's events: it plays the spec haptics here, in the process kept in the
+            // foreground by the service, so they fire once each with the screen off or the app in the background.
+            launch {
+                s.events.collect {
+                    WgoMetrics.event("nav event=${it.javaClass.simpleName}")
+                    hapticFor(it)?.let(::playHaptic)
+                    _events.tryEmit(it)
+                }
+            }
             // The radar draws only the remaining route (cut by the session every 5 m of progress) and the next maneuver.
             launch {
                 combine(s.remaining, s.state) { remaining, state -> remaining to nextManeuverOf(state) }
@@ -144,6 +154,8 @@ class NavigationHost private constructor(context: Context) {
     /** Ends the trip now: engine, ticks and the location request stop, and the service and its notification go away. */
     fun end(reason: TripEnd = TripEnd.Ended) {
         if (session == null) return
+        // Spec section 8: arrival = DoubleClick, played here (ending the trip cancels the event collector).
+        if (reason == TripEnd.Arrived) playHaptic(HapticEvent.DoubleClick)
         stopTrip()
         _lastEnd.value = reason
         WgoMetrics.event("nav end reason=$reason")
@@ -238,6 +250,14 @@ class NavigationHost private constructor(context: Context) {
         }
     }
 
+    /** Built on first use (the vibrator lookup), then reused for every trip of the process. */
+    private val hapticPlayer by lazy { HapticPlayer(app) }
+
+    private fun playHaptic(event: HapticEvent) {
+        hapticPlayer.play(event)
+        WgoMetrics.event("nav haptic=$event")
+    }
+
     /** Where the next maneuver is (null for the arrival: the route's end already shows it). */
     private fun nextManeuverOf(state: NavState): GeoCoord? {
         val nav = state.guidance() ?: return null
@@ -274,6 +294,18 @@ class NavigationHost private constructor(context: Context) {
         fun get(context: Context): NavigationHost =
             instance ?: synchronized(this) { instance ?: NavigationHost(context).also { instance = it } }
     }
+}
+
+/**
+ * Engine events -> haptics, exactly as spec section 8 lists them: turn at 200 m = Tick, turn at 50 m = DoubleClick,
+ * GPS lost = HeavyClick (arrival = DoubleClick is played when the trip ends). The spec has no row for off route,
+ * rerouted, GPS recovered or lost route: those stay silent.
+ */
+fun hapticFor(event: NavEvent): HapticEvent? = when (event) {
+    is NavEvent.ApproachingTurn -> HapticEvent.Tick
+    is NavEvent.AtTurn -> HapticEvent.DoubleClick
+    NavEvent.GpsLost -> HapticEvent.HeavyClick
+    NavEvent.Arrived, NavEvent.OffRouteDetected, NavEvent.Rerouted, NavEvent.GpsRecovered -> null
 }
 
 /** The guidance kept by every non-terminal state (null while waiting for GPS or after arrival). */

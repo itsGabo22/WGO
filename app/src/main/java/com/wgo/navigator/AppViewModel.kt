@@ -1,7 +1,6 @@
 package com.wgo.navigator
 
 import android.app.Application
-import com.wgo.navigator.nav.NavEvent
 import com.wgo.navigator.nav.NavState
 import com.wgo.navigator.service.NavigationHost
 import com.wgo.navigator.service.TripEnd
@@ -459,7 +458,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
             host.active.value -> _screen.value = ScreenState.Navigation
             host.lastEnd.value == TripEnd.Arrived -> _screen.value = ScreenState.Arrived
         }
-        viewModelScope.launch { host.events.collect(::onNavEvent) }
+        // Trip haptics (turns, GPS lost, arrival) are played by the host, never here: one collector, screen on or off.
         // Only ends that happen from now on (the current value was handled above).
         viewModelScope.launch { host.lastEnd.drop(1).collect { it?.let(::onTripEnded) } }
     }
@@ -470,28 +469,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         _screen.value = ScreenState.Navigation
     }
 
-    /**
-     * Engine events -> haptics, exactly as spec section 8 lists them: turn at 200 m = Tick, turn at 50 m = DoubleClick,
-     * GPS lost = HeavyClick, arrival = DoubleClick (played by [onTripEnded]). The spec has no row for off route,
-     * rerouted, GPS recovered or lost route: those stay silent.
-     */
-    private fun onNavEvent(event: NavEvent) {
-        when (event) {
-            is NavEvent.ApproachingTurn -> _haptics.tryEmit(HapticEvent.Tick)
-            is NavEvent.AtTurn -> _haptics.tryEmit(HapticEvent.DoubleClick)
-            NavEvent.GpsLost -> _haptics.tryEmit(HapticEvent.HeavyClick)
-            NavEvent.Arrived, NavEvent.OffRouteDetected, NavEvent.Rerouted, NavEvent.GpsRecovered -> Unit
-        }
-    }
-
     /** The trip ended inside the host (arrival, service lost, task removed); END from the UI goes home by itself. */
     private fun onTripEnded(reason: TripEnd) {
         _endConfirm.value = false
         when (reason) {
-            TripEnd.Arrived -> {
-                _haptics.tryEmit(HapticEvent.DoubleClick)
-                if (_screen.value == ScreenState.Navigation) _screen.value = ScreenState.Arrived
-            }
+            TripEnd.Arrived -> if (_screen.value == ScreenState.Navigation) _screen.value = ScreenState.Arrived
             TripEnd.ServiceLost, TripEnd.TaskRemoved -> if (_screen.value == ScreenState.Navigation) {
                 host.acknowledgeEnd()
                 goHome()
