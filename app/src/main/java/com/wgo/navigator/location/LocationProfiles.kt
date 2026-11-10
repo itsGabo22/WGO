@@ -12,8 +12,10 @@ data class RequestSpec(
 
 /**
  * Power profiles -> continuous request parameters. IDLE and ORIGIN never keep a request open (ORIGIN is a single
- * one-shot). NAVIGATING adapts its interval: 1 s while a maneuver is closer than 80 m, 3 s above 20 km/h on a long
- * straight, 2 s otherwise; no minimum distance (see [NAV_MIN_DISTANCE_M]). AMBIENT is balanced accuracy every 10 s.
+ * one-shot). NAVIGATING (screen on) adapts its interval: 1 s while a maneuver is closer than 80 m, 3 s above 20 km/h
+ * on a long straight, 2 s otherwise; no minimum distance (see [NAV_MIN_DISTANCE_M]). AMBIENT (navigating with the
+ * screen off or in ambient) keeps high accuracy but derives the interval from the distance to the next maneuver and
+ * the speed ([adaptiveIntervalMs]): 1 s inside 80 m, else 2-10 s.
  */
 object LocationProfiles {
     const val NAV_INTERVAL_MS = 2_000L
@@ -25,8 +27,18 @@ object LocationProfiles {
      * 10 s GPS-lost rule would fire. The GPS runs anyway while navigating; the interval bounds the wakeups.
      */
     const val NAV_MIN_DISTANCE_M = 0f
-    const val AMBIENT_INTERVAL_MS = 10_000L
-    const val AMBIENT_MIN_DISTANCE_M = 5f
+    /**
+     * Screen-off policy: `interval = clamp((distanceToNext - LEAD) / speed / 2, MIN, MAX)`, i.e. at least two fixes
+     * before the user is [ADAPTIVE_LEAD_M] from the maneuver (so the 200 m cue is never late), rounded DOWN to one of
+     * [ADAPTIVE_STEPS_MS] so the request is only replaced when the step changes, not on every fix.
+     */
+    const val ADAPTIVE_LEAD_M = 250.0
+    const val ADAPTIVE_MIN_MS = 2_000L
+    const val ADAPTIVE_MAX_MS = 10_000L
+    val ADAPTIVE_STEPS_MS = longArrayOf(2_000L, 3_000L, 4_000L, 6_000L, 8_000L, 10_000L)
+
+    /** Below this speed the user counts as standing still: the longest interval. */
+    const val STILL_MPS = 0.3f
 
     /** 20 km/h; the "fast" band is left below [SLOW_MPS] so it does not flap around the threshold. */
     const val FAST_MPS = 20f / 3.6f
@@ -39,7 +51,8 @@ object LocationProfiles {
         profile: LocationProfile,
         distanceToManeuverM: Double? = null,
         onLongStraight: Boolean = false,
-        fast: Boolean = false
+        fast: Boolean = false,
+        speedMps: Float = Float.NaN
     ): RequestSpec? = when (profile) {
         LocationProfile.IDLE, LocationProfile.ORIGIN -> null
         LocationProfile.NAVIGATING -> RequestSpec(
@@ -51,7 +64,25 @@ object LocationProfiles {
             },
             minDistanceM = NAV_MIN_DISTANCE_M
         )
-        LocationProfile.AMBIENT -> RequestSpec(false, AMBIENT_INTERVAL_MS, AMBIENT_MIN_DISTANCE_M)
+        LocationProfile.AMBIENT -> RequestSpec(
+            highAccuracy = true,
+            intervalMs = adaptiveIntervalMs(distanceToManeuverM, speedMps),
+            minDistanceM = NAV_MIN_DISTANCE_M
+        )
+    }
+
+    /**
+     * The screen-off interval (see [ADAPTIVE_LEAD_M]). 1 s inside 80 m of a maneuver; the normal 2 s when the distance
+     * or the speed is unknown; the longest step when standing still.
+     */
+    fun adaptiveIntervalMs(distanceToManeuverM: Double?, speedMps: Float): Long {
+        if (distanceToManeuverM == null || distanceToManeuverM.isNaN()) return NAV_INTERVAL_MS
+        if (distanceToManeuverM < NAV_NEAR_MANEUVER_M) return NAV_NEAR_MANEUVER_INTERVAL_MS
+        if (speedMps.isNaN()) return NAV_INTERVAL_MS
+        if (speedMps < STILL_MPS) return ADAPTIVE_MAX_MS
+        val raw = (distanceToManeuverM - ADAPTIVE_LEAD_M) / speedMps / 2.0 * 1000.0
+        val clamped = raw.coerceIn(ADAPTIVE_MIN_MS.toDouble(), ADAPTIVE_MAX_MS.toDouble())
+        return ADAPTIVE_STEPS_MS.last { it <= clamped }
     }
 
     /** Speed band with hysteresis: becomes fast above 20 km/h, slow again below 18 km/h; unknown speed keeps it. */

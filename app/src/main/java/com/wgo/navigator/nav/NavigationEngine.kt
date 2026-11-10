@@ -49,7 +49,8 @@ data class NavConfig(
  * - Reroute: requested on off route, at most once per 20 s and 3 times in a row without being back on the route; then
  *   [NavState.LostRoute] asks the user. A failed request keeps guiding on the old route.
  * - Arrival: within 15 m (walk) / 25 m (drive) of the destination, or snapped to the very end of the route.
- * - GPS lost: no usable fix for 10 s after the first one; any usable fix recovers.
+ * - GPS lost: no usable fix for 10 s after the first one, or for two expected fix intervals plus 2 s when the owner
+ *   asked for slower fixes ([expectedFixIntervalMs], screen-off power policy); any usable fix recovers.
  * - ETA: the route's own remaining duration divided by an exponentially smoothed ratio of observed to expected speed,
  *   clamped to 0.5x-2x; stationary fixes do not update the ratio (the estimate holds while waiting at a light).
  * - Turn events: spec section 8, approaching at 200 m and "now" at 50 m, once per maneuver, for real turns only
@@ -123,10 +124,16 @@ class NavigationEngine(
     }
 
     /** Call about once per second: GPS-lost detection and reroute retries need no fix. */
+    /**
+     * The interval the owner's location request currently asks for (0 = the normal 1-3 s). A slow request (up to 10 s
+     * with the screen off) must not look like a lost GPS: see [gpsLostAfterMs].
+     */
+    var expectedFixIntervalMs: Long = 0L
+
     fun tick() {
         if (state == NavState.Arrived || !everUsable) return
         val now = clock.elapsedMs()
-        if (state !is NavState.GpsLost && now - lastUsableMs >= GPS_LOST_MS) {
+        if (state !is NavState.GpsLost && now - lastUsableMs >= gpsLostAfterMs(expectedFixIntervalMs)) {
             state = NavState.GpsLost(lastNavigating)
             onEvent(NavEvent.GpsLost)
             return
@@ -410,6 +417,9 @@ class NavigationEngine(
     companion object {
         const val STALE_MS = 10_000L
         const val GPS_LOST_MS = 10_000L
+
+        /** GPS-lost threshold for a request expected to deliver a fix every [expectedIntervalMs]. */
+        fun gpsLostAfterMs(expectedIntervalMs: Long): Long = maxOf(GPS_LOST_MS, expectedIntervalMs * 2 + 2_000L)
         const val OFF_ROUTE_FIXES = 3
         const val U_TURN_FIXES = 3
         const val REROUTE_MIN_INTERVAL_MS = 20_000L

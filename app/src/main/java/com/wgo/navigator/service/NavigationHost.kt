@@ -15,6 +15,7 @@ import com.wgo.navigator.core.Place
 import com.wgo.navigator.core.Route
 import com.wgo.navigator.haptics.HapticEvent
 import com.wgo.navigator.haptics.HapticPlayer
+import com.wgo.navigator.location.LocationProfiles
 import com.wgo.navigator.location.LocationSources
 import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.nav.NavClock
@@ -106,8 +107,56 @@ class NavigationHost private constructor(context: Context) {
     /** The Activity is started (visible, maybe ambient). */
     private var visible = false
 
+    /** The Activity is in ambient mode (always-on, low power). */
+    private var ambient = false
+
     /** The navigation service is in the foreground. */
     private var serviceRunning = false
+
+    /** Ground speed of the last fix (NaN when unknown), for the screen-off interval. */
+    private var lastSpeedMps = Float.NaN
+
+    /** Speed along the route from the guidance's progress (for fixes that carry no usable speed). */
+    private val progressSpeed = ProgressSpeed()
+
+    /** The fix's ground speed when it has one above standing still, else the speed along the route. */
+    private fun speedMps(): Float = progressSpeed.pick(lastSpeedMps)
+
+    /** The screen-off interval the engine was last told about (0 = normal). */
+    private var expectedIntervalMs = 0L
+
+    /**
+     * Screen on and interactive: the P5-D NAVIGATING profile. Screen off, app in the background, or ambient: AMBIENT,
+     * whose interval follows the distance to the next maneuver and the speed (see LocationProfiles.adaptiveIntervalMs).
+     */
+    private fun tripProfile(): LocationProfile =
+        if (visible && !ambient) LocationProfile.NAVIGATING else LocationProfile.AMBIENT
+
+    private fun applyProfile() {
+        if (session == null) return
+        val p = tripProfile()
+        // Engine first: a slower request must never be seen with the old (10 s) GPS-lost rule.
+        updateExpectedInterval()
+        locationSource.setProfile(p)
+        WgoMetrics.event("nav profile=$p")
+    }
+
+    /** Distance to the next maneuver from the last guidance (null before the first one). */
+    private var lastDistanceToNextM: Double? = null
+
+    /** A slow screen-off request must not read as a lost GPS: widen the engine's rule to match it. */
+    private fun updateExpectedInterval() {
+        val s = session ?: return
+        val expected = if (tripProfile() == LocationProfile.AMBIENT) {
+            // Before the first guidance the distance is unknown: assume the longest step.
+            lastDistanceToNextM?.let { LocationProfiles.adaptiveIntervalMs(it, speedMps()) } ?: LocationProfiles.ADAPTIVE_MAX_MS
+        } else 0L
+        if (expected != expectedIntervalMs) {
+            expectedIntervalMs = expected
+            s.setExpectedFixInterval(expected)
+            WgoMetrics.event("nav interval_ms=$expected")
+        }
+    }
 
     // ---- commands ----
 
@@ -142,7 +191,8 @@ class NavigationHost private constructor(context: Context) {
                     .collect { (remaining, maneuver) -> radar.setRoute(remaining, maneuver) }
             }
         }
-        locationSource.setProfile(LocationProfile.NAVIGATING)
+        lastSpeedMps = origin.speedMps
+        applyProfile()
         // The fresh ORIGIN fix starts the engine at once (an old cached fallback is ignored as stale).
         s.onFix(origin)
         radar.onFix(origin)
@@ -175,7 +225,7 @@ class NavigationHost private constructor(context: Context) {
     /** RETRY on the GPS-lost overlay, or the location permission granted again: reopen the location request. */
     fun retryGps() {
         if (session == null) return
-        locationSource.setProfile(LocationProfile.NAVIGATING)
+        applyProfile()
         fixJob?.cancel()
         fixJob = null
         updateCollection()
@@ -188,8 +238,17 @@ class NavigationHost private constructor(context: Context) {
 
     /** Activity onStart / onStop. */
     fun setVisible(value: Boolean) {
+        if (visible == value) return
         visible = value
+        applyProfile()
         updateCollection()
+    }
+
+    /** The Activity entered or left ambient mode: same trip, slower screen-off location policy. */
+    fun setAmbient(value: Boolean) {
+        if (ambient == value) return
+        ambient = value
+        applyProfile()
     }
 
     // ---- service hooks ----
@@ -224,6 +283,7 @@ class NavigationHost private constructor(context: Context) {
             s!!.resume()
             fixJob = scope.launch {
                 locationSource.fixes.collect { fix ->
+                    if (!fix.speedMps.isNaN()) lastSpeedMps = fix.speedMps
                     val t0 = System.nanoTime()
                     s.onFix(fix)
                     WgoMetrics.engineFix(System.nanoTime() - t0)
@@ -244,8 +304,14 @@ class NavigationHost private constructor(context: Context) {
         val s = session ?: return
         when (state) {
             NavState.Arrived -> end(TripEnd.Arrived)
-            is NavState.Navigating ->
-                locationSource.setNavigationHint(state.distanceToNextM, s.geometry.onLongStraight(state.progressM, LONG_STRAIGHT_M))
+            is NavState.Navigating -> {
+                progressSpeed.onProgress(state.progressM, SystemClock.elapsedRealtime())
+                locationSource.setNavigationHint(
+                    state.distanceToNextM, s.geometry.onLongStraight(state.progressM, LONG_STRAIGHT_M), speedMps()
+                )
+                lastDistanceToNextM = state.distanceToNextM
+                updateExpectedInterval()
+            }
             else -> Unit
         }
     }
@@ -274,6 +340,10 @@ class NavigationHost private constructor(context: Context) {
         fixJob = null
         _radar.value = null
         _active.value = false
+        expectedIntervalMs = 0L
+        lastDistanceToNextM = null
+        lastSpeedMps = Float.NaN
+        progressSpeed.reset()
         locationSource.setProfile(LocationProfile.IDLE)
         locationSource.setNavigationHint(null, false)
         if (had) {

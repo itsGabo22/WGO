@@ -27,7 +27,10 @@ enum class LocationProfile {
     /** High accuracy, adaptive 1-3 s interval, no minimum distance (fixes keep coming while standing still). */
     NAVIGATING,
 
-    /** Ambient / low power while navigating: balanced accuracy, 10 s. */
+    /**
+     * Navigating with the screen off or in ambient: high accuracy, interval adapted to the distance to the next
+     * maneuver and the speed (1 s near a maneuver, 2-10 s otherwise).
+     */
     AMBIENT
 }
 
@@ -48,8 +51,9 @@ interface LocationSource {
     fun setProfile(profile: LocationProfile)
 
     /**
-     * Navigation context for the adaptive NAVIGATING interval: distance to the next maneuver (null when unknown, e.g.
-     * before routing exists) and whether the current segment is a long straight. Default: ignored.
+     * Navigation context for the adaptive NAVIGATING / AMBIENT intervals: distance to the next maneuver (null when
+     * unknown, e.g. before routing exists), whether the current segment is a long straight, and the last ground speed
+     * (NaN when unknown). Default: ignored.
      */
-    fun setNavigationHint(distanceToManeuverM: Double?, onLongStraight: Boolean) {}
+    fun setNavigationHint(distanceToManeuverM: Double?, onLongStraight: Boolean, speedMps: Float = Float.NaN) {}
 }

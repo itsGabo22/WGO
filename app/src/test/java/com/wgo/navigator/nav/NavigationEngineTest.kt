@@ -305,6 +305,26 @@ class NavigationEngineTest {
         assertEquals(1, count<NavEvent.GpsRecovered>())
     }
 
+    @Test fun aSlowScreenOffRequestWidensTheGpsLostRule() {
+        assertEquals(10_000L, NavigationEngine.gpsLostAfterMs(0L))
+        assertEquals(10_000L, NavigationEngine.gpsLostAfterMs(2_000L))
+        assertEquals(14_000L, NavigationEngine.gpsLostAfterMs(6_000L))
+        assertEquals(22_000L, NavigationEngine.gpsLostAfterMs(10_000L))
+        val e = engine(straight)
+        e.expectedFixIntervalMs = 10_000L
+        e.at(0.0, 100.0)
+        // One 10 s gap between fixes (the slow request working as intended) is not a loss...
+        repeat(10) { clock.ms += 1_000; e.tick() }
+        e.at(0.0, 110.0)
+        repeat(21) { clock.ms += 1_000; e.tick() }
+        assertTrue(e.state is NavState.Navigating)
+        assertEquals(0, count<NavEvent.GpsLost>())
+        // ...two missed fixes are.
+        clock.ms += 1_000
+        e.tick()
+        assertTrue(e.state is NavState.GpsLost)
+    }
+
     @Test fun resumingAfterAPauseDoesNotReportALoss() {
         val e = engine(straight)
         e.at(0.0, 100.0)

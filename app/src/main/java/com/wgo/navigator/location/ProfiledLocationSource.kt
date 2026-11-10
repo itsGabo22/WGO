@@ -19,10 +19,10 @@ import kotlinx.coroutines.flow.onEach
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 abstract class ProfiledLocationSource : LocationSource {
-    private data class Hint(val distanceToManeuverM: Double?, val onLongStraight: Boolean)
+    private data class Hint(val distanceToManeuverM: Double?, val onLongStraight: Boolean, val speedMps: Float)
 
     private val profile = MutableStateFlow(LocationProfile.IDLE)
-    private val hint = MutableStateFlow(Hint(null, false))
+    private val hint = MutableStateFlow(Hint(null, false, Float.NaN))
     private val fast = MutableStateFlow(false)
 
     /** Whether location permission is granted right now (checked before each request). */
@@ -35,12 +35,13 @@ abstract class ProfiledLocationSource : LocationSource {
         this.profile.value = profile
     }
 
-    override fun setNavigationHint(distanceToManeuverM: Double?, onLongStraight: Boolean) {
-        hint.value = Hint(distanceToManeuverM, onLongStraight)
+    override fun setNavigationHint(distanceToManeuverM: Double?, onLongStraight: Boolean, speedMps: Float) {
+        hint.value = Hint(distanceToManeuverM, onLongStraight, speedMps)
     }
 
+    // distinctUntilChanged: a new hint (every fix) replaces the request only when the resulting spec changes.
     override val fixes: Flow<Fix> =
-        combine(profile, hint, fast) { p, h, f -> LocationProfiles.requestSpec(p, h.distanceToManeuverM, h.onLongStraight, f) }
+        combine(profile, hint, fast) { p, h, f -> LocationProfiles.requestSpec(p, h.distanceToManeuverM, h.onLongStraight, f, h.speedMps) }
             .distinctUntilChanged()
             .flatMapLatest { spec -> if (spec == null || !permitted()) emptyFlow() else updates(spec) }
             .onEach { fast.value = LocationProfiles.nextFast(fast.value, it.speedMps) }

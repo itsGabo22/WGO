@@ -92,6 +92,11 @@ class NavigationSession(
         start()
     }
 
+    /** The location request's current interval (0 = normal): widens the GPS-lost rule for slow screen-off requests. */
+    fun setExpectedFixInterval(ms: Long) {
+        engine.expectedFixIntervalMs = ms
+    }
+
     /** LOST ROUTE -> retry. */
     fun retryReroute() {
         engine.retryReroute()
