@@ -234,8 +234,9 @@ private fun ModePad(
         }
     }
 
-    val minutesText = "$minutes ${string(StringKey.ETA_MIN_UNIT)}"
-    val spoken = "$description, $minutes ${string(StringKey.MINUTES_WORD)}"
+    // The pads show estimates (no route request on this screen): "~" visually, "about" when spoken.
+    val minutesText = "~$minutes ${string(StringKey.ETA_MIN_UNIT)}"
+    val spoken = "$description, ${string(StringKey.ETA_ABOUT)} $minutes ${string(StringKey.MINUTES_WORD)}"
 
     Box(
         modifier = modifier

@@ -54,7 +54,7 @@ import com.wgo.navigator.ui.components.PermissionDenied
 import com.wgo.navigator.ui.map.GeoCoord
 import com.wgo.navigator.ui.map.PastoCentre
 import com.wgo.navigator.ui.map.RadarProjection
-import com.wgo.navigator.ui.minutesOf
+import com.wgo.navigator.route.ModeEstimate
 import com.wgo.navigator.ui.screens.ScreenConfirmPlace
 import com.wgo.navigator.ui.screens.ScreenError
 import com.wgo.navigator.ui.screens.ScreenWorking
@@ -67,13 +67,10 @@ enum class ScreenState {
     Intro, Listening, Working, ConfirmPlace, ModeSelection, Navigation, Error, Settings, MapPicker
 }
 
-/**
- * Rough per-mode minutes for the mode pads, from the straight-line distance (no extra route request): walking at
- * 1.25 m/s over a 1.3x detour, driving at 6.5 m/s (about 23 km/h in town) over a 1.4x detour plus one minute.
- */
+/** Per-mode minutes for the mode pads from the straight-line distance (no route request; see [ModeEstimate]). */
 private fun etaMinutes(from: GeoCoord?, to: GeoCoord): Pair<Int, Int> {
-    val crow = RadarProjection.distanceMeters(from ?: PastoCentre, to)
-    return minutesOf(crow * 1.3 / 1.25) to minutesOf(crow * 1.4 / 6.5 + 60)
+    val origin = from ?: PastoCentre
+    return ModeEstimate.minutes(origin, to, TravelMode.Walk) to ModeEstimate.minutes(origin, to, TravelMode.Drive)
 }
 
 class MainActivity : ComponentActivity() {
