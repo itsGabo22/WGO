@@ -248,6 +248,7 @@ fun ScreenError(
         PipelineError.PlaceNotFound -> StringKey.ERR_PLACE_NOT_FOUND to StringKey.HINT_OTHER_NAME
         PipelineError.RouteUnavailable -> StringKey.ERR_ROUTE_UNAVAILABLE to StringKey.HINT_ROUTE
         PipelineError.AiUnavailable -> StringKey.ERR_AI_UNAVAILABLE to StringKey.HINT_AI
+        PipelineError.Timeout -> StringKey.ERR_TIMEOUT to StringKey.HINT_TIMEOUT
         PipelineError.MicPermission, PipelineError.LocationPermission -> error("handled above")
     }
     val icon = when (error) {

@@ -50,3 +50,5 @@ private fun ErrorPreview(dark: Boolean, error: PipelineError, language: Language
 @WgoWatchPreviews @Composable private fun ErrorVoiceDaylight() = ErrorPreview(false, PipelineError.VoiceUnavailable)
 @WgoWatchPreviews @Composable private fun ErrorNotUnderstoodNight() = ErrorPreview(true, PipelineError.NotUnderstood)
 @WgoWatchPreviews @Composable private fun ErrorLocationDaylight() = ErrorPreview(false, PipelineError.LocationPermission)
+@WgoWatchPreviews @Composable private fun ErrorTimeoutDaylight() = ErrorPreview(false, PipelineError.Timeout)
+@WgoWatchPreviews @Composable private fun ErrorTimeoutEnNight() = ErrorPreview(true, PipelineError.Timeout, Language.EN)

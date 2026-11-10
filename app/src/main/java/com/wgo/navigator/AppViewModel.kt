@@ -282,7 +282,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 _haptics.tryEmit(HapticEvent.Click) // spec section 8: destination understood
             }
             is Outcome.Err -> fail(
-                if (found.failure == WgoFailure.NotFound) PipelineError.PlaceNotFound else PipelineError.Offline,
+                // A server error keeps the "no internet" message it always had; only a read timeout is "too slow".
+                if (found.failure == WgoFailure.NotFound) PipelineError.PlaceNotFound
+                else PipelineError.forNetwork(found.failure, PipelineError.Offline),
                 Step.Resolve
             )
         }
@@ -339,13 +341,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
             }
             is Outcome.Err -> {
                 locationSource.setProfile(LocationProfile.IDLE)
-                fail(
-                    when (r.failure) {
-                        WgoFailure.Offline, WgoFailure.Timeout -> PipelineError.Offline
-                        else -> PipelineError.RouteUnavailable
-                    },
-                    Step.Route
-                )
+                fail(PipelineError.forNetwork(r.failure, PipelineError.RouteUnavailable), Step.Route)
             }
         }
     }
@@ -363,7 +359,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
             PipelineError.MicPermission, PipelineError.VoiceUnavailable, PipelineError.NotUnderstood,
             PipelineError.PlaceNotFound, PipelineError.AiUnavailable, null -> runStep(Step.Listen)
             PipelineError.LocationPermission, PipelineError.RouteUnavailable -> runStep(Step.Route)
-            PipelineError.Offline -> runStep(failedStep)
+            PipelineError.Offline, PipelineError.Timeout -> runStep(failedStep)
         }
     }
 

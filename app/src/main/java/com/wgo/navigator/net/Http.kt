@@ -20,8 +20,9 @@ class HttpResponse(val code: Int, val body: String)
 
 /**
  * Minimal HTTP over [HttpURLConnection] (no client library). One blocking call on [Dispatchers.IO]; cancelling the
- * caller disconnects the socket. Transport problems become failures: timeouts -> [WgoFailure.Timeout], anything else
- * (no route to host, DNS, reset) -> [WgoFailure.Offline]. Every request is counted (debug metrics) by [kind]; neither
+ * caller disconnects the socket. Transport problems become failures: a READ timeout (connected, but the server is
+ * slow) -> [WgoFailure.Timeout]; a connect timeout or anything else (no route to host, DNS, reset) ->
+ * [WgoFailure.Offline]. Every request is counted (debug metrics) by [kind]; neither
  * URLs, bodies nor headers are ever logged.
  */
 class HttpClient(private val userAgent: String) {
@@ -45,6 +46,7 @@ class HttpClient(private val userAgent: String) {
         val cancelHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { if (it != null) conn.disconnect() }
         var sent = 0L
         var received = 0L
+        var connected = false
         try {
             conn.connectTimeout = connectTimeoutMs
             conn.readTimeout = readTimeoutMs
@@ -54,21 +56,24 @@ class HttpClient(private val userAgent: String) {
             conn.setRequestProperty("User-Agent", userAgent)
             conn.setRequestProperty("Accept", "application/json")
             headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
-            if (body != null) {
-                val bytes = body.toByteArray(Charsets.UTF_8)
+            val bytes = body?.toByteArray(Charsets.UTF_8)
+            if (bytes != null) {
                 sent = bytes.size.toLong()
                 conn.doOutput = true
                 conn.setFixedLengthStreamingMode(bytes.size)
-                conn.outputStream.use { it.write(bytes) }
             }
+            // Connect explicitly, so a timeout while connecting (no usable network) is told apart from a slow answer.
+            conn.connect()
+            connected = true
+            if (bytes != null) conn.outputStream.use { it.write(bytes) }
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.use { it.readBytes() }?.also { received = it.size.toLong() }?.toString(Charsets.UTF_8).orEmpty()
             log(kind, code, started, sent, received, connectTimeoutMs, readTimeoutMs)
             Outcome.Ok(HttpResponse(code, text))
         } catch (e: SocketTimeoutException) {
-            log(kind, -1, started, sent, received, connectTimeoutMs, readTimeoutMs)
-            Outcome.Err(WgoFailure.Timeout)
+            log(kind, if (connected) -1 else -3, started, sent, received, connectTimeoutMs, readTimeoutMs)
+            Outcome.Err(if (connected) WgoFailure.Timeout else WgoFailure.Offline)
         } catch (e: IOException) {
             log(kind, -2, started, sent, received, connectTimeoutMs, readTimeoutMs)
             Outcome.Err(WgoFailure.Offline)
