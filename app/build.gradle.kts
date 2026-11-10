@@ -36,15 +36,33 @@ android {
         buildConfigField("String", "LLM_BASE_URL", localStringField("LLM_BASE_URL"))
         buildConfigField("String", "LLM_MODEL", localStringField("LLM_MODEL"))
         buildConfigField("String", "WGO_CONTACT", localStringField("WGO_CONTACT"))
+        // Measurement hooks (utterance and intro-replay activity extras). Off in release; R8 drops the guarded code.
+        buildConfigField("boolean", "TEST_HOOKS", "false")
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "TEST_HOOKS", "true")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // Release-like build for performance runs: not debuggable, R8 + resource shrinking, signed with the debug key
+        // so it installs next to the debug build (own application id). No debug source set: no debug receivers, no
+        // WgoMetrics (BuildConfig.DEBUG is false). Only the TEST_HOOKS activity extras stay, to drive the pipeline.
+        create("benchmark") {
+            initWith(getByName("release"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            applicationIdSuffix = ".bench"
+            buildConfigField("boolean", "TEST_HOOKS", "true")
         }
     }
     compileOptions {
