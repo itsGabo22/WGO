@@ -7,9 +7,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 /**
- * Debug builds only: utterances injected from adb (the debug-source-set receiver for
- * `<applicationId>.debug.UTTERANCE`), so the whole pipeline can be tested with no microphone. In release builds
- * [inject] is a no-op and nothing is ever emitted.
+ * Test builds only ([BuildConfig.TEST_HOOKS]: debug and benchmark): utterances injected from adb, through the
+ * debug-source-set receiver for `<applicationId>.debug.UTTERANCE` or the `wgo_utterance_b64` activity extra (the only
+ * way into the benchmark build, which has no receivers), so the whole pipeline can be driven with no microphone. In
+ * release builds [inject] is a no-op and nothing is ever emitted.
  */
 object DebugUtterances {
     data class Utterance(val text: String, val language: Language?)
@@ -18,7 +19,7 @@ object DebugUtterances {
     val utterances: SharedFlow<Utterance> = _utterances.asSharedFlow()
 
     fun inject(text: String, lang: String?) {
-        if (!BuildConfig.DEBUG) return
+        if (!BuildConfig.TEST_HOOKS) return
         val clean = text.trim().take(MAX_CHARS)
         if (clean.isEmpty()) return
         val language = when (lang?.lowercase()?.take(2)) {

@@ -48,6 +48,8 @@ import com.wgo.navigator.core.permissions.WgoPermission
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ActivityNotFoundException
 import android.os.SystemClock
+import android.util.Base64
+import com.wgo.navigator.voice.DebugUtterances
 import com.wgo.navigator.ui.components.PermissionDenied
 import com.wgo.navigator.ui.map.GeoCoord
 import com.wgo.navigator.ui.map.PastoCentre
@@ -111,11 +113,19 @@ class MainActivity : ComponentActivity() {
         appViewModel.onAppStopped()
     }
 
-    /** Debug only: `am start -f 0x20000000 --ez wgo_replay_intro true` replays the intro for measurements. */
+    /**
+     * Test builds only (debug and benchmark): `am start -f 0x20000000 --ez wgo_replay_intro true` replays the intro, and
+     * `--es wgo_utterance_b64 <UTF-8 Base64>` injects an utterance (the benchmark build has no adb receiver).
+     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (!BuildConfig.DEBUG) return
+        if (!BuildConfig.TEST_HOOKS) return
         if (intent.getBooleanExtra(EXTRA_REPLAY_INTRO, false)) appViewModel.replayIntroForDebug()
+        intent.getStringExtra(EXTRA_UTTERANCE_B64)?.let { encoded ->
+            runCatching { String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8) }.getOrNull()
+                ?.let { DebugUtterances.inject(it, intent.getStringExtra(EXTRA_UTTERANCE_LANG)) }
+        }
+        if (!BuildConfig.DEBUG) return
         intent.getStringExtra(EXTRA_LOCATION_PROFILE)
             ?.let { name -> LocationProfile.entries.firstOrNull { it.name == name } }
             ?.let(appViewModel::debugSetLocationProfile)
@@ -123,6 +133,8 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val EXTRA_REPLAY_INTRO = "wgo_replay_intro"
+        const val EXTRA_UTTERANCE_B64 = "wgo_utterance_b64"
+        const val EXTRA_UTTERANCE_LANG = "wgo_lang"
         /** Debug only: `--es wgo_location_profile AMBIENT` forces a location profile for measurements. */
         const val EXTRA_LOCATION_PROFILE = "wgo_location_profile"
     }

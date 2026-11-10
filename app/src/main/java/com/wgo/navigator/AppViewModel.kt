@@ -84,9 +84,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         if (_screen.value == ScreenState.Intro) _screen.value = ScreenState.Listening
     }
 
-    /** Debug builds only: replays the intro in a warm process so it can be measured without cold-start noise. */
+    /** Test builds only: replays the intro in a warm process so it can be measured without cold-start noise. */
     fun replayIntroForDebug() {
-        if (!BuildConfig.DEBUG) return
+        if (!BuildConfig.TEST_HOOKS) return
         introLockupFired = false
         _introSkipped.value = false
         _screen.value = ScreenState.Intro
@@ -451,8 +451,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     private var navigatingStarted = false
 
     init {
-        // Debug builds only: utterances injected through adb enter the pipeline exactly like a final transcript.
-        if (BuildConfig.DEBUG) viewModelScope.launch {
+        // Test builds only: utterances injected through adb enter the pipeline exactly like a final transcript.
+        if (BuildConfig.TEST_HOOKS) viewModelScope.launch {
             DebugUtterances.utterances.collect { u ->
                 if (_screen.value !in INJECTABLE_SCREENS) return@collect
                 cancelListening()
