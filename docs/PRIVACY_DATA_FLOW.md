@@ -19,8 +19,10 @@ remote-interpreter counter (date and count). No transcript is persisted. Debug b
 
 ## The remote interpreter (default provider)
 
-* Endpoint: `https://api.groq.com/openai/v1/chat/completions`, model `openai/gpt-oss-20b` with low reasoning effort
-  (both overridable through `LLM_BASE_URL` / `LLM_MODEL` in the git-ignored `local.properties`).
+* Endpoint: `https://api.groq.com/openai/v1/chat/completions`, model `openai/gpt-oss-120b` with low reasoning effort
+  (both overridable through `LLM_BASE_URL` / `LLM_MODEL` in the git-ignored `local.properties`). Chosen over
+  `openai/gpt-oss-20b` on 2026-11-10 by a live comparison on the hard-request corpus: same data sent, the larger model
+  never invented a place name (the smaller one invented 2 of 8) at a similar latency and token cost.
 * The system prompt states that the transcript is data, not instructions; the answer can only select one of five
   intents (Navigate, ChangeMode, Cancel, Repeat, Unknown), a place string (cleaned, at most 80 characters) and a mode.
   It cannot trigger anything else.

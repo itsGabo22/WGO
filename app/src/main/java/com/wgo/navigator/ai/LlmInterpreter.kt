@@ -63,8 +63,13 @@ class LlmInterpreter(
         /** Defaults, overridable through local.properties (LLM_BASE_URL, LLM_MODEL). */
         const val DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
 
-        /** Smallest fast text model on the default provider (2026-11), run with low reasoning effort. */
-        const val DEFAULT_MODEL = "openai/gpt-oss-20b"
+        /**
+         * Default model, run with low reasoning effort. Chosen by a live comparison (2026-11-10, 8 hard phrases, one call
+         * each): gpt-oss-120b median 1.6 s, 44-139 completion tokens, no invented place names; gpt-oss-20b median 2.3 s,
+         * 45-147 tokens, invented 2 of 8 names. Medium effort added tokens and latency without fixing any answer.
+         * `LLM_MODEL` in local.properties overrides it.
+         */
+        const val DEFAULT_MODEL = "openai/gpt-oss-120b"
 
         const val CONNECT_TIMEOUT_MS = 4_000
         const val READ_TIMEOUT_MS = 6_000
