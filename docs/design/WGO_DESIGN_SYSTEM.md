@@ -108,7 +108,7 @@ Elevation is made of crisp rings, never blur: `edge-control` for secondary contr
 | safe circle | 82% (~186 dp) | text and controls |
 | meridian | vertical center | header on top, focus in the middle, action at the bottom |
 
-Pill fit rule (pill width `w`, height `h`, center offset `y` from the dial center, R = 113.5): `sqrt((w/2 - h/2)^2 + y^2) + h/2 <= 104`. For the Galaxy Watch5 Pro (about 225 dp) the usable radius is R - 9.5, so the limit is 103. Verified placements (value = `top` in dp): badge 80x18 @16 (VOICE ON badge with equalizer, about 96x18, @19); CANCEL chip 104x32 @176; FINALIZAR 120x48 @160; RETRY 120x40 @166; HUD card 140x66 @22 (24 dp corners); bottom nav row (mute 34 + gap 8 + END 86x34) @172.
+Pill fit rule (pill width `w`, height `h`, center offset `y` from the dial center, R = 113.5): `sqrt((w/2 - h/2)^2 + y^2) + h/2 <= 104`. For the Galaxy Watch5 Pro (about 225 dp) the usable radius is R - 9.5, so the limit is 103. Verified placements (value = `top` in dp): badge 80x18 @16 (VOICE ON badge with equalizer, about 96x18, @19); CANCEL chip 104x32 @176; FINALIZAR 120x48 @158 (@160 fits 104 but measures 103.2 against the Watch5 Pro's 103); RETRY 120x40 @166; HUD card 140x66 @22 (24 dp corners); bottom nav row (mute 34 + gap 8 + END 86x34) @172.
 
 ### 4.1 Responsive scale (all round watches)
 
@@ -125,7 +125,7 @@ Every geometry value in this document is written in **reference dp** on the 227 
 | Wear OS Large Round (reference) | 227 | 1.000 | previews and unit tests |
 | Large round sanity case | 240 | 1.057 | previews and unit tests |
 
-Runtime verification on devices is pending (no emulator was connected when this was written).
+Runtime verification (P5, 2026-11): the Small Round emulator (192 dp, s = 0.846) runs every screen; uiautomator bounds and the fit unit tests (`PipelineSurfacesFitTest`, `NavigationSurfacesFitTest`) check the placements. The real Galaxy Watch5 Pro is still pending.
 
 ## 5. Motion
 
@@ -152,7 +152,7 @@ Performance and accessibility: animate in the draw phase only (`graphicsLayer {}
 
 **BezelGauge** - Canvas ring, stroke 4 dp, inset 3 dp, track `surfaceRaised`, fill round cap starting at 12 o'clock clockwise. `progress` is a lambda read inside the draw scope. Uses: distance-to-turn (depletes), listening (two orbiting comets: 30% `primaryInk` and 12% `auraDeep`), arrival (fills to 100% in `go`), GPS search (22% `alert` arc rotating).
 
-**StatusBadge** - 18 dp high pill, `label-sm`, 8 dp horizontal padding. Variants: neutral (surface/ink), soft (surface/primaryInk), primary, go, alert. `VOICE ON` adds a 3-bar equalizer (2 dp bars, 10 dp max, 500-900 ms reverse).
+**StatusBadge** - 18 dp high pill, `label-sm`, 8 dp horizontal padding. Variants: neutral (surface/ink), soft (surface/primaryInk), primary, go, alert, on-alert (onAlert/alert, for badges on an `alert` background such as "EN PAUSA"). `VOICE ON` adds a 3-bar equalizer (2 dp bars, 10 dp max, 500-900 ms reverse).
 
 **TurnCard** - 140x66 dp, radius 24 dp, `surface` solid, `edge-control`. Row: maneuver icon 26 dp (`primaryInk`, stroke 2.6) + distance in `numeral-lg` with odometer roll (digits slide 30 dp in 240 ms); below, instruction 12/14 sp weight 500, max width 124 dp, 2 lines. Imminent state (<= 50 m): background `primary`, text `onPrimary`, pulse scale 1 -> 1.04 at 700 ms.
 
@@ -174,13 +174,34 @@ Performance and accessibility: animate in the draw phase only (`graphicsLayer {}
 
 **ScreenNavigation** - layers: RadarMinimap (full bleed) -> BezelGauge r 109, `primaryInk`, depleting toward the next maneuver -> `N` marker (left 12, top 104) -> TurnCard 140x66 @22 -> zoom buttons 34 dp (`+` top 98, `-` top 138, 13 dp from the right, touch area extended to 48 dp) -> bottom row @172: mute 34 dp circle at x 49.5 and END pill 86x34 (`alert`, close icon 16 dp, 12 sp bold) at x 91.5. In driving mode the END action must have a 60 dp (`hit-drive`) touch height.
 
-**ScreenArrival** - bezel ring closes in `go`; disc 60 dp `go` with a 34 dp check (stroke 3) at top 36 (overshoot 1.12 then 1); two 80 dp ring bursts (3 dp border, `go` and `aura`, scale 0.8 -> 2.3, fade); `headline-lg` "¡Llegamos!" @104; `body-md` `inkMuted` "Centro Histórico · 8 min" @134; FINALIZAR pill 120x48 (`inverted`, 14 sp) @160 which resets the state machine to Listening. Real timeline ~2.5 s: ring 0-0.9, disc 0.5-0.9, check 0.8-1.2, bursts 0.9-1.6, text 1.2-1.6, button 1.4-1.8 s, then hold. Double-click haptic.
+**ScreenArrival** - bezel ring closes in `go`; disc 60 dp `go` with a 34 dp check (stroke 3) at top 36 (overshoot 1.12 then 1); two 80 dp ring bursts (3 dp border, `go` and `aura`, scale 0.8 -> 2.3, fade); `headline-lg` "¡Llegamos!" @104; `body-md` `inkMuted` "Centro Histórico · 8 min" @134; FINALIZAR pill 120x48 (`inverted`, 14 sp) @158 (fit 101.4; @160 is 103.2, over the Watch5 Pro limit) which resets the state machine to Listening. Real timeline ~2.5 s: ring 0-0.9, disc 0.5-0.9, check 0.8-1.2, bursts 0.9-1.6, text 1.2-1.6, button 1.4-1.8 s, then hold. Double-click haptic.
 
 **ScreenGpsLost (overlay)** - full-screen `alert` background, text `onAlert`. Ring r 108 (track 28% `onAlert`, fill 100%) breathing at 1.6 s alternate. Badge "EN PAUSA" (`onAlert` bg, `alert` text) @18. Satellite-off icon 38 dp in a 40 dp box at (93.5, 64); three 48 dp search rings centered at (113.5, 84), border 3 dp `onAlert`, scale 0.6 -> 2.4, alpha 0.9 -> 0, 2400 ms, staggered 800 ms. `headline-md` "SIN SEÑAL GPS" @112 (width 170); `body-md` "Buscando satélites" + 3 fading dots @138; RETRY pill 120x40 (`onAlert` background, `alert` text, 13 sp) @166. Pause telemetry ticks while visible.
 
 **ScreenSettings (no scroll, no close button; leave with edge-swipe-to-dismiss)** - `label-md` "AJUSTES" @18; SegmentedToggle Claro/Oscuro 156x40 @40; SegmentedToggle Español/English 156x40 @97 (labels uppercase 12 sp; they fit in 75 dp halves); MapRow 132x44 @152. The three controls sit on a 57 dp centre-to-centre pitch so their 48 REAL dp hit boxes (56.7 dp at s = 0.846) never overlap; below s = 0.846 the hit boxes are capped at the 57 dp pitch. Fit values: title 99.8, theme toggle 98.9, language toggle 78.1, MapRow 96.8 (all <= 103). The previous layout (@24/@52/@104/@156) overlapped the toggle hit boxes by 4.7 dp and the language toggle with the MapRow by 2.7 dp at s = 0.846. Theme and language apply live and persist; MapRow opens ScreenMapPicker.
 
 **ScreenMapPicker** - the MapPicker component full screen (see section 6). Background `canvas`. Anything not listed there is not on this screen.
+
+### 7.1 Live pipeline and navigation surfaces (P5)
+
+Fit values are against the Galaxy Watch5 Pro limit of 103 (section 4) and are checked by `PipelineSurfacesFitTest` and `NavigationSurfacesFitTest`. Every action has a 48 REAL dp hit area (`wgoMinTouch`); titles are polite live regions; reduce motion makes every loop static.
+
+- **Intro (cold start)** - WHERE / WE / GO? -> WGO lockup in `display-xl`, tagline "¿A dónde vamos?"; one Click haptic at the lockup; tap or Back skips it.
+- **Permission denied (microphone / location)** - title, why, RETRY, and SETTINGS after "don't ask again".
+- **Working** (interpreting / resolving / routing) - badge 80x18 @16 (102.8); stage `label-md` 130x14 @38 (96.8); detail `body-md` 150x18 @54 (92.1); processing orb 64 @92; CANCEL 104x32 @176 (102.4); bezel shows the stage statically (1/3, 2/3, 9/10).
+- **Confirm place** - soft badge "DESTINO" @22 (100.3); name `headline-sm` 150x40 @44 (94.0); "a 1,8 km · street" @86 (82.4); IR MassiveButton 120 centred at 134; "© OPENSTREETMAP" `label-sm` @164; OTRO 1/3 104x32 @176 (102.4) only with several results.
+- **Error** - icon disc 40 @30, title `headline-sm` 150x40 @80, hint `body-md` 160x36 @124, RETRY 120x32 centred at 186 (100.8). Messages: not understood, voice unavailable, no internet, taking too long (a read timeout: "Tardó demasiado", retry repeats the failed step), place not found, route unavailable, AI unavailable.
+- **Mode selection** - the pad ETA pills are estimates from the straight-line distance (walk 1.15x at 1.25 m/s, drive 1.43x at 9.5 m/s): shown as "~12 min", spoken "unos 12 minutos".
+- **GPS SEARCHING** (no usable fix yet) - same grid as Working: bezel GPS-search arc (ambience rate), badge @16, "BUSCANDO GPS…" `label-md` `primaryInk` @38, "Busca cielo abierto" `body-md` @54, location disc 64 @92, CANCEL @176 (ends the trip).
+- **GPS LOST** - the ScreenGpsLost overlay of section 7 over the navigation screen, with one constraint found by the fit rule: the "EN PAUSA" badge must stay at most 80 dp wide (@18: 100.9; a 96 dp badge would be 103.9). RETRY reopens the location request. The engine keeps running underneath and the overlay goes away by itself when fixes return.
+- **OFF ROUTE / REROUTING** - not a screen: the HUD instruction line becomes "FUERA DE RUTA" / "RECALCULANDO…" (`label-md` `primaryInk`, live region).
+- **LOST ROUTE** (3 reroutes in a row failed) - alert badge "SIN RUTA" @22 (100.3); title 150x40 @44 (94.0); hint @86 (82.4); REINTENTAR MassiveButton 150 centred at 134 (79.1); TERMINAR chip @176 (102.4).
+- **END NAVIGATION?** (Back or CANCEL while navigating) - "¿Terminar la navegación?" 150x40 @44; destination @86; TERMINAR MassiveButton `alert` with close icon, 150 centred at 134 (79.1; 120 dp clipped the label); SEGUIR chip @176. Back on this surface = SEGUIR.
+- **ARRIVED (minimal, P5)** - section 7's ScreenArrival without its timeline (the celebration is P6): bezel closed in `go`, disc 60 `go` with check @36, "¡Llegamos!" @104, destination @134, FINALIZAR 120x48 inverted **@158** (101.4; the @160 above measures 103.2, over the Watch5 Pro limit).
+
+Under GPS LOST, LOST ROUTE and END NAVIGATION? the radar stays composed (no map rebuild on SEGUIR) with its loops stopped.
+
+**State machine** - Intro -> Listening -> Working (interpreting -> resolving) -> ConfirmPlace -> (ModeSelection) -> Working (routing) -> Navigation -> Arrived -> Listening; Error from any pipeline step (retry repeats it); Settings <-> MapPicker from Listening. Inside Navigation the engine state picks the surface: WaitingForGps (GPS SEARCHING), Navigating, OffRoute and Rerouting (HUD status), LostRoute, GpsLost, plus the END NAVIGATION? overlay. Back: Intro skips; pipeline goes one step back; Navigation asks END NAVIGATION? (Back again keeps); Arrived goes home. Ending or arriving stops the location request and clears the saved destination; a relaunch never resumes a trip by itself.
 
 ## 8. Haptics and voice (each visual event has a pair)
 
@@ -198,6 +219,8 @@ Performance and accessibility: animate in the draw phase only (`graphicsLayer {}
 | language switch | `EFFECT_CLICK` | next utterance already in the new language |
 
 Fire haptics from the navigation ViewModel on state change, never from composables. All user-facing strings go through `Strings.kt` (ES default, EN).
+
+Implementation notes (P5): the turn rows fire once per maneuver and only for real turns (not for "continue", the departure or the arrival), with the same 200 m / 50 m in both modes (this table does not distinguish walking). Events with no row here are silent on purpose: off route, rerouted, GPS recovered, lost route. Voice (TTS) is P6. The same mapping is machine-readable in `tokens.json` (`haptic`).
 
 ## 9. Compose mapping (current stack: Kotlin 2.1.20, Compose BOM 2024.02.01, `androidx.wear.compose:compose-material:1.3.0` (Material 2), minSdk 30; do not change the stack inside the design steps)
 
