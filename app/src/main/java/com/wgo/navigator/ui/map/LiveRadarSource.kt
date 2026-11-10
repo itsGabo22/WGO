@@ -3,7 +3,6 @@ package com.wgo.navigator.ui.map
 import android.os.SystemClock
 import com.wgo.navigator.TravelMode
 import com.wgo.navigator.core.Fix
-import com.wgo.navigator.core.LocationSource
 import com.wgo.navigator.location.FixFilter
 import com.wgo.navigator.location.FixQuality
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,16 +14,15 @@ import kotlinx.coroutines.flow.update
 val PastoCentre = GeoCoord(1.2136, -77.2811)
 
 /**
- * Radar data from the real [LocationSource]: the user's position, heading and accuracy, plus the trip's [route]
- * polyline and the first [maneuver] point when a route exists (drawn whole; progress along it is not tracked yet).
- * No simulated blips. Good fixes move the user; inaccurate ones only flag [RadarState.searching]; stale ones
- * (older than 10 s) are ignored. The heading comes from GPS while moving at >= 1.5 m/s (bearing of the fix, or the
- * direction from the previous good fix) and is otherwise kept, so the map does not spin while standing still.
+ * Radar data from real fixes: the user's position, heading and accuracy, plus the trip's [route] polyline and the
+ * next [maneuver] point. No simulated blips. Good fixes move the user; inaccurate ones only flag
+ * [RadarState.searching]; stale ones (older than 10 s) are ignored. The heading comes from GPS while moving at
+ * >= 1.5 m/s (bearing of the fix, or the direction from the previous good fix) and is otherwise kept, so the map does
+ * not spin while standing still.
  *
- * [track] collects the source; call it from `repeatOnLifecycle(STARTED)` so updates stop with the app/screen.
+ * The owner feeds it with [onFix] from the one location request of the trip (the radar never opens its own).
  */
 class LiveRadarSource(
-    private val source: LocationSource,
     private val mode: TravelMode?,
     initial: GeoCoord?,
     private val route: List<GeoCoord> = emptyList(),
@@ -41,14 +39,7 @@ class LiveRadarSource(
 
     private var lastGood: Fix? = null
 
-    suspend fun track() {
-        source.fixes.collect { onFix(it) }
-    }
-
-    /** A one-shot fix (the ORIGIN) to start from; it goes through the same filters. */
-    fun seed(fix: Fix) = onFix(fix)
-
-    internal fun onFix(fix: Fix) {
+    fun onFix(fix: Fix) {
         when (FixFilter.classify(fix, mode, nowNanos())) {
             FixQuality.Stale -> Unit
             FixQuality.Inaccurate -> _state.update { it.copy(searching = true, accuracyM = fix.accuracyM) }

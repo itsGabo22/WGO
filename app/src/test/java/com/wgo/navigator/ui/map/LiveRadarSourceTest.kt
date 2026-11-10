@@ -1,7 +1,6 @@
 package com.wgo.navigator.ui.map
 
 import com.wgo.navigator.TravelMode
-import com.wgo.navigator.core.FakeLocationSource
 import com.wgo.navigator.core.fix
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,7 +9,7 @@ import org.junit.Test
 
 class LiveRadarSourceTest {
     private val now = 50_000_000_000L
-    private fun radar(mode: TravelMode? = TravelMode.Walk) = LiveRadarSource(FakeLocationSource(), mode, null) { now }
+    private fun radar(mode: TravelMode? = TravelMode.Walk) = LiveRadarSource(mode, null) { now }
 
     @Test fun startsSearchingAtPastoWithNoBlipsOrRoute() {
         val s = radar().state.value
@@ -56,7 +55,7 @@ class LiveRadarSourceTest {
 
     @Test fun routeAndManeuverAreKeptAcrossFixes() {
         val route = listOf(GeoCoord(1.2120, -77.2830), GeoCoord(1.2120, -77.2808), GeoCoord(1.2142, -77.2808))
-        val r = LiveRadarSource(FakeLocationSource(), TravelMode.Walk, null, route, route[1]) { now }
+        val r = LiveRadarSource(TravelMode.Walk, null, route, route[1]) { now }
         val start = r.state.value
         assertEquals(route, start.route)
         assertEquals(route[0], start.location)

@@ -1,6 +1,12 @@
 package com.wgo.navigator
 
 import android.app.Application
+import android.os.SystemClock
+import com.wgo.navigator.nav.NavClock
+import com.wgo.navigator.nav.NavEvent
+import com.wgo.navigator.nav.NavState
+import com.wgo.navigator.nav.NavigationSession
+import com.wgo.navigator.ui.map.LiveRadarSource
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wgo.navigator.core.Fix
@@ -329,15 +335,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         when (val r = router.route(GeoCoord(fix.lat, fix.lon), place.coord, mode)) {
             is Outcome.Ok -> {
                 _route.value = r.value
-                _origin.value = fix
                 WgoMetrics.event(
                     "pipeline routed mode=$mode m=${r.value.distanceM.toInt()} s=${r.value.durationS.toInt()} " +
                         "steps=${r.value.steps.size} points=${r.value.polyline.size} snapshot=${WgoMetrics.snapshot()}"
                 )
                 tripStore.saveTrip(place.name, place.coord.lat, place.coord.lon, mode)
-                _screen.value = ScreenState.Navigation
-                locationSource.setProfile(LocationProfile.NAVIGATING)
-                navigatingStarted = true
+                startNavigation(r.value, place, fix)
             }
             is Outcome.Err -> {
                 locationSource.setProfile(LocationProfile.IDLE)
@@ -412,6 +415,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      */
     fun onAppStopped() {
         if (sessionActive && _micState.value != MicState.Waiting) cancelListening()
+        // No location in the background or with the screen off (until the P6 foreground service): the request goes
+        // away with the collection, and the engine pauses so the gap is not reported as a GPS loss.
+        appStarted = false
+        fixJob?.cancel()
+        fixJob = null
+        session?.pause()
     }
 
     fun selectMode(mode: TravelMode) {
@@ -420,12 +429,149 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         runStep(Step.Route)
     }
 
-    /** Back/cancel from navigation, settings or the picker's parent: ends the trip (nothing auto-resumes later). */
+    /** Back from settings (and any other screen with nothing to confirm): ends a trip if one runs, then home. */
     fun backToListening() {
-        stopLocation()
-        _route.value = null
-        viewModelScope.launch { tripStore.clearTrip() }
+        stopNavigation()
         goHome()
+    }
+
+    // ---- Live navigation: one NavigationSession per trip, fed by the one location request of the trip ----
+
+    private var session: NavigationSession? = null
+    private var sessionJob: Job? = null
+    private var fixJob: Job? = null
+
+    /** True between the Activity's onStart and onStop: fixes are only requested while the app is visible. */
+    private var appStarted = false
+
+    private val _navState = MutableStateFlow<NavState>(NavState.WaitingForGps)
+    val navState: StateFlow<NavState> = _navState.asStateFlow()
+
+    /** True while the END NAVIGATION? confirm covers the navigation screen. */
+    private val _endConfirm = MutableStateFlow(false)
+    val endConfirm: StateFlow<Boolean> = _endConfirm.asStateFlow()
+
+    /** The radar's data for the current trip (null when there is no trip). */
+    private val _radar = MutableStateFlow<LiveRadarSource?>(null)
+    val radar: StateFlow<LiveRadarSource?> = _radar.asStateFlow()
+
+    /** Name of the trip's destination (kept for the arrival surface after the trip ended). */
+    private val _destinationName = MutableStateFlow("")
+    val destinationName: StateFlow<String> = _destinationName.asStateFlow()
+
+    private fun startNavigation(route: Route, place: Place, origin: Fix) {
+        stopNavigation(clearTrip = false)
+        val s = NavigationSession(route, place.coord, router, viewModelScope, NavClock { SystemClock.elapsedRealtime() })
+        session = s
+        _destinationName.value = place.name
+        _endConfirm.value = false
+        _navState.value = NavState.WaitingForGps
+        val radar = LiveRadarSource(route.mode, GeoCoord(origin.lat, origin.lon), route.polyline, route.steps.getOrNull(1)?.location)
+        _radar.value = radar
+        sessionJob = viewModelScope.launch {
+            launch { s.state.collect(::onNavState) }
+            launch { s.events.collect(::onNavEvent) }
+        }
+        _screen.value = ScreenState.Navigation
+        locationSource.setProfile(LocationProfile.NAVIGATING)
+        // The fresh ORIGIN fix starts the engine at once (an old cached fallback is ignored as stale).
+        s.onFix(origin)
+        radar.onFix(origin)
+        if (appStarted) {
+            s.start()
+            startFixes()
+        }
+        WgoMetrics.event("nav start mode=${route.mode} points=${route.polyline.size} steps=${route.steps.size}")
+    }
+
+    /** The trip's only continuous location request, while the app is visible. Feeds the engine and the radar. */
+    private fun startFixes() {
+        val s = session ?: return
+        fixJob?.cancel()
+        fixJob = viewModelScope.launch {
+            locationSource.fixes.collect { fix ->
+                s.onFix(fix)
+                _radar.value?.onFix(fix)
+            }
+        }
+    }
+
+    private fun onNavState(state: NavState) {
+        _navState.value = state
+        val s = session ?: return
+        when (state) {
+            NavState.Arrived -> arrive()
+            is NavState.Navigating ->
+                locationSource.setNavigationHint(state.distanceToNextM, s.geometry.onLongStraight(state.progressM, LONG_STRAIGHT_M))
+            else -> Unit
+        }
+    }
+
+    private fun onNavEvent(event: NavEvent) {
+        WgoMetrics.event("nav event=${event.javaClass.simpleName}")
+    }
+
+    private fun arrive() {
+        stopNavigation()
+        _endConfirm.value = false
+        _screen.value = ScreenState.Arrived
+    }
+
+    /** Ends the trip: engine, ticks and the location request stop now, and the saved destination is cleared. */
+    private fun stopNavigation(clearTrip: Boolean = true) {
+        val had = session != null
+        session?.stop()
+        session = null
+        sessionJob?.cancel()
+        fixJob?.cancel()
+        sessionJob = null
+        fixJob = null
+        _radar.value = null
+        _route.value = null
+        stopLocation()
+        if (clearTrip && had) viewModelScope.launch { tripStore.clearTrip() }
+        if (had) WgoMetrics.event("nav stop snapshot=${WgoMetrics.snapshot()}")
+    }
+
+    /** Back or CANCEL while navigating: ask first (END NAVIGATION?). */
+    fun requestEndNavigation() {
+        if (_screen.value == ScreenState.Navigation) _endConfirm.value = true
+    }
+
+    /** KEEP (or Back on the confirm). */
+    fun keepNavigating() {
+        _endConfirm.value = false
+    }
+
+    /** END on the confirm, END on the lost-route surface, or CANCEL while still searching for GPS. */
+    fun endNavigation() {
+        _endConfirm.value = false
+        stopNavigation()
+        goHome()
+    }
+
+    /** FINALIZAR on the arrival surface (or Back there). */
+    fun finishArrival() {
+        _destinationName.value = ""
+        goHome()
+    }
+
+    /** RETRY on the lost-route surface: a fresh series of reroutes. */
+    fun retryReroute() {
+        session?.retryReroute()
+    }
+
+    /** RETRY on the GPS-lost overlay: reopen the location request. */
+    fun retryGps() {
+        if (session != null && appStarted) startFixes()
+    }
+
+    /** Activity onStart: fixes resume (and the GPS-lost timer restarts from now). */
+    fun onAppStarted() {
+        appStarted = true
+        val s = session ?: return
+        s.resume()
+        startFixes()
     }
 
     // ---- Location (lazy permission, ORIGIN one-shot, then NAVIGATING; IDLE everywhere else) ----
@@ -437,14 +583,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         .map { it.getValue(WgoPermission.LOCATION) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, permissions.status.value.getValue(WgoPermission.LOCATION))
 
-    /** The one-shot ORIGIN fix of the current trip (null until it arrives). */
-    private val _origin = MutableStateFlow<Fix?>(null)
-    val origin: StateFlow<Fix?> = _origin.asStateFlow()
-
     private var locationJob: Job? = null
-
-    /** True once the current trip reached NAVIGATING (cleared when leaving navigation). */
-    private var navigatingStarted = false
 
     init {
         // Test builds only: utterances injected through adb enter the pipeline exactly like a final transcript.
@@ -457,42 +596,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 onTranscript(u.text, u.language)
             }
         }
-        // A permission granted outside the dialog (system settings after "don't ask again") arrives through the
-        // broker's refresh on start: restart the trip's location if navigation is showing and never got going.
+        // A permission granted again outside the dialog (system settings) arrives through the broker's refresh on
+        // start: reopen the trip's location request if a trip is running without one.
         viewModelScope.launch {
             locationPermission.collect { status ->
-                val idleTrip = !navigatingStarted && locationJob?.isActive != true
-                if (status == PermissionStatus.Granted && _screen.value == ScreenState.Navigation && idleTrip) startLocation()
+                if (status == PermissionStatus.Granted && session != null && appStarted && fixJob?.isActive != true) {
+                    locationSource.setProfile(LocationProfile.NAVIGATING)
+                    startFixes()
+                }
             }
         }
     }
 
-    /**
-     * The user committed to a trip: ask for location the first time (system dialog, never during the intro), take one
-     * ORIGIN fix, then keep NAVIGATING updates while the navigation screen collects them.
-     */
-    private fun startLocation() {
+    /** Retry chip of the location-denied surface (permission revoked mid-trip): ask again, then resume the trip. */
+    fun retryLocation() {
         locationJob?.cancel()
         locationJob = viewModelScope.launch {
             if (permissions.ensure(WgoPermission.LOCATION) != PermissionStatus.Granted) return@launch
-            locationSource.setProfile(LocationProfile.ORIGIN)
-            val origin = locationSource.once(ORIGIN_TIMEOUT_MS)
-            if (origin is Outcome.Ok) _origin.value = origin.value
-            if (_screen.value == ScreenState.Navigation) {
+            if (session != null && appStarted) {
                 locationSource.setProfile(LocationProfile.NAVIGATING)
-                navigatingStarted = true
+                startFixes()
             }
         }
     }
 
-    /** Retry chip of the denied surface. */
-    fun retryLocation() = startLocation()
-
     private fun stopLocation() {
         locationJob?.cancel()
-        navigatingStarted = false
         locationSource.setProfile(LocationProfile.IDLE)
-        _origin.value = null
+        locationSource.setNavigationHint(null, false)
     }
 
     /** Debug builds only: force a location profile (to measure AMBIENT, which has no ambient-mode trigger yet). */
@@ -501,6 +632,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     }
 
     override fun onCleared() {
+        session?.stop()
         locationSource.setProfile(LocationProfile.IDLE)
     }
 
@@ -520,6 +652,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     private companion object {
         const val ORIGIN_TIMEOUT_MS = 8_000L
         const val PLACE_RESULTS = 3
+
+        /** A straight run this long ahead lets the NAVIGATING request slow to 3 s above 20 km/h. */
+        const val LONG_STRAIGHT_M = 300.0
 
         /** Debug injections are accepted where a new request makes sense (never mid-navigation or in settings). */
         val INJECTABLE_SCREENS = setOf(

@@ -32,6 +32,7 @@ import androidx.wear.compose.material.Scaffold
 import com.wgo.navigator.ui.LocalLanguage
 import com.wgo.navigator.ui.wgoEdgeSwipeBack
 import com.wgo.navigator.ui.screens.ScreenActiveNavigation
+import com.wgo.navigator.ui.screens.ScreenArrived
 import com.wgo.navigator.ui.screens.ScreenListening
 import com.wgo.navigator.ui.screens.ScreenMapPicker
 import com.wgo.navigator.ui.screens.ScreenModeSelection
@@ -64,7 +65,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 
 enum class ScreenState {
-    Intro, Listening, Working, ConfirmPlace, ModeSelection, Navigation, Error, Settings, MapPicker
+    Intro, Listening, Working, ConfirmPlace, ModeSelection, Navigation, Arrived, Error, Settings, MapPicker
 }
 
 /** Per-mode minutes for the mode pads from the straight-line distance (no route request; see [ModeEstimate]). */
@@ -103,6 +104,11 @@ class MainActivity : ComponentActivity() {
     // Fallback voice strategy: the system speech activity, launched for a result on the ViewModel's request.
     private val speechDialogLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         appViewModel.voiceDialog.onResult(result.resultCode, result.data)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        appViewModel.onAppStarted()
     }
 
     override fun onStop() {
@@ -209,9 +215,11 @@ class MainActivity : ComponentActivity() {
 
                     val micDenied by appViewModel.micDenied.collectAsState()
 
-                    // Back skips the intro and leaves mode selection, navigation and settings for the listening screen.
-                    // On screen 01 it ends a voice session (or closes the microphone-denied surface) before leaving.
+                    // Back skips the intro and leaves the pipeline one step at a time. During navigation it asks
+                    // END NAVIGATION? (Back again = KEEP); on the arrival it goes home. On screen 01 it ends a voice
+                    // session (or closes the microphone-denied surface) before leaving.
                     val listeningBusy = micState != MicState.Idle || micDenied
+                    val endConfirm by appViewModel.endConfirm.collectAsState()
                     BackHandler(enabled = currentScreen != ScreenState.Listening || listeningBusy) {
                         when (currentScreen) {
                             ScreenState.Intro -> appViewModel.skipIntro()
@@ -220,7 +228,10 @@ class MainActivity : ComponentActivity() {
                                 if (micDenied) appViewModel.dismissMicDenied() else appViewModel.cancelListening()
                             ScreenState.Working, ScreenState.ConfirmPlace, ScreenState.ModeSelection, ScreenState.Error ->
                                 appViewModel.backInPipeline()
-                            else -> appViewModel.backToListening()
+                            ScreenState.Navigation ->
+                                if (endConfirm) appViewModel.keepNavigating() else appViewModel.requestEndNavigation()
+                            ScreenState.Arrived -> appViewModel.finishArrival()
+                            ScreenState.Settings -> appViewModel.backToListening()
                         }
                     }
 
@@ -322,19 +333,28 @@ class MainActivity : ComponentActivity() {
                             }
                             ScreenState.Navigation -> {
                                 val locationPermission by appViewModel.locationPermission.collectAsState()
-                                val origin by appViewModel.origin.collectAsState()
-                                val route by appViewModel.route.collectAsState()
+                                val navState by appViewModel.navState.collectAsState()
+                                val radar by appViewModel.radar.collectAsState()
+                                val destination by appViewModel.destinationName.collectAsState()
                                 ScreenActiveNavigation(
-                                    route = route,
-                                    onCancel = appViewModel::backToListening,
+                                    onCancel = appViewModel::requestEndNavigation,
                                     mapStyleId = mapStyleId,
-                                    locationSource = appViewModel.locationSource,
-                                    travelMode = selectedMode,
-                                    origin = origin,
+                                    navState = navState,
+                                    radarSource = radar,
+                                    destination = destination,
+                                    endConfirm = endConfirm,
+                                    onEnd = appViewModel::endNavigation,
+                                    onKeep = appViewModel::keepNavigating,
+                                    onRetryReroute = appViewModel::retryReroute,
+                                    onRetryGps = appViewModel::retryGps,
                                     locationPermission = locationPermission,
                                     onRetryLocation = appViewModel::retryLocation,
                                     onOpenLocationSettings = { openAppPermissionSettings() }
                                 )
+                            }
+                            ScreenState.Arrived -> {
+                                val destination by appViewModel.destinationName.collectAsState()
+                                ScreenArrived(destination = destination, onFinish = appViewModel::finishArrival)
                             }
                             ScreenState.MapPicker -> {
                                 ScreenMapPicker(
