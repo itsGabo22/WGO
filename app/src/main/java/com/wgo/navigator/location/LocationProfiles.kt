@@ -13,14 +13,18 @@ data class RequestSpec(
 /**
  * Power profiles -> continuous request parameters. IDLE and ORIGIN never keep a request open (ORIGIN is a single
  * one-shot). NAVIGATING adapts its interval: 1 s while a maneuver is closer than 80 m, 3 s above 20 km/h on a long
- * straight, 2 s otherwise; always about 5 m minimum distance. AMBIENT is balanced accuracy every 10 s.
+ * straight, 2 s otherwise; no minimum distance (see [NAV_MIN_DISTANCE_M]). AMBIENT is balanced accuracy every 10 s.
  */
 object LocationProfiles {
     const val NAV_INTERVAL_MS = 2_000L
     const val NAV_NEAR_MANEUVER_INTERVAL_MS = 1_000L
     const val NAV_STRAIGHT_FAST_INTERVAL_MS = 3_000L
     const val NAV_NEAR_MANEUVER_M = 80.0
-    const val NAV_MIN_DISTANCE_M = 5f
+    /**
+     * 0: a user standing still (red light, waiting to cross) must keep getting fixes, or the navigation engine's
+     * 10 s GPS-lost rule would fire. The GPS runs anyway while navigating; the interval bounds the wakeups.
+     */
+    const val NAV_MIN_DISTANCE_M = 0f
     const val AMBIENT_INTERVAL_MS = 10_000L
     const val AMBIENT_MIN_DISTANCE_M = 5f
 

@@ -24,7 +24,7 @@ enum class LocationProfile {
     /** No continuous updates: the origin is taken with a single [LocationSource.once] when a destination is chosen. */
     ORIGIN,
 
-    /** High accuracy, adaptive 1-3 s interval, about 5 m minimum distance. */
+    /** High accuracy, adaptive 1-3 s interval, no minimum distance (fixes keep coming while standing still). */
     NAVIGATING,
 
     /** Ambient / low power while navigating: balanced accuracy, 10 s. */

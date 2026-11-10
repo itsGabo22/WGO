@@ -23,7 +23,7 @@ class LocationProfilesTest {
 
     @Test fun navigatingAdaptsItsInterval() {
         val base = LocationProfiles.requestSpec(LocationProfile.NAVIGATING)!!
-        assertEquals(RequestSpec(true, 2_000L, 5f), base)
+        assertEquals(RequestSpec(true, 2_000L, 0f), base)
         assertEquals(1_000L, LocationProfiles.requestSpec(LocationProfile.NAVIGATING, distanceToManeuverM = 79.0)!!.intervalMs)
         assertEquals(2_000L, LocationProfiles.requestSpec(LocationProfile.NAVIGATING, distanceToManeuverM = 80.0)!!.intervalMs)
         assertEquals(3_000L, LocationProfiles.requestSpec(LocationProfile.NAVIGATING, 900.0, onLongStraight = true, fast = true)!!.intervalMs)
@@ -82,7 +82,7 @@ class LocationProfilesTest {
 
         source.setProfile(LocationProfile.NAVIGATING)
         awaitUntil { source.opened.size == 1 && source.sink != null }
-        assertEquals(listOf(RequestSpec(true, 2_000L, 5f)), source.opened)
+        assertEquals(listOf(RequestSpec(true, 2_000L, 0f)), source.opened)
         source.sink!!(fix(speedMps = 1f))
         awaitUntil { received.size == 1 }
 
