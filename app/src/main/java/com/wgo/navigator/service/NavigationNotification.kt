@@ -4,9 +4,14 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.wear.ongoing.OngoingActivity
+import androidx.wear.ongoing.Status
 import com.wgo.navigator.Language
 import com.wgo.navigator.R
 import com.wgo.navigator.ui.StringKey
@@ -58,7 +63,37 @@ class NavigationNotification(private val context: Context) {
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
     }
 
-    fun build(title: String, status: String, language: Language): Notification = builder(title, status, language).build()
+    /**
+     * The trip notification wrapped in a Wear [OngoingActivity]: the static icon on the watch face (a tap returns to
+     * the app) and [status] as the Recents line. Building it again is how the status is updated (at most every 5 s).
+     */
+    fun build(title: String, status: String, language: Language): Notification {
+        val builder = builder(title, status, language)
+        val touch = touchIntent()
+        OngoingActivity.Builder(context, NOTIFICATION_ID, builder)
+            .setStaticIcon(R.drawable.ic_wgo_nav)
+            .setTouchIntent(touch)
+            .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+            .setStatus(Status.Builder().addTemplate(status.ifBlank { stringFor(StringKey.NOTIF_NAVIGATING, language) }).build())
+            .build()
+            .apply(context)
+        return builder.build()
+    }
+
+    /** Re-posts the notification with a new status. Without POST_NOTIFICATIONS (API 33+) it is only hidden: skip it. */
+    fun update(title: String, status: String, language: Language) {
+        if (!canPost()) return
+        val n = build(title, status, language)
+        try {
+            manager.notify(NOTIFICATION_ID, n)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check and the call: the foreground notification simply stays as it was.
+        }
+    }
+
+    private fun canPost(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, "android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED
 
     fun cancel() = manager.cancel(NOTIFICATION_ID)
 

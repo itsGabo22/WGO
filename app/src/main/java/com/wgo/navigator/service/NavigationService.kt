@@ -4,12 +4,14 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.core.app.ServiceCompat
 import com.wgo.navigator.metrics.WgoMetrics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -61,6 +63,18 @@ class NavigationService : Service() {
             scope.launch {
                 host.active.first { !it }
                 stopNow()
+            }
+            // The ongoing activity's status: only when the maneuver or the distance bucket changed, at most every 5 s.
+            scope.launch {
+                val throttle = OngoingStatus.Throttle()
+                combine(host.navState, host.destinationName) { state, name -> state to name }.collect { (state, name) ->
+                    if (!host.active.value) return@collect
+                    val text = OngoingStatus.text(state, host.language)
+                    if (throttle.shouldPost(text, SystemClock.elapsedRealtime())) {
+                        notification.update(name, text, host.language)
+                        WgoMetrics.event("nav ongoing_post n=${throttle.posts}")
+                    }
+                }
             }
         }
         if (!host.active.value) stopNow()
