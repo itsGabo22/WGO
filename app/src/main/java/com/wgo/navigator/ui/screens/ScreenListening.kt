@@ -69,13 +69,13 @@ import com.wgo.navigator.ui.theme.wgoRiseIn
 private const val REFERENCE_SIZE = 227f
 
 /** What the title slot shows; a change of [language] with the same [state] rolls, anything else cross-fades. */
-private data class TitleState(val state: MicState, val language: Language, val notice: StringKey?)
+private data class TitleState(val state: MicState, val language: Language)
 
 /**
  * Screen 01. Positions follow the spec (`top` in dp on a 227 dp canvas) expressed as fractions of the actual
  * screen so they also fit Small Round. One [WgoClock] is shared by every looping piece.
  * [transcript] is the live (partial, then final) transcript, one line at @54 per spec section 7; [level] is the live
- * voice level read only in the orb's draw phase; [notice] replaces the idle title after a failed session.
+ * voice level read only in the orb's draw phase. (Failed sessions go to the pipeline's error surface.)
  */
 @Composable
 fun ScreenListening(
@@ -87,7 +87,6 @@ fun ScreenListening(
     modifier: Modifier = Modifier,
     transcript: String = "",
     level: (() -> Float)? = null,
-    notice: StringKey? = null,
     clock: WgoClock = rememberWgoClock()
 ) {
     val palette = Wgo.palette
@@ -113,7 +112,7 @@ fun ScreenListening(
         )
 
         AnimatedContent(
-            targetState = TitleState(micState, language, if (micState == MicState.Idle) notice else null),
+            targetState = TitleState(micState, language),
             transitionSpec = {
                 when {
                     reduceMotion -> fadeIn(tween(WgoMotion.SNAP)) togetherWith fadeOut(tween(WgoMotion.SNAP))
@@ -136,14 +135,11 @@ fun ScreenListening(
             CompositionLocalProvider(LocalLanguage provides title.language) {
                 when (title.state) {
                     MicState.Idle -> Text(
-                        text = string(title.notice ?: StringKey.TITLE_WHERE_TO),
+                        text = string(StringKey.TITLE_WHERE_TO),
                         color = palette.ink,
                         style = WgoType.headlineMd,
                         textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        modifier = if (title.notice != null) {
-                            Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
-                        } else Modifier
+                        maxLines = 2
                     )
                     MicState.Waiting -> Text(
                         text = string(StringKey.LISTENING_SYSTEM),
