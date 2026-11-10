@@ -1,11 +1,10 @@
 package com.wgo.navigator
 
 import android.app.Application
-import android.os.SystemClock
-import com.wgo.navigator.nav.NavClock
 import com.wgo.navigator.nav.NavEvent
 import com.wgo.navigator.nav.NavState
-import com.wgo.navigator.nav.NavigationSession
+import com.wgo.navigator.service.NavigationHost
+import com.wgo.navigator.service.TripEnd
 import com.wgo.navigator.ui.map.LiveRadarSource
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -18,7 +17,6 @@ import com.wgo.navigator.core.permissions.PermissionStatus
 import com.wgo.navigator.core.permissions.WgoPermission
 import com.wgo.navigator.haptics.HapticEvent
 import com.wgo.navigator.haptics.HapticSource
-import com.wgo.navigator.location.LocationSources
 import com.wgo.navigator.core.VoiceEvent
 import com.wgo.navigator.core.WgoFailure
 import com.wgo.navigator.metrics.WgoMetrics
@@ -45,8 +43,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import com.wgo.navigator.core.Maneuver
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -322,6 +319,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         if (permissions.ensure(WgoPermission.LOCATION) != PermissionStatus.Granted) {
             return fail(PipelineError.LocationPermission, Step.Route)
         }
+        // API 33+: the trip's notification (ongoing activity) needs POST_NOTIFICATIONS. Asked once, the first time a
+        // route is requested; whatever the answer, the trip runs (without it the notification is only hidden).
+        if (permissions.status.value[WgoPermission.NOTIFICATIONS] == PermissionStatus.NotAsked) {
+            WgoMetrics.event("notifications=${permissions.ensure(WgoPermission.NOTIFICATIONS)}")
+        }
         locationSource.setProfile(LocationProfile.ORIGIN)
         val originStart = System.nanoTime()
         val fresh = locationSource.once(ORIGIN_TIMEOUT_MS)
@@ -417,12 +419,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      */
     fun onAppStopped() {
         if (sessionActive && _micState.value != MicState.Waiting) cancelListening()
-        // No location in the background or with the screen off (until the P6 foreground service): the request goes
-        // away with the collection, and the engine pauses so the gap is not reported as a GPS loss.
-        appStarted = false
-        fixJob?.cancel()
-        fixJob = null
-        session?.pause()
+        // A running trip goes on in the navigation service; without the service it pauses until the app is back.
+        host.setVisible(false)
     }
 
     fun selectMode(mode: TravelMode) {
@@ -433,112 +431,51 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
     /** Back from settings (and any other screen with nothing to confirm): ends a trip if one runs, then home. */
     fun backToListening() {
-        stopNavigation()
+        host.end(TripEnd.Ended)
+        host.acknowledgeEnd()
         goHome()
     }
 
-    // ---- Live navigation: one NavigationSession per trip, fed by the one location request of the trip ----
+    // ---- Live navigation: the trip lives in the process-wide NavigationHost (kept alive by the foreground navigation
+    // service); this ViewModel only observes it and sends commands, whether the Activity is visible or not ----
 
-    private var session: NavigationSession? = null
-    private var sessionJob: Job? = null
-    private var fixJob: Job? = null
+    private val host = NavigationHost.get(application)
 
-    /** True between the Activity's onStart and onStop: fixes are only requested while the app is visible. */
-    private var appStarted = false
+    val navState: StateFlow<NavState> = host.navState
 
-    private val _navState = MutableStateFlow<NavState>(NavState.WaitingForGps)
-    val navState: StateFlow<NavState> = _navState.asStateFlow()
+    /** The radar's data for the current trip (null when there is no trip). */
+    val radar: StateFlow<LiveRadarSource?> = host.radar
+
+    /** Name of the trip's destination (kept for the arrival surface after the trip ended). */
+    val destinationName: StateFlow<String> = host.destinationName
 
     /** True while the END NAVIGATION? confirm covers the navigation screen. */
     private val _endConfirm = MutableStateFlow(false)
     val endConfirm: StateFlow<Boolean> = _endConfirm.asStateFlow()
 
-    /** The radar's data for the current trip (null when there is no trip). */
-    private val _radar = MutableStateFlow<LiveRadarSource?>(null)
-    val radar: StateFlow<LiveRadarSource?> = _radar.asStateFlow()
-
-    /** Name of the trip's destination (kept for the arrival surface after the trip ended). */
-    private val _destinationName = MutableStateFlow("")
-    val destinationName: StateFlow<String> = _destinationName.asStateFlow()
+    init {
+        // A reopened Activity (new ViewModel, same process) reconnects to the live trip, or to its unread arrival.
+        when {
+            host.active.value -> _screen.value = ScreenState.Navigation
+            host.lastEnd.value == TripEnd.Arrived -> _screen.value = ScreenState.Arrived
+        }
+        viewModelScope.launch { host.events.collect(::onNavEvent) }
+        // Only ends that happen from now on (the current value was handled above).
+        viewModelScope.launch { host.lastEnd.drop(1).collect { it?.let(::onTripEnded) } }
+    }
 
     private fun startNavigation(route: Route, place: Place, origin: Fix) {
-        stopNavigation(clearTrip = false)
-        val s = NavigationSession(route, place.coord, router, viewModelScope, NavClock { SystemClock.elapsedRealtime() })
-        session = s
-        _destinationName.value = place.name
         _endConfirm.value = false
-        _navState.value = NavState.WaitingForGps
-        val radar = LiveRadarSource(route.mode, GeoCoord(origin.lat, origin.lon), route.polyline, route.steps.getOrNull(1)?.location)
-        _radar.value = radar
-        sessionJob = viewModelScope.launch {
-            // Debug builds only: the active route as `lat,lon` lines (tools/sim_drive.ps1 -FromLogcat replays it).
-            launch { s.route.collect { WgoMetrics.route(it.polyline) } }
-            launch { s.state.collect(::onNavState) }
-            launch { s.events.collect(::onNavEvent) }
-            // The radar draws only the remaining route (cut by the session every 5 m of progress) and the next maneuver.
-            launch {
-                combine(s.remaining, s.state) { remaining, state -> remaining to nextManeuverOf(state) }
-                    .collect { (remaining, maneuver) -> radar.setRoute(remaining, maneuver) }
-            }
-        }
+        host.start(route, place, origin)
         _screen.value = ScreenState.Navigation
-        locationSource.setProfile(LocationProfile.NAVIGATING)
-        // The fresh ORIGIN fix starts the engine at once (an old cached fallback is ignored as stale).
-        s.onFix(origin)
-        radar.onFix(origin)
-        if (appStarted) {
-            s.start()
-            startFixes()
-        }
-        WgoMetrics.event("nav start mode=${route.mode} points=${route.polyline.size} steps=${route.steps.size}")
-    }
-
-    /** The trip's only continuous location request, while the app is visible. Feeds the engine and the radar. */
-    private fun startFixes() {
-        val s = session ?: return
-        fixJob?.cancel()
-        fixJob = viewModelScope.launch {
-            locationSource.fixes.collect { fix ->
-                val t0 = System.nanoTime()
-                s.onFix(fix)
-                WgoMetrics.engineFix(System.nanoTime() - t0)
-                _radar.value?.onFix(fix)
-            }
-        }
-    }
-
-    private fun onNavState(state: NavState) {
-        if (state is NavState.Rerouting && _navState.value !is NavState.Rerouting) WgoMetrics.inc(WgoMetrics.Counter.REROUTE)
-        _navState.value = state
-        val s = session ?: return
-        when (state) {
-            NavState.Arrived -> arrive()
-            is NavState.Navigating ->
-                locationSource.setNavigationHint(state.distanceToNextM, s.geometry.onLongStraight(state.progressM, LONG_STRAIGHT_M))
-            else -> Unit
-        }
-    }
-
-    /** Where the next maneuver is (null for the arrival: the route's end already shows it). */
-    private fun nextManeuverOf(state: NavState): GeoCoord? {
-        val nav = when (state) {
-            is NavState.Navigating -> state
-            is NavState.OffRoute -> state.last
-            is NavState.Rerouting -> state.last
-            is NavState.LostRoute -> state.last
-            is NavState.GpsLost -> state.last
-            else -> null
-        } ?: return null
-        return nav.next?.takeIf { it.maneuver != Maneuver.ARRIVE }?.location
     }
 
     /**
      * Engine events -> haptics, exactly as spec section 8 lists them: turn at 200 m = Tick, turn at 50 m = DoubleClick,
-     * GPS lost = HeavyClick, arrival = DoubleClick (played by [arrive]). The spec has no row for off route, rerouted,
-     * GPS recovered or lost route: those stay silent.
+     * GPS lost = HeavyClick, arrival = DoubleClick (played by [onTripEnded]). The spec has no row for off route,
+     * rerouted, GPS recovered or lost route: those stay silent.
      */
     private fun onNavEvent(event: NavEvent) {
-        WgoMetrics.event("nav event=${event.javaClass.simpleName}")
         when (event) {
             is NavEvent.ApproachingTurn -> _haptics.tryEmit(HapticEvent.Tick)
             is NavEvent.AtTurn -> _haptics.tryEmit(HapticEvent.DoubleClick)
@@ -547,28 +484,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         }
     }
 
-    private fun arrive() {
-        // Played here, not from the event: ending the trip cancels the event collector.
-        _haptics.tryEmit(HapticEvent.DoubleClick)
-        stopNavigation()
+    /** The trip ended inside the host (arrival, service lost, task removed); END from the UI goes home by itself. */
+    private fun onTripEnded(reason: TripEnd) {
         _endConfirm.value = false
-        _screen.value = ScreenState.Arrived
-    }
-
-    /** Ends the trip: engine, ticks and the location request stop now, and the saved destination is cleared. */
-    private fun stopNavigation(clearTrip: Boolean = true) {
-        val had = session != null
-        session?.stop()
-        session = null
-        sessionJob?.cancel()
-        fixJob?.cancel()
-        sessionJob = null
-        fixJob = null
-        _radar.value = null
-        _route.value = null
-        stopLocation()
-        if (clearTrip && had) viewModelScope.launch { tripStore.clearTrip() }
-        if (had) WgoMetrics.event("nav stop snapshot=${WgoMetrics.snapshot()}")
+        when (reason) {
+            TripEnd.Arrived -> {
+                _haptics.tryEmit(HapticEvent.DoubleClick)
+                if (_screen.value == ScreenState.Navigation) _screen.value = ScreenState.Arrived
+            }
+            TripEnd.ServiceLost, TripEnd.TaskRemoved -> if (_screen.value == ScreenState.Navigation) {
+                host.acknowledgeEnd()
+                goHome()
+            }
+            TripEnd.Ended -> Unit
+        }
     }
 
     /** Back or CANCEL while navigating: ask first (END NAVIGATION?). */
@@ -584,38 +513,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     /** END on the confirm, END on the lost-route surface, or CANCEL while still searching for GPS. */
     fun endNavigation() {
         _endConfirm.value = false
-        stopNavigation()
+        host.end(TripEnd.Ended)
+        host.acknowledgeEnd()
         goHome()
     }
 
     /** FINALIZAR on the arrival surface (or Back there). */
     fun finishArrival() {
-        _destinationName.value = ""
+        host.acknowledgeEnd()
         goHome()
     }
 
     /** RETRY on the lost-route surface: a fresh series of reroutes. */
     fun retryReroute() {
-        session?.retryReroute()
+        host.retryReroute()
     }
 
     /** RETRY on the GPS-lost overlay: reopen the location request. */
     fun retryGps() {
-        if (session != null && appStarted) startFixes()
+        host.retryGps()
     }
 
-    /** Activity onStart: fixes resume (and the GPS-lost timer restarts from now). */
+    /** Activity onStart: a trip without its service resumes its fixes (and the GPS-lost timer restarts from now). */
     fun onAppStarted() {
-        appStarted = true
-        val s = session ?: return
-        s.resume()
-        startFixes()
+        host.setVisible(true)
     }
 
-    // ---- Location (lazy permission, ORIGIN one-shot, then NAVIGATING; IDLE everywhere else) ----
+    // ---- Location (lazy permission, ORIGIN one-shot, then NAVIGATING in the host; IDLE everywhere else) ----
 
-    /** Real source: fused when Play services is present, else the platform LocationManager. */
-    val locationSource: LocationSource = LocationSources.create(application)
+    /** The process's only location source (owned by the host): fused when Play services is present, else platform. */
+    val locationSource: LocationSource = host.locationSource
 
     val locationPermission: StateFlow<PermissionStatus> = permissions.status
         .map { it.getValue(WgoPermission.LOCATION) }
@@ -638,10 +565,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         // start: reopen the trip's location request if a trip is running without one.
         viewModelScope.launch {
             locationPermission.collect { status ->
-                if (status == PermissionStatus.Granted && session != null && appStarted && fixJob?.isActive != true) {
-                    locationSource.setProfile(LocationProfile.NAVIGATING)
-                    startFixes()
-                }
+                if (status == PermissionStatus.Granted && host.active.value) host.resumeFixes()
             }
         }
     }
@@ -651,27 +575,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         locationJob?.cancel()
         locationJob = viewModelScope.launch {
             if (permissions.ensure(WgoPermission.LOCATION) != PermissionStatus.Granted) return@launch
-            if (session != null && appStarted) {
-                locationSource.setProfile(LocationProfile.NAVIGATING)
-                startFixes()
-            }
+            if (host.active.value) host.resumeFixes()
         }
     }
-
-    private fun stopLocation() {
-        locationJob?.cancel()
-        locationSource.setProfile(LocationProfile.IDLE)
-        locationSource.setNavigationHint(null, false)
-    }
-
     /** Debug builds only: force a location profile (to measure AMBIENT, which has no ambient-mode trigger yet). */
     fun debugSetLocationProfile(profile: LocationProfile) {
         if (BuildConfig.DEBUG) locationSource.setProfile(profile)
     }
 
     override fun onCleared() {
-        session?.stop()
-        locationSource.setProfile(LocationProfile.IDLE)
+        // A running trip belongs to the host and its service, not to this screen: it goes on (a reopened Activity
+        // reconnects). Without a trip, make sure no ORIGIN request is left behind.
+        if (!host.active.value) locationSource.setProfile(LocationProfile.IDLE)
     }
 
     fun openSettings() {
@@ -690,9 +605,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     private companion object {
         const val ORIGIN_TIMEOUT_MS = 8_000L
         const val PLACE_RESULTS = 3
-
-        /** A straight run this long ahead lets the NAVIGATING request slow to 3 s above 20 km/h. */
-        const val LONG_STRAIGHT_M = 300.0
 
         /** Debug injections are accepted where a new request makes sense (never mid-navigation or in settings). */
         val INJECTABLE_SCREENS = setOf(

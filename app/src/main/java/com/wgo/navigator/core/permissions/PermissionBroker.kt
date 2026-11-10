@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
@@ -18,7 +19,13 @@ import kotlinx.coroutines.flow.update
 enum class WgoPermission(val manifest: String) {
     /** Fine location (API 31+ lets the user downgrade to approximate in the same dialog). */
     LOCATION(Manifest.permission.ACCESS_FINE_LOCATION),
-    MICROPHONE(Manifest.permission.RECORD_AUDIO)
+    MICROPHONE(Manifest.permission.RECORD_AUDIO),
+
+    /**
+     * The trip notification / ongoing activity (POST_NOTIFICATIONS, API 33+; written as a literal because the constant
+     * is API 33). Below API 33 it does not exist and counts as granted. A denial never blocks navigation.
+     */
+    NOTIFICATIONS("android.permission.POST_NOTIFICATIONS")
 }
 
 enum class PermissionStatus {
@@ -69,7 +76,8 @@ class PermissionBroker(context: Context) {
     val status: StateFlow<Map<WgoPermission, PermissionStatus>> = _status.asStateFlow()
 
     fun isGranted(permission: WgoPermission): Boolean =
-        ContextCompat.checkSelfPermission(app, permission.manifest) == PackageManager.PERMISSION_GRANTED
+        (permission == WgoPermission.NOTIFICATIONS && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) ||
+            ContextCompat.checkSelfPermission(app, permission.manifest) == PackageManager.PERMISSION_GRANTED
 
     /**
      * Returns [PermissionStatus.Granted] immediately when granted; otherwise asks (system dialog) unless the
