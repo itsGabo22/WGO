@@ -61,6 +61,34 @@ object WgoMetrics {
 
     fun get(counter: Counter): Long = counters.get(counter.ordinal)
 
+    const val ROUTE_TAG = "WGO_ROUTE"
+
+    /**
+     * Debug only: dumps the active route polyline under [ROUTE_TAG], one `lat,lon` per line between `begin` and `end`
+     * markers, so tools/sim_drive.ps1 -FromLogcat can replay the real route on the emulator. Coordinates of the route
+     * only (no fix, no destination name).
+     */
+    fun route(points: List<com.wgo.navigator.ui.map.GeoCoord>) {
+        if (!BuildConfig.DEBUG) return
+        try {
+            Log.i(ROUTE_TAG, "begin n=${points.size}")
+            points.forEach { Log.i(ROUTE_TAG, String.format(java.util.Locale.US, "%.6f,%.6f", it.lat, it.lon)) }
+            Log.i(ROUTE_TAG, "end")
+        } catch (e: RuntimeException) {
+            // JVM unit tests: android.util.Log is a stub there.
+        }
+    }
+
+    private val engineNanos = AtomicLong()
+    private val engineFixes = AtomicLong()
+
+    /** Debug only: time spent in the navigation engine for one fix (reported as an average in [snapshot]). */
+    fun engineFix(nanos: Long) {
+        if (!BuildConfig.DEBUG) return
+        engineNanos.addAndGet(nanos)
+        engineFixes.incrementAndGet()
+    }
+
     fun snapshot(): String = buildString {
         append("screen=").append(screen)
         append(" frames={")
@@ -68,6 +96,9 @@ object WgoMetrics {
         append('}')
         Counter.entries.forEach { append(' ').append(it.name.lowercase()).append('=').append(counters.get(it.ordinal)) }
         append(" locActive=").append(get(Counter.LOCATION_REQ_START) - get(Counter.LOCATION_REQ_STOP))
+        val fixes = engineFixes.get()
+        append(" engine_fixes=").append(fixes)
+        append(" engine_ns_avg=").append(if (fixes == 0L) 0 else engineNanos.get() / fixes)
         Net.entries.forEach {
             append(" net_").append(it.name.lowercase()).append('=').append(netCount.get(it.ordinal))
                 .append('/').append(netBytes.get(it.ordinal)).append('B')

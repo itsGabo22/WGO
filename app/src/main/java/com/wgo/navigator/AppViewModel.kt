@@ -471,6 +471,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         val radar = LiveRadarSource(route.mode, GeoCoord(origin.lat, origin.lon), route.polyline, route.steps.getOrNull(1)?.location)
         _radar.value = radar
         sessionJob = viewModelScope.launch {
+            // Debug builds only: the active route as `lat,lon` lines (tools/sim_drive.ps1 -FromLogcat replays it).
+            launch { s.route.collect { WgoMetrics.route(it.polyline) } }
             launch { s.state.collect(::onNavState) }
             launch { s.events.collect(::onNavEvent) }
             // The radar draws only the remaining route (cut by the session every 5 m of progress) and the next maneuver.
@@ -497,7 +499,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         fixJob?.cancel()
         fixJob = viewModelScope.launch {
             locationSource.fixes.collect { fix ->
+                val t0 = System.nanoTime()
                 s.onFix(fix)
+                WgoMetrics.engineFix(System.nanoTime() - t0)
                 _radar.value?.onFix(fix)
             }
         }
