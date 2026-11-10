@@ -504,6 +504,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     }
 
     private fun onNavState(state: NavState) {
+        if (state is NavState.Rerouting && _navState.value !is NavState.Rerouting) WgoMetrics.inc(WgoMetrics.Counter.REROUTE)
         _navState.value = state
         val s = session ?: return
         when (state) {
@@ -527,11 +528,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         return nav.next?.takeIf { it.maneuver != Maneuver.ARRIVE }?.location
     }
 
+    /**
+     * Engine events -> haptics, exactly as spec section 8 lists them: turn at 200 m = Tick, turn at 50 m = DoubleClick,
+     * GPS lost = HeavyClick, arrival = DoubleClick (played by [arrive]). The spec has no row for off route, rerouted,
+     * GPS recovered or lost route: those stay silent.
+     */
     private fun onNavEvent(event: NavEvent) {
         WgoMetrics.event("nav event=${event.javaClass.simpleName}")
+        when (event) {
+            is NavEvent.ApproachingTurn -> _haptics.tryEmit(HapticEvent.Tick)
+            is NavEvent.AtTurn -> _haptics.tryEmit(HapticEvent.DoubleClick)
+            NavEvent.GpsLost -> _haptics.tryEmit(HapticEvent.HeavyClick)
+            NavEvent.Arrived, NavEvent.OffRouteDetected, NavEvent.Rerouted, NavEvent.GpsRecovered -> Unit
+        }
     }
 
     private fun arrive() {
+        // Played here, not from the event: ending the trip cancels the event collector.
+        _haptics.tryEmit(HapticEvent.DoubleClick)
         stopNavigation()
         _endConfirm.value = false
         _screen.value = ScreenState.Arrived
