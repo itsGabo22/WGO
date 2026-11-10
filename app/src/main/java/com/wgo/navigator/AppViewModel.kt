@@ -45,6 +45,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import com.wgo.navigator.core.Maneuver
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -471,6 +473,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         sessionJob = viewModelScope.launch {
             launch { s.state.collect(::onNavState) }
             launch { s.events.collect(::onNavEvent) }
+            // The radar draws only the remaining route (cut by the session every 5 m of progress) and the next maneuver.
+            launch {
+                combine(s.remaining, s.state) { remaining, state -> remaining to nextManeuverOf(state) }
+                    .collect { (remaining, maneuver) -> radar.setRoute(remaining, maneuver) }
+            }
         }
         _screen.value = ScreenState.Navigation
         locationSource.setProfile(LocationProfile.NAVIGATING)
@@ -505,6 +512,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 locationSource.setNavigationHint(state.distanceToNextM, s.geometry.onLongStraight(state.progressM, LONG_STRAIGHT_M))
             else -> Unit
         }
+    }
+
+    /** Where the next maneuver is (null for the arrival: the route's end already shows it). */
+    private fun nextManeuverOf(state: NavState): GeoCoord? {
+        val nav = when (state) {
+            is NavState.Navigating -> state
+            is NavState.OffRoute -> state.last
+            is NavState.Rerouting -> state.last
+            is NavState.LostRoute -> state.last
+            is NavState.GpsLost -> state.last
+            else -> null
+        } ?: return null
+        return nav.next?.takeIf { it.maneuver != Maneuver.ARRIVE }?.location
     }
 
     private fun onNavEvent(event: NavEvent) {

@@ -25,8 +25,8 @@ val PastoCentre = GeoCoord(1.2136, -77.2811)
 class LiveRadarSource(
     private val mode: TravelMode?,
     initial: GeoCoord?,
-    private val route: List<GeoCoord> = emptyList(),
-    private val maneuver: GeoCoord? = null,
+    private var route: List<GeoCoord> = emptyList(),
+    private var maneuver: GeoCoord? = null,
     private val nowNanos: () -> Long = { SystemClock.elapsedRealtimeNanos() }
 ) : RadarSource {
     private val _state = MutableStateFlow(
@@ -44,10 +44,16 @@ class LiveRadarSource(
             FixQuality.Stale -> Unit
             FixQuality.Inaccurate -> _state.update { it.copy(searching = true, accuracyM = fix.accuracyM) }
             FixQuality.Good -> {
-                val bearing = nextBearing(_state.value.bearing, lastGood, fix)
+                val prev = _state.value
+                val bearing = nextBearing(prev.bearing, lastGood, fix)
                 lastGood = fix
+                val location = GeoCoord(fix.lat, fix.lon)
+                // Standing still (GPS jitter under 2 m, same heading): keep the state, so nothing is re-projected.
+                if (!prev.searching && bearing == prev.bearing &&
+                    RadarProjection.distanceMeters(prev.location, location) < MIN_REDRAW_MOVE_M
+                ) return
                 _state.value = RadarState(
-                    location = GeoCoord(fix.lat, fix.lon),
+                    location = location,
                     bearing = bearing,
                     route = route,
                     blips = emptyList(),
@@ -59,8 +65,22 @@ class LiveRadarSource(
         }
     }
 
+    /**
+     * The route still ahead of the user (the navigation session cuts it as progress grows) and the next maneuver point.
+     * The radar then draws only what is left; nothing changes while the user stands still.
+     */
+    fun setRoute(remaining: List<GeoCoord>, nextManeuver: GeoCoord?) {
+        if (remaining === route && nextManeuver == maneuver) return
+        route = remaining
+        maneuver = nextManeuver
+        _state.update { it.copy(route = remaining, maneuver = nextManeuver) }
+    }
+
     companion object {
         const val MIN_HEADING_SPEED_MPS = 1.5f
+
+        /** Smaller moves (with the same heading) are jitter: no new radar state, so no re-projection. */
+        const val MIN_REDRAW_MOVE_M = 2.0
         private const val MIN_MOVE_FOR_HEADING_M = 2.0
 
         /** Before any movement the map faces along the route's first segment (north without a route). */

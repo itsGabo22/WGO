@@ -65,6 +65,32 @@ class LiveRadarSourceTest {
         assertEquals(route[1], r.state.value.maneuver)
     }
 
+    @Test fun standingStillKeepsTheSameStateSoNothingIsReprojected() {
+        val r = radar()
+        r.onFix(fix(lat = 1.2200, lon = -77.2900, accuracyM = 8f, speedMps = 0f, elapsedNanos = now))
+        val first = r.state.value
+        // About 1 m of jitter, three times: the very same state object (no new emission, no re-projection).
+        repeat(3) { r.onFix(fix(lat = 1.220009, lon = -77.2900, accuracyM = 9f, speedMps = 0.1f, elapsedNanos = now)) }
+        assertTrue(first === r.state.value)
+        // A real move of about 11 m produces a new state.
+        r.onFix(fix(lat = 1.2201, lon = -77.2900, accuracyM = 8f, speedMps = 0.5f, elapsedNanos = now))
+        assertEquals(1.2201, r.state.value.location.lat, 1e-9)
+    }
+
+    @Test fun setRouteDrawsOnlyTheRemainingRouteAndTheNextManeuver() {
+        val route = listOf(GeoCoord(1.2120, -77.2830), GeoCoord(1.2120, -77.2808), GeoCoord(1.2142, -77.2808))
+        val r = LiveRadarSource(TravelMode.Walk, null, route, route[1]) { now }
+        val ahead = listOf(GeoCoord(1.2120, -77.2815), route[1], route[2])
+        r.setRoute(ahead, route[1])
+        assertEquals(ahead, r.state.value.route)
+        val before = r.state.value
+        r.setRoute(ahead, route[1])
+        assertTrue("the same route again changes nothing", before === r.state.value)
+        r.setRoute(listOf(GeoCoord(1.2130, -77.2808), route[2]), null)
+        assertEquals(2, r.state.value.route.size)
+        assertEquals(null, r.state.value.maneuver)
+    }
+
     @Test fun headingIsDerivedFromMovementWhenTheFixHasNone() {
         val start = fix(lat = 1.2120, lon = -77.2830, speedMps = Float.NaN, elapsedNanos = now - 2_000_000_000L)
         // about 24 m north in 2 s = 12 m/s, no bearing in the fix
