@@ -25,7 +25,9 @@ import com.wgo.navigator.ui.theme.WgoType
 import com.wgo.navigator.ui.theme.rememberWgoClock
 
 enum class StatusBadgeVariant {
-    Neutral, Soft, Primary, Go, Alert
+    Neutral, Soft, Primary, Go, Alert,
+    /** Inverse of [Alert], for badges on an `alert` background (the GPS-lost overlay, spec section 7). */
+    OnAlert
 }
 
 private val BadgeHeight = 18.dp
@@ -51,6 +53,7 @@ fun StatusBadge(
         StatusBadgeVariant.Primary -> palette.primary
         StatusBadgeVariant.Go -> palette.go
         StatusBadgeVariant.Alert -> palette.alert
+        StatusBadgeVariant.OnAlert -> palette.onAlert
     }
     val content = when (variant) {
         StatusBadgeVariant.Neutral -> palette.ink
@@ -58,6 +61,7 @@ fun StatusBadge(
         StatusBadgeVariant.Primary -> palette.onPrimary
         StatusBadgeVariant.Go -> palette.onGo
         StatusBadgeVariant.Alert -> palette.onAlert
+        StatusBadgeVariant.OnAlert -> palette.alert
     }
 
     Row(

@@ -64,6 +64,16 @@ object WgoIcons {
     /** Alert: a circle with an exclamation mark. */
     val Alert = icon("Alert", "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M12 7.5v5.5", "M12 16.5h.01")
     val Check = icon("Check", "M5 12.5l4.5 4.5L19 7")
+
+    /** Satellite with a slash (GPS lost): a body, two panels, a dish arc, and the strike-through. */
+    val SatelliteOff = icon(
+        "SatelliteOff",
+        "M10.5 10.5l3 3",
+        "M8.5 12.5l-3.5 3.5 2.5 2.5 3.5-3.5",
+        "M15.5 11.5l3.5-3.5-2.5-2.5-3.5 3.5",
+        "M6 21a5 5 0 0 0 0-3",
+        "M3 3l18 18"
+    )
     val Close = icon("Close", "M6 6l12 12", "M18 6L6 18")
     val DirectionsCar = icon(
         "DirectionsCar",
