@@ -18,6 +18,9 @@ import java.text.Normalizer
 object LocalIntentParser {
     const val MAX_PLACE_CHARS = 80
 
+    /** A known Pasto nickname ([PlaceAliases]) is as certain as a verb + concrete place. */
+    const val ALIAS_CONFIDENCE = 0.9f
+
     private data class Tok(val orig: String, val norm: String)
     private class Phrase(text: String, val mode: TravelMode? = null) {
         val words = text.split(' ')
@@ -58,6 +61,8 @@ object LocalIntentParser {
         if (placeToks.isEmpty()) {
             return if (mode != null) Interpretation(IntentKind.ChangeMode, null, mode, 0.9f) else Interpretation.Unknown
         }
+        // Local nicknames ("la UDENAR", "el terminal") resolve here, with no remote call.
+        PlaceAliases.resolve(placeToks.map { it.norm })?.let { return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE) }
         val vague = placeToks.any { it.norm in VAGUE_WORDS }
         val confidence = when {
             vague -> 0.5f
