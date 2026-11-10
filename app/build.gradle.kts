@@ -100,7 +100,11 @@ dependencies {
     implementation("androidx.wear.compose:compose-navigation:1.3.0")
     implementation("org.osmdroid:osmdroid-android:6.1.18")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    
+    // Navigation with the wrist down (P6-A): the ongoing activity on the watch face and the ambient lifecycle observer.
+    // Newest stable releases; both only need androidx.core 1.6.0, so no existing version is raised.
+    implementation("androidx.wear:wear-ongoing:1.1.0")
+    implementation("androidx.wear:wear:1.4.0")
+
     constraints {
         // Play services still pulls androidx.fragment 1.0.0 transitively; registerForActivityResult needs >= 1.3.0
         // (lint InvalidFragmentVersionForActivityResult). This only raises the transitive version, it adds nothing.
