@@ -30,6 +30,9 @@ import kotlin.math.roundToInt
 /** Where the user sits on the 227 dp canvas: (113.5, 150), i.e. below the center so the road ahead has room. */
 const val USER_ANCHOR_Y_FRACTION = 150f / 227f
 
+/** Zoom levels the tiles come from below the radar's zoom: log2 of [WgoMapConfig.TILE_SCALE]. */
+private val TILE_ZOOM_SHIFT = kotlin.math.ln(WgoMapConfig.TILE_SCALE.toDouble()) / kotlin.math.ln(2.0)
+
 /**
  * Raster tiles only (the overlays are Compose layers above it), clipped to a circle:
  * - the user is held at the fixed anchor with `setMapCenterOffset` and the map is re-centered on [center];
@@ -59,6 +62,7 @@ fun RadarMapView(
             setMultiTouchControls(false)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             isTilesScaledToDpi = true
+            tilesScaleFactor = WgoMapConfig.TILE_SCALE
             isHorizontalMapRepetitionEnabled = false
             isVerticalMapRepetitionEnabled = false
             // Static radar: swallow touches so the map cannot be panned.
@@ -100,10 +104,12 @@ fun RadarMapView(
                 map.setMapCenterOffset(0, offsetY)
             }
             map.overlayManager.tilesOverlay.setColorFilter(filter)
-            map.controller.setZoom(zoom)
+            // Larger tiles from a lower zoom: the same ground on screen (see WgoMapConfig.TILE_SCALE).
+            map.controller.setZoom(zoom - TILE_ZOOM_SHIFT)
             map.mapOrientation = -bearing
             map.controller.setCenter(GeoPoint(center.lat, center.lon))
-            onTileSize(TileSystem.getTileSize().toDouble())
+            // The overlays project with the radar's zoom, so they get the tile size that zoom implies.
+            onTileSize(TileSystem.getTileSize() / WgoMapConfig.TILE_SCALE.toDouble())
         }
     )
 }

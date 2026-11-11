@@ -13,6 +13,13 @@ import java.io.File
  * and is a no-op once the configuration is applied (if the warm-up is still running it waits for it).
  */
 object WgoMapConfig {
+    /**
+     * Extra tile scale on top of osmdroid's density scaling (spec section 9.1, legibility): tiles are drawn this many
+     * times larger and come from `log2(TILE_SCALE)` zoom levels lower, so the ground shown is unchanged while street
+     * lines and labels grow, and each tile covers more ground (fewer tile bytes per km).
+     */
+    const val TILE_SCALE = 2.0f
+
     private const val DISK_CACHE_MAX_BYTES = 20L * 1024 * 1024
     private const val DISK_CACHE_TRIM_BYTES = 15L * 1024 * 1024
     private const val MEMORY_CACHE_TILES = 12
