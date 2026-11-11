@@ -18,6 +18,9 @@ jdk-21.0.4+7/
 jdk21/
 jdk21.zip
 
+# The owner's private places (docs/PLACES.md); my_places.example.json is the committed template
+app/src/main/assets/my_places.json
+
 # Legacy / reference folders: kept locally, never pushed
 legacy_web_app/
 stitch_wgo_smartwatch_ai_navigator/
