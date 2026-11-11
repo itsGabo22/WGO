@@ -13,6 +13,10 @@ Speech to text uses the watch's own recogniser (in-app `SpeechRecognizer`, or th
 fallback). WGO prefers the offline model; when the device has no offline model for the language, the platform
 recogniser may use its own online service, under the platform's privacy terms. WGO never stores or uploads audio.
 
+Spoken guidance (P7) uses the watch's text-to-speech engine. WGO prefers offline voices; if the chosen voice is a
+network voice, the engine may send the phrase text (for example "Gira a la derecha por Carrera 35") to its provider,
+under the engine's privacy terms. No position, place name lists or identifiers are added by WGO.
+
 Persisted on the watch (DataStore): theme, language, map style, the active destination and mode, and the daily
 remote-interpreter counter (date and count). No transcript is persisted. Debug builds log counters and request sizes
 (never URLs, bodies, keys or transcripts) under the `WGO_METRICS` tag.
