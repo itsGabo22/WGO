@@ -78,17 +78,6 @@ fun MapStyleId.nightDimAlpha(): Float = when (this) {
     else -> 0.22f
 }
 
-/**
- * Strength of the `ground` wash over the tiles. The light styles use a stronger wash (their dark routes need a light
- * ground, also after the Night dim) so the route keeps at least 3:1 against the surrounding tile.
- */
-fun MapStyleId.washAlpha(): Float = when (this) {
-    MapStyleId.PERGAMINO -> 0.70f
-    MapStyleId.PIXEL -> 0.60f
-    MapStyleId.ISLA -> 0.80f
-    else -> 0.25f
-}
-
 /** Quantizes [value] 0..1 to [steps] levels; used by the sweep of stepped styles. */
 fun stepValue(value: Float, steps: Int): Float = floor(value * steps) / steps
 

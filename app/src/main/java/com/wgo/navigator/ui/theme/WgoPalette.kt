@@ -19,7 +19,9 @@ data class WgoMapPalette(
     val route: Color,
     val routeHalo: Color,
     val player: Color,
-    val rangeRing: Color
+    val rangeRing: Color,
+    /** What the tile filter turns OSM streets into (map-street / ms-<style>-street; >= 3:1 against [ground]). */
+    val street: Color
 )
 
 /**
@@ -92,7 +94,8 @@ val DaylightPalette = WgoPalette(
         route = Color(0xFF0052FF),
         routeHalo = Color(0xFFFFFFFF),
         player = Color(0xFF000000),
-        rangeRing = Color(0x24000000)
+        rangeRing = Color(0x24000000),
+        street = Color(0xFF3B507D)
     )
 )
 
@@ -124,7 +127,8 @@ val NightPalette = WgoPalette(
         route = Color(0xFF00D4FF),
         routeHalo = Color(0xFF0052FF),
         player = Color(0xFFFFFFFF),
-        rangeRing = Color(0x1FFFFFFF)
+        rangeRing = Color(0x1FFFFFFF),
+        street = Color(0xFF5A78B8)
     )
 )
 

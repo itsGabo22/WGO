@@ -20,11 +20,11 @@ private const val RANGE_RING_ALPHA = 0.18f
 
 private fun staticMap(
     ground: Color, building: Color, park: Color, water: Color, road: Color,
-    roadMajor: Color, roadCasing: Color, route: Color, routeHalo: Color, player: Color
+    roadMajor: Color, roadCasing: Color, route: Color, routeHalo: Color, player: Color, street: Color
 ) = WgoMapPalette(
     ground = ground, building = building, park = park, water = water, road = road,
     roadMajor = roadMajor, roadCasing = roadCasing, route = route, routeHalo = routeHalo,
-    player = player, rangeRing = player.copy(alpha = RANGE_RING_ALPHA)
+    player = player, rangeRing = player.copy(alpha = RANGE_RING_ALPHA), street = street
 )
 
 // ms-<style>-<role> tokens from docs/design/tokens.json (identical in Daylight and Night).
@@ -36,9 +36,10 @@ private val BarrioMap = staticMap(
     road = Color(0xFF3A3F3A),
     roadMajor = Color(0xFF23262A),
     roadCasing = Color(0xFF8D9A82),
-    route = Color(0xFFFFD23F),
+    route = Color(0xFFFFEA9A),
     routeHalo = Color(0xFF23262A),
-    player = Color(0xFFFFFFFF)
+    player = Color(0xFFFFFFFF),
+    street = Color(0xFFD2DBC6)
 )
 
 private val PergaminoMap = staticMap(
@@ -49,9 +50,10 @@ private val PergaminoMap = staticMap(
     road = Color(0xFFF6ECD2),
     roadMajor = Color(0xFFFFF6DD),
     roadCasing = Color(0xFF8A6A3B),
-    route = Color(0xFFB3261E),
+    route = Color(0xFF9E1F18),
     routeHalo = Color(0xFFFFF6DD),
-    player = Color(0xFF2B1D0E)
+    player = Color(0xFF2B1D0E),
+    street = Color(0xFF7A5C30)
 )
 
 private val NeonMap = staticMap(
@@ -64,7 +66,8 @@ private val NeonMap = staticMap(
     roadCasing = Color(0xFF12002A),
     route = Color(0xFF00F0FF),
     routeHalo = Color(0xFF12002A),
-    player = Color(0xFFFFFFFF)
+    player = Color(0xFFFFFFFF),
+    street = Color(0xFFFF2BD6)
 )
 
 private val PixelMap = staticMap(
@@ -75,9 +78,10 @@ private val PixelMap = staticMap(
     road = Color(0xFF8BAC0F),
     roadMajor = Color(0xFF306230),
     roadCasing = Color(0xFF306230),
-    route = Color(0xFF0F380F),
+    route = Color(0xFF082808),
     routeHalo = Color(0xFF9BBC0F),
-    player = Color(0xFF0F380F)
+    player = Color(0xFF0F380F),
+    street = Color(0xFF204220)
 )
 
 private val CircuitoMap = staticMap(
@@ -90,7 +94,8 @@ private val CircuitoMap = staticMap(
     roadCasing = Color(0xFF0D0F13),
     route = Color(0xFFFFD400),
     routeHalo = Color(0xFF0D0F13),
-    player = Color(0xFFFF6B6B)
+    player = Color(0xFFFF6B6B),
+    street = Color(0xFFE8ECF2)
 )
 
 private val SonarMap = staticMap(
@@ -103,7 +108,8 @@ private val SonarMap = staticMap(
     roadCasing = Color(0xFF02100E),
     route = Color(0xFF7DFFE0),
     routeHalo = Color(0xFF02100E),
-    player = Color(0xFFFFFFFF)
+    player = Color(0xFFFFFFFF),
+    street = Color(0xFF1FB5A2)
 )
 
 private val IslaMap = staticMap(
@@ -114,9 +120,10 @@ private val IslaMap = staticMap(
     road = Color(0xFFF3E9C6),
     roadMajor = Color(0xFFFFF7DA),
     roadCasing = Color(0xFFA89A6A),
-    route = Color(0xFFB83A00),
+    route = Color(0xFF8F2C00),
     routeHalo = Color(0xFFFFF7DA),
-    player = Color(0xFF10240A)
+    player = Color(0xFF10240A),
+    street = Color(0xFF5E5535)
 )
 
 val MapStyleId.fx: MapFx

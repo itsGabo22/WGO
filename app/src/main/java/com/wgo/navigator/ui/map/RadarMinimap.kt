@@ -114,8 +114,7 @@ fun RadarMinimap(
             )
         }
 
-        // Wash so the tiles never fight the route.
-        Box(Modifier.fillMaxSize().background(style.palette.ground.copy(alpha = style.id.washAlpha())))
+        // (No ground wash since P6-B: the tile filter already maps land to `ground`; a wash only cut street contrast.)
 
         // Static style effects (hatch, scanlines, grid, vignette...): no clock read, so this layer is cached.
         Box(Modifier.fillMaxSize().graphicsLayer().drawBehind { drawMapFxStatic(style, 1.dp.toPx()) })
