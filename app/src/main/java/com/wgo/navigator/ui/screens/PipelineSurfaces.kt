@@ -34,6 +34,7 @@ import com.wgo.navigator.ui.components.MassiveButtonVariant
 import com.wgo.navigator.ui.components.MicOrb
 import com.wgo.navigator.ui.components.MicState
 import com.wgo.navigator.ui.components.PermissionDenied
+import androidx.compose.ui.semantics.contentDescription
 import com.wgo.navigator.ui.components.StatusBadge
 import com.wgo.navigator.ui.components.StatusBadgeVariant
 import com.wgo.navigator.ui.components.WgoChip
@@ -126,8 +127,9 @@ fun ScreenWorking(
 }
 
 /**
- * CONFIRM PLACE. Badge (soft, "DESTINO", widest EN label about 96) @22 (100.3); name `headline-sm` 2 lines 150x40
- * @44 (94.0, live region); "a 1,8 km · street" `body-md` one line 160x18 @86 (82.4); GO MassiveButton 120 wide
+ * CONFIRM PLACE (P6-B). Name `headline-sm` 2 lines 130x40 @28 (99.5, live region, announced as "DESTINO: name");
+ * subtitle `body-md` 150x36 @70 (80.4): line 1 "a 1,8 km", line 2 the neighbourhood / address, ellipsis at 2 lines
+ * (the old one-line "a 1,8 km · street" truncated the neighbourhood; the "DESTINO" badge made room); GO MassiveButton 120 wide
  * centred at 134 (65.7 at s = 1, 66.1 with the 56.7 dp touch height of s = 0.846); "© OPENSTREETMAP" `label-sm`
  * 130x12 @164 (87.7, one line, no wrap); OTHER chip "OTRO 1/3" 104x32 @176 (102.4), shown only with more than one result. The GO and
  * OTHER hit boxes never overlap (105.6-162.4 and 163.6-220.3 at s = 0.846). Static: no clock.
@@ -145,19 +147,16 @@ fun ScreenConfirmPlace(
 ) {
     val palette = Wgo.palette
     val language = LocalLanguage.current
-    val badge = string(StringKey.CONFIRM_BADGE)
+    // The "DESTINO" badge is gone (P6-B: the two-line subtitle needs its room); screen readers still hear it.
+    val spokenName = "${string(StringKey.CONFIRM_BADGE)}: ${place.name}"
+    // Distance on line 1, neighbourhood / address on line 2; without a distance the address may use both lines.
     val subtitle = listOfNotNull(
         distanceM?.let { String.format(string(StringKey.DIST_AWAY), formatDistance(it, language)) },
         place.address.takeIf { it.isNotBlank() }
-    ).joinToString(" · ")
+    ).joinToString("\n")
     val option = String.format(string(StringKey.CONFIRM_OPTION), index + 1, count)
 
     Box(modifier.fillMaxSize().background(palette.canvas)) {
-        StatusBadge(
-            text = badge,
-            variant = StatusBadgeVariant.Soft,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = 22.dp).wgoRiseIn()
-        )
         Text(
             text = place.name,
             color = palette.ink,
@@ -167,9 +166,12 @@ fun ScreenConfirmPlace(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .offset(y = 44.dp)
-                .width(150.dp)
-                .semantics { liveRegion = LiveRegionMode.Polite }
+                .offset(y = 28.dp)
+                .width(130.dp)
+                .semantics {
+                    contentDescription = spokenName
+                    liveRegion = LiveRegionMode.Polite
+                }
                 .wgoRiseIn()
         )
         if (subtitle.isNotEmpty()) Text(
@@ -177,9 +179,9 @@ fun ScreenConfirmPlace(
             color = palette.inkMuted,
             style = WgoType.bodyMd,
             textAlign = TextAlign.Center,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = 86.dp).width(160.dp).wgoRiseIn()
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = 70.dp).width(150.dp).wgoRiseIn()
         )
         val goTouch = wgoTouchSide(52.dp)
         MassiveButton(

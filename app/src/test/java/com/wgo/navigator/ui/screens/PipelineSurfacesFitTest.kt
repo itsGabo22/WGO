@@ -22,9 +22,9 @@ class PipelineSurfacesFitTest {
     )
 
     private val confirm = listOf(
-        Box("confirm badge", 96f, 18f, 22f),
-        Box("confirm name", 150f, 40f, 44f),
-        Box("confirm subtitle", 160f, 18f, 86f),
+        // P6-B: no badge; the name moves up and narrows, the subtitle takes two lines (distance / neighbourhood).
+        Box("confirm name", 130f, 40f, 28f),
+        Box("confirm subtitle (2 lines)", 150f, 36f, 70f),
         Box("confirm GO (s=1)", 120f, 52f, 134f - 26f),
         Box("confirm GO (s=0.846)", 120f, wgoMinTouchRefDp(0.846f), 134f - wgoMinTouchRefDp(0.846f) / 2),
         Box("confirm attribution", 130f, 12f, 164f),
@@ -43,6 +43,15 @@ class PipelineSurfacesFitTest {
         println(report.joinToString("\n") { (b, f) -> "%-24s %5.1f".format(b.name, f) })
         val bad = report.filter { it.second > WGO_FIT_LIMIT_GW5P }
         assertTrue("over the limit: $bad", bad.isEmpty())
+    }
+
+    @Test fun theConfirmTextStacksAboveGo() {
+        val nameBottom = 28f + 40f
+        val subtitleTop = 70f
+        val subtitleBottom = 70f + 36f
+        val goTop = 134f - 26f
+        assertTrue("name ends $nameBottom, subtitle starts $subtitleTop", nameBottom <= subtitleTop)
+        assertTrue("subtitle ends $subtitleBottom, GO starts $goTop", subtitleBottom <= goTop)
     }
 
     @Test fun goAndOtherHitBoxesDoNotOverlapOnSmallRound() {
