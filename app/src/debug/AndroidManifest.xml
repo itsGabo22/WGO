@@ -17,6 +17,14 @@
             </intent-filter>
         </receiver>
         <receiver
+            android:name="com.wgo.navigator.debug.MapStyleReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="${applicationId}.debug.MAP_STYLE" />
+            </intent-filter>
+        </receiver>
+        <receiver
             android:name="com.wgo.navigator.debug.UtteranceReceiver"
             android:exported="true"
             tools:ignore="ExportedReceiver">
