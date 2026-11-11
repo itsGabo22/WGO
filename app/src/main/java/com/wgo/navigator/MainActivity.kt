@@ -71,6 +71,7 @@ import com.wgo.navigator.ui.screens.ScreenConfirmPlace
 import com.wgo.navigator.ui.screens.ScreenError
 import com.wgo.navigator.ui.screens.ScreenPlaceNotFound
 import com.wgo.navigator.ui.screens.ScreenVoicePicker
+import com.wgo.navigator.ui.screens.ScreenCredits
 import com.wgo.navigator.ui.screens.ScreenWorking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
@@ -78,7 +79,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 
 enum class ScreenState {
-    Intro, Listening, Working, ConfirmPlace, ModeSelection, Navigation, Arrived, Error, Settings, MapPicker, VoicePicker
+    Intro, Listening, Working, ConfirmPlace, ModeSelection, Navigation, Arrived, Error, Settings, MapPicker, VoicePicker, Credits
 }
 
 /** Per-mode minutes for the mode pads from the straight-line distance (no route request; see [ModeEstimate]). */
@@ -277,7 +278,7 @@ class MainActivity : ComponentActivity() {
                     BackHandler(enabled = currentScreen != ScreenState.Listening || listeningBusy) {
                         when (currentScreen) {
                             ScreenState.Intro -> appViewModel.skipIntro()
-                            ScreenState.MapPicker, ScreenState.VoicePicker -> appViewModel.backToSettings()
+                            ScreenState.MapPicker, ScreenState.VoicePicker, ScreenState.Credits -> appViewModel.backToSettings()
                             ScreenState.Listening ->
                                 if (micDenied) appViewModel.dismissMicDenied() else appViewModel.cancelListening()
                             ScreenState.Working, ScreenState.ConfirmPlace, ScreenState.ModeSelection, ScreenState.Error ->
@@ -442,9 +443,11 @@ class MainActivity : ComponentActivity() {
                                 ScreenSettings(
                                     viewModel = settingsViewModel,
                                     onOpenMapPicker = appViewModel::openMapPicker,
-                                    onOpenVoicePicker = appViewModel::openVoicePicker
+                                    onOpenVoicePicker = appViewModel::openVoicePicker,
+                                    onOpenCredits = appViewModel::openCredits
                                 )
                             }
+                            ScreenState.Credits -> ScreenCredits()
                             ScreenState.VoicePicker -> {
                                 val voiceName by settingsViewModel.voiceName.collectAsState()
                                 ScreenVoicePicker(

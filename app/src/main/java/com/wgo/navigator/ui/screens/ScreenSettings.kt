@@ -43,9 +43,10 @@ private const val ROW_PITCH = 57f
 /** Centres of the P7 rows (MapRow is centred at 174): voice guidance, then voice. */
 internal const val VOICE_MODE_CENTER = 231f
 internal const val VOICE_ROW_CENTER = 288f
+internal const val CREDITS_ROW_CENTER = 345f
 
 /** Scrolled content height: the last row can reach the middle of the dial. */
-private const val CONTENT_HEIGHT = 288f + 22f + 100f
+private const val CONTENT_HEIGHT = 345f + 22f + 100f
 
 /**
  * Settings (spec section 7, P7 update): a vertically scrolling list (touch scroll, position indicator while
@@ -60,7 +61,8 @@ fun ScreenSettings(
     viewModel: SettingsViewModel,
     onOpenMapPicker: () -> Unit,
     modifier: Modifier = Modifier,
-    onOpenVoicePicker: () -> Unit = {}
+    onOpenVoicePicker: () -> Unit = {},
+    onOpenCredits: () -> Unit = {}
 ) {
     val palette = Wgo.palette
     val isDarkMode by viewModel.isDarkMode.collectAsState()
@@ -146,6 +148,14 @@ fun ScreenSettings(
                 opens = true,
                 maxTouchHeight = pitch,
                 modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(VOICE_ROW_CENTER - 22f) - rowExtra)
+            )
+            SettingRow(
+                label = string(StringKey.SET_CREDITS),
+                value = "OpenStreetMap · CARTO · Overture",
+                onClick = onOpenCredits,
+                opens = true,
+                maxTouchHeight = pitch,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(CREDITS_ROW_CENTER - 22f) - rowExtra)
             )
         }
         PositionIndicator(scrollState = scroll)
