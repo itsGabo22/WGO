@@ -35,7 +35,13 @@ class MapContrastTest {
     private fun Color.rgb() = floatArrayOf(red * 255f, green * 255f, blue * 255f)
     private fun FloatArray.dim(d: Float) = FloatArray(3) { this[it] * (1f - d) }
 
-    private data class Row(val style: String, val street: Double, val major: Double, val routeLand: Double, val routeHalo: Double)
+    private data class Row(
+        val style: String, val street: Double, val major: Double, val routeLand: Double, val routeHalo: Double,
+        val routeStreet: Double = 0.0, val haloStreet: Double = 0.0
+    ) {
+        /** The route stands out from the streets: by itself (>= 3:1) or through a contrasting halo (casing). */
+        val routeOverStreets get() = routeStreet >= 3.0 || (haloStreet >= 3.0 && routeHalo >= 3.0)
+    }
 
     private fun rows(): List<Row> = MapStyleId.entries.flatMap { id ->
         listOf(false, true).map { dark ->
@@ -47,18 +53,27 @@ class MapContrastTest {
             val major = minOf(contrast(WgoTileFilter.apply(m, secondary).dim(d), l), contrast(WgoTileFilter.apply(m, primary).dim(d), l))
             val route = style.palette.route.rgb().dim(d)
             val halo = style.palette.routeHalo.rgb().dim(d)
-            Row("$id ${if (dark) "night" else "day"}", contrast(st, l), major, contrast(route, l), contrast(route, halo))
+            Row(
+                "$id ${if (dark) "night" else "day"}", contrast(st, l), major, contrast(route, l), contrast(route, halo),
+                routeStreet = contrast(route, st), haloStreet = contrast(halo, st)
+            )
         }
     }
 
     @Test fun everyStyleMeetsTheLegibilityTargets() {
         val table = rows()
-        println(table.joinToString("\n") { "%-16s street %5.2f  major %5.2f  route:land %5.2f  route:halo %5.2f".format(it.style, it.street, it.major, it.routeLand, it.routeHalo) })
+        println(table.joinToString("\n") {
+            "%-16s street %5.2f  major %5.2f  route:land %5.2f  route:halo %5.2f  route:street %5.2f  halo:street %5.2f  %s".format(
+                it.style, it.street, it.major, it.routeLand, it.routeHalo, it.routeStreet, it.haloStreet,
+                if (it.routeOverStreets) "ok" else "ROUTE BLENDS WITH STREETS"
+            )
+        })
         table.forEach {
             assertTrue("${it.style} street ${it.street}", it.street >= 3.0)
             assertTrue("${it.style} main roads ${it.major}", it.major >= 3.0)
             assertTrue("${it.style} route:land ${it.routeLand}", it.routeLand >= 4.5)
             assertTrue("${it.style} route:halo ${it.routeHalo}", it.routeHalo >= 3.0)
+            assertTrue("${it.style} route over streets: ${it.routeStreet} / halo ${it.haloStreet}", it.routeOverStreets)
         }
     }
 
