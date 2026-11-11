@@ -26,6 +26,12 @@ object WgoTileFilter {
     val OSM_LAND = floatArrayOf(242f, 239f, 233f)
     val OSM_STREET = floatArrayOf(255f, 255f, 255f)
 
+    /**
+     * ARGB of osmdroid's loading placeholder (background and grid lines): the OSM land colour, so the filter turns a
+     * tile that has not arrived yet into the style's `ground` instead of a plain white / grey page.
+     */
+    const val LOADING_TILE_ARGB: Int = (0xFF shl 24) or (242 shl 16) or (239 shl 8) or 233
+
     fun filterFor(style: WgoMapStyle, @Suppress("UNUSED_PARAMETER") dark: Boolean): ColorMatrixColorFilter =
         // COBALTO's palette is already the active theme's (map-ground / map-street); the others are theme-independent.
         ColorMatrixColorFilter(ColorMatrix(streetArray(style.palette.ground, style.palette.street)))

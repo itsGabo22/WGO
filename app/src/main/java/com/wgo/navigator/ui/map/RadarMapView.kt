@@ -63,6 +63,9 @@ fun RadarMapView(
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             isTilesScaledToDpi = true
             tilesScaleFactor = WgoMapConfig.TILE_SCALE
+            // Tiles still loading: OSM land colour, no grid, so the style filter draws them as the style's ground.
+            overlayManager.tilesOverlay.loadingBackgroundColor = WgoTileFilter.LOADING_TILE_ARGB
+            overlayManager.tilesOverlay.loadingLineColor = WgoTileFilter.LOADING_TILE_ARGB
             isHorizontalMapRepetitionEnabled = false
             isVerticalMapRepetitionEnabled = false
             // Static radar: swallow touches so the map cannot be panned.
