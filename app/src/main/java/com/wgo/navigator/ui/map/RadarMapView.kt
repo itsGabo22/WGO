@@ -20,8 +20,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.wgo.navigator.metrics.WgoMetrics
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import android.graphics.Color
+import org.osmdroid.tileprovider.MapTileProviderBasic
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.overlay.TilesOverlay
 import org.osmdroid.util.TileSystem
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
@@ -34,10 +36,11 @@ const val USER_ANCHOR_Y_FRACTION = 150f / 227f
 private val TILE_ZOOM_SHIFT = kotlin.math.ln(WgoMapConfig.TILE_SCALE.toDouble()) / kotlin.math.ln(2.0)
 
 /**
- * Raster tiles only (the overlays are Compose layers above it), clipped to a circle:
+ * Raster tiles only (the overlays are Compose layers above it), clipped to a circle (spec section 9.1, map layers):
+ * - the base layer ([provider]'s base) recoloured by [filter]; with CARTO a second tiles overlay draws the labels above
+ *   it with [labelFilter] (transparent while loading); the route and every other Compose layer sit above both;
  * - the user is held at the fixed anchor with `setMapCenterOffset` and the map is re-centered on [center];
- * - heading-up: `mapOrientation = -bearing`, so the map turns while Compose draws the chevron unrotated;
- * - [filter] recolors the tiles (see [WgoTileFilter]).
+ * - heading-up: `mapOrientation = -bearing`, so the map turns while Compose draws the chevron unrotated.
  * The `MapView` is touched only when one of the inputs changes (about once per second), never per frame, and it is
  * tied to the lifecycle (`onResume` / `onPause` / `onDetach`). No zoom controls, no touch gestures.
  * [onTileSize] reports osmdroid's real tile size in px so overlay math can match it.
@@ -49,23 +52,31 @@ fun RadarMapView(
     zoom: Double,
     filter: ColorMatrixColorFilter,
     modifier: Modifier = Modifier,
+    provider: TileProvider = TileProvider.OSM,
+    labelFilter: ColorMatrixColorFilter? = null,
     onTileSize: (Double) -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var size by remember { mutableStateOf(IntSize.Zero) }
 
+    // The labels layer (CARTO only): its own provider on the shared tile cache; nothing drawn while a tile loads.
+    val labels = remember {
+        TilesOverlay(MapTileProviderBasic(context.applicationContext, MapTiles.cartoLabels), context.applicationContext).apply {
+            loadingBackgroundColor = Color.TRANSPARENT
+            loadingLineColor = Color.TRANSPARENT
+            setHorizontalWrapEnabled(false)
+            setVerticalWrapEnabled(false)
+        }
+    }
+
     val mapView = remember {
         WgoMapConfig.ensure(context) // no-op after the intro warm-up
         MapView(context).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(false)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             isTilesScaledToDpi = true
             tilesScaleFactor = WgoMapConfig.TILE_SCALE
-            // Tiles still loading: OSM land colour, no grid, so the style filter draws them as the style's ground.
-            overlayManager.tilesOverlay.loadingBackgroundColor = WgoTileFilter.LOADING_TILE_ARGB
-            overlayManager.tilesOverlay.loadingLineColor = WgoTileFilter.LOADING_TILE_ARGB
             isHorizontalMapRepetitionEnabled = false
             isVerticalMapRepetitionEnabled = false
             // Static radar: swallow touches so the map cannot be panned.
@@ -89,8 +100,28 @@ fun RadarMapView(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             mapView.onPause()
+            // The MapView detaches the overlays it holds; the labels layer only needs it when it was left out (OSM).
+            val labelsAttached = mapView.overlayManager.contains(labels)
             mapView.onDetach()
+            if (!labelsAttached) labels.onDetach(mapView)
         }
+    }
+
+    // The provider decides the base source, its loading colour (the base's land, so the filter shows `ground`) and
+    // whether the labels layer exists. Runs again only if the provider changes (the OSM fallback).
+    DisposableEffect(mapView, provider) {
+        val base = if (provider == TileProvider.CARTO) MapTiles.cartoBase else MapTiles.osmBase
+        mapView.setTileSource(base)
+        mapView.overlayManager.tilesOverlay.loadingBackgroundColor = provider.base.loadingArgb
+        mapView.overlayManager.tilesOverlay.loadingLineColor = provider.base.loadingArgb
+        if (provider == TileProvider.CARTO) {
+            if (!mapView.overlayManager.contains(labels)) mapView.overlayManager.add(labels)
+        } else {
+            mapView.overlayManager.remove(labels)
+        }
+        mapView.invalidate()
+        WgoMetrics.event("tiles map provider=${provider.name.lowercase()}")
+        onDispose { }
     }
 
     AndroidView(
@@ -107,6 +138,7 @@ fun RadarMapView(
                 map.setMapCenterOffset(0, offsetY)
             }
             map.overlayManager.tilesOverlay.setColorFilter(filter)
+            labels.setColorFilter(labelFilter)
             // Larger tiles from a lower zoom: the same ground on screen (see WgoMapConfig.TILE_SCALE).
             map.controller.setZoom(zoom - TILE_ZOOM_SHIFT)
             map.mapOrientation = -bearing

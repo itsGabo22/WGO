@@ -36,6 +36,8 @@ android {
         buildConfigField("String", "LLM_BASE_URL", localStringField("LLM_BASE_URL"))
         buildConfigField("String", "LLM_MODEL", localStringField("LLM_MODEL"))
         buildConfigField("String", "WGO_CONTACT", localStringField("WGO_CONTACT"))
+        // CARTO basemaps key (P7 map layers); empty = the OpenStreetMap tile pipeline.
+        buildConfigField("String", "MAP_TILE_KEY", localStringField("MAP_TILE_KEY"))
         // Measurement hooks (utterance and intro-replay activity extras). Off in release; R8 drops the guarded code.
         buildConfigField("boolean", "TEST_HOOKS", "false")
     }

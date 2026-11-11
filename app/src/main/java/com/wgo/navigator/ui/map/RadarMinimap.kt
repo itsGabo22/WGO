@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -61,7 +62,9 @@ fun RadarMinimap(
 ) {
     val palette = Wgo.palette
     val dark = palette === NightPalette
-    val filter = remember(style.id, dark) { WgoTileFilter.filterFor(style, dark) }
+    val provider by MapTiles.provider.collectAsState()
+    val filter = remember(style.id, dark, provider) { WgoTileFilter.filterFor(style, dark, provider.base) }
+    val labelFilter = remember(style.id, dark) { WgoTileFilter.labelFilterFor(style) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     var tileSize by remember { mutableDoubleStateOf(RadarProjection.DEFAULT_TILE_SIZE_PX) }
 
@@ -110,6 +113,8 @@ fun RadarMinimap(
                 bearing = heading.toFloat(),
                 zoom = zoom,
                 filter = filter,
+                provider = provider,
+                labelFilter = labelFilter,
                 onTileSize = { tileSize = it; onTileSize(it) }
             )
         }
