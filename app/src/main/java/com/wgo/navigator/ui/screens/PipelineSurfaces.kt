@@ -249,10 +249,11 @@ fun ScreenError(
         PipelineError.RouteUnavailable -> StringKey.ERR_ROUTE_UNAVAILABLE to StringKey.HINT_ROUTE
         PipelineError.AiUnavailable -> StringKey.ERR_AI_UNAVAILABLE to StringKey.HINT_AI
         PipelineError.Timeout -> StringKey.ERR_TIMEOUT to StringKey.HINT_TIMEOUT
+        PipelineError.MicStart -> StringKey.ERR_MIC_START to StringKey.HINT_MIC_START
         PipelineError.MicPermission, PipelineError.LocationPermission -> error("handled above")
     }
     val icon = when (error) {
-        PipelineError.VoiceUnavailable, PipelineError.NotUnderstood -> WgoIcons.Mic
+        PipelineError.VoiceUnavailable, PipelineError.NotUnderstood, PipelineError.MicStart -> WgoIcons.Mic
         PipelineError.PlaceNotFound, PipelineError.RouteUnavailable -> WgoIcons.LocationPin
         else -> WgoIcons.Alert
     }

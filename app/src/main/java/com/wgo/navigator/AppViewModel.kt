@@ -178,6 +178,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                     WgoFailure.NoPermission -> _micDenied.value = true
                     WgoFailure.Unavailable -> fail(PipelineError.VoiceUnavailable, Step.Listen)
                     WgoFailure.Offline -> fail(PipelineError.Offline, Step.Listen)
+                    WgoFailure.NotStarted -> fail(PipelineError.MicStart, Step.Listen)
                     else -> fail(PipelineError.NotUnderstood, Step.Listen)
                 }
             }
@@ -365,7 +366,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     fun retry() {
         when (_error.value) {
             PipelineError.MicPermission, PipelineError.VoiceUnavailable, PipelineError.NotUnderstood,
-            PipelineError.PlaceNotFound, PipelineError.AiUnavailable, null -> runStep(Step.Listen)
+            PipelineError.PlaceNotFound, PipelineError.AiUnavailable, PipelineError.MicStart, null -> runStep(Step.Listen)
             PipelineError.LocationPermission, PipelineError.RouteUnavailable -> runStep(Step.Route)
             PipelineError.Offline, PipelineError.Timeout -> runStep(failedStep)
         }

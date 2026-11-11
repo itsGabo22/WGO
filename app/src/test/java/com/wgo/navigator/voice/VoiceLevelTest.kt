@@ -1,8 +1,6 @@
 package com.wgo.navigator.voice
 
-import android.speech.SpeechRecognizer
 import com.wgo.navigator.Language
-import com.wgo.navigator.core.WgoFailure
 import com.wgo.navigator.core.speechTag
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -23,15 +21,6 @@ class VoiceLevelTest {
         assertTrue("attack should jump most of the way", up >= 0.5f)
         val down = s.push(-2f)
         assertTrue("release should fall slowly", up - down < up * 0.2f)
-    }
-
-    @Test fun errorCodesMapToFailures() {
-        assertEquals(WgoFailure.NotFound, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_NO_MATCH))
-        assertEquals(WgoFailure.NotFound, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_SPEECH_TIMEOUT))
-        assertEquals(WgoFailure.Offline, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_NETWORK))
-        assertEquals(WgoFailure.Offline, InAppVoiceInput.failureFor(11))
-        assertEquals(WgoFailure.NoPermission, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS))
-        assertEquals(WgoFailure.Unavailable, InAppVoiceInput.failureFor(SpeechRecognizer.ERROR_CLIENT))
     }
 
     @Test fun speechTags() {

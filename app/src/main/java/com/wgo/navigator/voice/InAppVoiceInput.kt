@@ -1,20 +1,18 @@
 package com.wgo.navigator.voice
 
 import android.content.Context
-import android.content.Intent
-import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import com.wgo.navigator.Language
 import com.wgo.navigator.core.VoiceEvent
 import com.wgo.navigator.core.VoiceInput
 import com.wgo.navigator.core.WgoFailure
-import com.wgo.navigator.core.speechTag
 import com.wgo.navigator.metrics.WgoMetrics
+import com.wgo.navigator.voice.RecognizerErrors.Action
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
@@ -25,23 +23,33 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Speech to text with the in-app [SpeechRecognizer] (strategy 1). The recognizer is created on demand when [listen]
- * is collected and destroyed on every end: final result, error, [cancel], or the collector going away (Back, onStop).
- * Caps: [MAX_LISTEN_MS] of listening in total and [SILENCE_AFTER_SPEECH_MS] of silence once speech started; after a
- * cap the recognizer is asked to stop and the best transcript so far is used. Offline recognition is preferred; a
- * missing offline language model triggers one automatic online retry within the same session.
+ * Speech to text with the in-app recognizer (strategy 1). A recognizer instance is created on demand when [listen] is
+ * collected and destroyed on every end: final result, error, [cancel], or the collector going away (Back, onStop).
+ * Never two instances at once: an instance is destroyed before the next one is created.
+ *
+ * Errors follow [RecognizerErrors]: only network codes mean "no internet"; a missing language model moves the session
+ * online and through the language tags (the tag that reached "ready" is remembered for the process); a busy,
+ * disconnected or unbinding service is recreated once, [RecognizerErrors.RESTART_DELAY_MS] after the old instance was
+ * destroyed. Caps: [START_TIMEOUT_MS] to get ready (a cold recognizer process takes about 4 s), then [MAX_LISTEN_MS] of
+ * listening and [SILENCE_AFTER_SPEECH_MS] of silence once speech started; after a listening cap the recognizer is
+ * asked to stop and the best transcript so far is used.
  */
 class InAppVoiceInput(
-    context: Context,
-    private val now: () -> Long = { SystemClock.elapsedRealtime() }
+    private val newRecognizer: () -> Recognizer,
+    private val now: () -> Long = { SystemClock.elapsedRealtime() },
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate, // the recognizer lives on the main thread
+    private val pause: suspend (Long) -> Unit = { delay(it) }
 ) : VoiceInput {
-    private val app = context.applicationContext
+    constructor(context: Context) : this({ AndroidRecognizer(context.applicationContext) })
 
     @Volatile
     private var session: ProducerScope<VoiceEvent>? = null
 
-    /** Languages whose offline model turned out to be missing: later sessions go online at once (saves ~2 s). */
+    /** Languages whose offline model turned out to be missing: later sessions go online at once. */
     private val noOfflineModel = java.util.Collections.synchronizedSet(HashSet<Language>())
+
+    /** Per language, the index of the tag that last reached "ready" (later sessions start with it). */
+    private val workingTag = java.util.concurrent.ConcurrentHashMap<Language, Int>()
 
     override fun cancel() {
         session?.close()
@@ -51,16 +59,29 @@ class InAppVoiceInput(
         session = this
         val started = now()
         val smoother = LevelSmoother()
-        var recognizer: SpeechRecognizer? = null
+        val tags = RecognizerErrors.tags(language)
+        var tagIndex = workingTag[language] ?: 0
         var online = language in noOfflineModel
+        var freshRetryUsed = false
+        var recognizer: Recognizer? = null
+        var generation = 0
         var instances = 0
+        var restartJob: Job? = null
         WgoMetrics.inc(WgoMetrics.Counter.RECOGNIZER_SESSION)
         var ready = false
+        var readyAt = 0L
         var speechStarted = false
         var lastVoice = started
         var lastPartial: String? = null
         var stopAt = 0L
         var finished = false
+
+        fun release() {
+            generation++ // callbacks of the released instance are ignored from now on
+            recognizer?.cancel()
+            recognizer?.destroy()
+            recognizer = null
+        }
 
         fun finish(event: VoiceEvent) {
             if (finished) return
@@ -70,133 +91,128 @@ class InAppVoiceInput(
         }
 
         fun begin() {
-            recognizer?.destroy()
-            val r = SpeechRecognizer.createSpeechRecognizer(app)
+            val gen = ++generation
+            val r = newRecognizer()
             instances++
-            r.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    if (!ready) trySend(VoiceEvent.Ready)
+            recognizer = r
+            val request = RecognizerRequest(tags[tagIndex], preferOffline = !online)
+            WgoMetrics.event("voice_attempt n=$instances tag=${request.languageTag} online=$online at_ms=${now() - started}")
+            r.start(request, object : RecognizerListener {
+                private fun stale() = gen != generation || finished
+
+                override fun onReady() {
+                    if (stale() || ready) return
                     ready = true
+                    readyAt = now()
+                    lastVoice = readyAt
+                    workingTag[language] = tagIndex
+                    WgoMetrics.event("voice_ready ms=${readyAt - started} instances=$instances tag=${tags[tagIndex]}")
+                    trySend(VoiceEvent.Ready)
                 }
 
                 override fun onBeginningOfSpeech() {
+                    if (stale()) return
                     speechStarted = true
                     lastVoice = now()
                 }
 
-                override fun onRmsChanged(rmsdB: Float) {
-                    val level = smoother.push(rmsdB)
+                override fun onRms(rmsDb: Float) {
+                    if (stale()) return
+                    val level = smoother.push(rmsDb)
                     if (level >= VOICE_LEVEL) lastVoice = now()
                     trySend(VoiceEvent.Level(level))
                 }
 
-                override fun onPartialResults(partialResults: Bundle?) {
-                    val text = best(partialResults) ?: return
+                override fun onPartial(text: String) {
+                    if (stale()) return
                     if (text != lastPartial) lastVoice = now()
                     lastPartial = text
                     trySend(VoiceEvent.Partial(text))
                 }
 
-                override fun onResults(results: Bundle?) {
-                    val text = best(results) ?: lastPartial
-                    finish(if (text.isNullOrBlank()) VoiceEvent.Failed(WgoFailure.NotFound) else VoiceEvent.Final(text))
+                override fun onResults(text: String?) {
+                    if (stale()) return
+                    val best = text ?: lastPartial
+                    finish(if (best.isNullOrBlank()) VoiceEvent.Failed(WgoFailure.NotFound) else VoiceEvent.Final(best))
                 }
 
-                override fun onError(error: Int) {
-                    WgoMetrics.event("voice_error code=$error ready=$ready online=$online")
-                    when {
-                        !online && error in LANGUAGE_MODEL_ERRORS -> {
-                            online = true
-                            noOfflineModel += language
-                            begin()
+                override fun onError(code: Int) {
+                    if (stale()) return
+                    val action = RecognizerErrors.decide(
+                        code, RecognizerErrors.Attempt(ready, online, tagIndex, tags.size, freshRetryUsed, lastPartial)
+                    )
+                    WgoMetrics.event("voice_error code=$code ready=$ready online=$online tag=${tags[tagIndex]} action=$action")
+                    when (action) {
+                        is Action.Restart -> {
+                            if (!online && action.online) noOfflineModel += language
+                            online = action.online
+                            tagIndex = action.tagIndex
+                            if (action.consumesFreshRetry) freshRetryUsed = true
+                            release()
+                            restartJob = launch {
+                                pause(RecognizerErrors.RESTART_DELAY_MS)
+                                if (!finished) begin()
+                            }
                         }
-                        error in NO_SPEECH_ERRORS && !lastPartial.isNullOrBlank() -> finish(VoiceEvent.Final(lastPartial!!))
-                        else -> finish(VoiceEvent.Failed(failureFor(error)))
+                        is Action.Final -> finish(VoiceEvent.Final(action.text))
+                        is Action.Fail -> finish(VoiceEvent.Failed(action.failure))
                     }
                 }
-
-                override fun onEndOfSpeech() = Unit
-                override fun onBufferReceived(buffer: ByteArray?) = Unit
-                override fun onEvent(eventType: Int, params: Bundle?) = Unit
             })
-            r.startListening(recognizerIntent(language, preferOffline = !online))
-            recognizer = r
         }
 
         begin()
 
-        // Caps: total listening time and trailing silence. After stopListening() the recognizer normally answers with
-        // onResults within a few hundred ms; if it does not, the best partial (or "not understood") ends the session.
+        // Caps: time to get ready, total listening time and trailing silence. After stop() the recognizer normally
+        // answers with onResults within a few hundred ms; if it does not, the best partial (or "not understood") ends
+        // the session.
         val watchdog = launch {
             while (isActive && !finished) {
                 delay(WATCHDOG_TICK_MS)
                 val t = now()
-                if (stopAt == 0L) {
-                    val overTime = t - started >= MAX_LISTEN_MS
-                    val silent = speechStarted && t - lastVoice >= SILENCE_AFTER_SPEECH_MS
-                    if (overTime || silent) {
-                        WgoMetrics.event("voice_stop reason=${if (overTime) "cap" else "silence"} after_ms=${t - started}")
-                        stopAt = t
-                        recognizer?.stopListening()
+                when {
+                    !ready -> if (t - started >= START_TIMEOUT_MS) {
+                        WgoMetrics.event("voice_stop reason=not_ready after_ms=${t - started}")
+                        finish(VoiceEvent.Failed(WgoFailure.NotStarted))
                     }
-                } else if (t - stopAt >= STOP_GRACE_MS) {
-                    val partial = lastPartial
-                    finish(if (partial.isNullOrBlank()) VoiceEvent.Failed(WgoFailure.NotFound) else VoiceEvent.Final(partial))
+                    stopAt == 0L -> {
+                        val overTime = t - readyAt >= MAX_LISTEN_MS
+                        val silent = speechStarted && t - lastVoice >= SILENCE_AFTER_SPEECH_MS
+                        if (overTime || silent) {
+                            WgoMetrics.event("voice_stop reason=${if (overTime) "cap" else "silence"} after_ms=${t - started}")
+                            stopAt = t
+                            recognizer?.stop()
+                        }
+                    }
+                    t - stopAt >= STOP_GRACE_MS -> {
+                        val partial = lastPartial
+                        finish(if (partial.isNullOrBlank()) VoiceEvent.Failed(WgoFailure.NotFound) else VoiceEvent.Final(partial))
+                    }
                 }
             }
         }
 
         awaitClose {
             watchdog.cancel()
+            restartJob?.cancel()
             val t0 = now()
-            recognizer?.cancel()
-            recognizer?.destroy()
-            recognizer = null
+            release()
             if (session === this) session = null
             WgoMetrics.event(
                 "voice_destroyed session_ms=${t0 - started} destroy_ms=${now() - t0} instances=$instances online=$online"
             )
         }
-    }.flowOn(Dispatchers.Main.immediate) // SpeechRecognizer must be created and driven on the main thread
-
-    private fun recognizerIntent(language: Language, preferOffline: Boolean) =
-        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, language.speechTag)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, language.speechTag)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, preferOffline)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_AFTER_SPEECH_MS)
-            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, app.packageName)
-        }
+    }.flowOn(dispatcher)
 
     companion object {
         const val MAX_LISTEN_MS = 8_000L
         const val SILENCE_AFTER_SPEECH_MS = 2_000L
+
+        /** A cold recognizer process needs about 4 s (measured on the Galaxy Watch5 Pro); a restart adds about 0.5 s. */
+        const val START_TIMEOUT_MS = 12_000L
         private const val STOP_GRACE_MS = 1_200L
         private const val WATCHDOG_TICK_MS = 100L
         private const val VOICE_LEVEL = 0.35f
-
-        // Literal values (API 31+ constants) so minSdk 30 code needs no version guard: LANGUAGE_NOT_SUPPORTED,
-        // LANGUAGE_UNAVAILABLE.
-        private val LANGUAGE_MODEL_ERRORS = setOf(12, 13)
-        private val NO_SPEECH_ERRORS = setOf(SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
-
-        /** Maps a [SpeechRecognizer] error code to the app's failure types. */
-        fun failureFor(error: Int): WgoFailure = when (error) {
-            SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> WgoFailure.NotFound
-            SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> WgoFailure.Offline
-            // SERVER_DISCONNECTED (API 31): seen live right after the network came back; transient, so "no internet".
-            11 -> WgoFailure.Offline
-            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> WgoFailure.NoPermission
-            SpeechRecognizer.ERROR_SERVER -> WgoFailure.Server(0)
-            10 -> WgoFailure.Server(429) // TOO_MANY_REQUESTS (API 31)
-            else -> WgoFailure.Unavailable // client, busy, audio, server disconnected, language not supported
-        }
-
-        private fun best(bundle: Bundle?): String? =
-            bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull { it.isNotBlank() }?.trim()
 
         /**
          * Strategy 1 is usable: a recognition service exists AND one is selected (Galaxy Watch4/5 report a service but

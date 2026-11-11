@@ -11,7 +11,9 @@ enum class PipelineError {
     /** Informational: the remote interpreter failed AND the local rules found nothing. */
     AiUnavailable,
     /** Connected, but the server did not answer in time (read timeout). Retry repeats the failed step. */
-    Timeout;
+    Timeout,
+    /** The speech recognizer could not be started (busy or disconnected even after a silent retry). */
+    MicStart;
 
     companion object {
         /**

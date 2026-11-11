@@ -22,6 +22,9 @@ sealed interface WgoFailure {
     /** The remote service answered with an error; [code] is the HTTP status when there is one, else 0. */
     data class Server(val code: Int) : WgoFailure
 
+    /** A local engine (the speech recognizer) could not be started, even after a silent retry. */
+    data object NotStarted : WgoFailure
+
     /** The caller (or the user) cancelled. */
     data object Cancelled : WgoFailure
 }
