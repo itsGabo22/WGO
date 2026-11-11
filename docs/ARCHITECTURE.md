@@ -91,7 +91,9 @@ death the app starts at Home: a trip never resumes by itself.
 mic ──SpeechRecognizer (on device; network recognizer only when the device has no offline model)──> transcript
 transcript ──LocalIntentParser + PlaceAliases──> place query (+ mode)        (no network)
           └─(low confidence only)──> LLM provider: transcript text only, no location, no identifiers
-place query + coarse bias box ──> Nominatim (identifying User-Agent, 1 request/s) ──> up to 3 places
+place name (+ landmark hint) ──> my places (private, on the watch) ──> local places index (Overture, on the watch)
+          └─(no strong local match)──> Nominatim (identifying User-Agent, 1 request/s, <= 3 per utterance) ──> <= 2 places
+          (ranking and acceptance rules: docs/PLACE_SEARCH.md)
 origin fix + destination + mode ──> OSRM (OSM-DE) ──> route polyline + steps
 fixes (one request per trip, screen on or off) ──> NavigationHost ──> NavigationSession ──> NavState / NavEvent ──> UI + haptics + ongoing activity
                                                      └─(off route, at most 1 per 20 s, 3 in a row)──> OSRM again
