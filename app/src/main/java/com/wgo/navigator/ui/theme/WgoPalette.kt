@@ -22,6 +22,25 @@ data class WgoMapPalette(
     val rangeRing: Color
 )
 
+/**
+ * Ambient (always-on, low power) colors, from docs/design/tokens.json (ambient-*). Identical in both themes: ambient
+ * is always black with a short, low-intensity grey ramp (no pure white, no large filled areas).
+ */
+@Immutable
+data class WgoAmbientPalette(
+    val canvas: Color,
+    val ink: Color,
+    val inkMuted: Color,
+    val stroke: Color
+)
+
+val AmbientPalette = WgoAmbientPalette(
+    canvas = Color(0xFF000000),
+    ink = Color(0xFFB0B0B0),
+    inkMuted = Color(0xFF8A8A8A),
+    stroke = Color(0xFF6E6E6E)
+)
+
 /** Semantic colors for one WGO theme. Values come from docs/design/tokens.json; never hard-code colors in screens. */
 @Immutable
 data class WgoPalette(
@@ -40,7 +59,9 @@ data class WgoPalette(
     val onAlert: Color,
     val go: Color,
     val onGo: Color,
-    val map: WgoMapPalette
+    val map: WgoMapPalette,
+    /** Ambient mode (same in both themes). */
+    val ambient: WgoAmbientPalette = AmbientPalette
 )
 
 /** Daylight: light source theme. */
