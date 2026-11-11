@@ -4,7 +4,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -376,7 +379,7 @@ fun ScreenArrived(destination: String, onFinish: () -> Unit, modifier: Modifier 
  * 0.96 (release with [WgoMotion.pop]), as every WGO control does.
  */
 @Composable
-private fun PillButton(
+internal fun PillButton(
     label: String,
     onClick: () -> Unit,
     background: Color,
@@ -384,7 +387,10 @@ private fun PillButton(
     width: Dp,
     height: Dp,
     textStyle: TextStyle,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    border: Color? = null,
+    uppercase: Boolean = true
 ) {
     val reduceMotion = LocalWgoReduceMotion.current
     val interaction = remember { MutableInteractionSource() }
@@ -409,10 +415,24 @@ private fun PillButton(
                     scaleY = scale
                 }
                 .clip(CircleShape)
-                .background(if (pressed) content else background),
+                .background(if (pressed) content else background)
+                .then(if (border != null && !pressed) Modifier.border(1.5.dp, border, CircleShape) else Modifier),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = label.uppercase(), style = textStyle, color = if (pressed) background else content, maxLines = 1)
+            val color = if (pressed) background else content
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp)) {
+                if (icon != null) {
+                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(
+                    text = if (uppercase) label.uppercase() else label,
+                    style = textStyle,
+                    color = color,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

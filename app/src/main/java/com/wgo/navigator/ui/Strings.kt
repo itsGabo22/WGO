@@ -47,6 +47,8 @@ enum class StringKey {
     // Pipeline surfaces
     STAGE_INTERPRETING, STAGE_RESOLVING, CONFIRM_BADGE, BTN_GO, BTN_OTHER, CONFIRM_OPTION, DIST_AWAY, OSM_ATTRIBUTION,
     ERR_PLACE_NOT_FOUND, ERR_ROUTE_UNAVAILABLE, ERR_AI_UNAVAILABLE,
+    // Place not found (P7)
+    NOT_FOUND_TITLE, NOT_FOUND_MAYBE, NOT_FOUND_ASK, BTN_SAY_STREET,
     HINT_SPEAK_AGAIN, HINT_CHECK_CONNECTION, HINT_OTHER_NAME, HINT_ROUTE, HINT_AI, HINT_VOICE_UNAVAILABLE, NAV_TOTALS,
     ERR_TIMEOUT, HINT_TIMEOUT, ETA_ABOUT, ERR_MIC_START, HINT_MIC_START, VOICE_PREPARING, MIC_STATE_PREPARING, SPEAK_NOW, HUD_EXPAND, HUD_COLLAPSE, RECENTER,
     // Live navigation states (P5-D)
@@ -136,6 +138,10 @@ private val es = mapOf(
     StringKey.DIST_AWAY to "a %s",
     StringKey.OSM_ATTRIBUTION to "© OpenStreetMap",
     StringKey.ERR_PLACE_NOT_FOUND to "No encontré ese lugar",
+    StringKey.NOT_FOUND_TITLE to "No encontré «%s»",
+    StringKey.NOT_FOUND_MAYBE to "¿Quizá este?",
+    StringKey.NOT_FOUND_ASK to "Dime el barrio o la calle",
+    StringKey.BTN_SAY_STREET to "DIME LA CALLE",
     StringKey.ERR_ROUTE_UNAVAILABLE to "No hay ruta disponible",
     StringKey.ERR_AI_UNAVAILABLE to "IA no disponible por ahora",
     StringKey.HINT_SPEAK_AGAIN to "Toca reintentar y habla de nuevo.",
@@ -272,6 +278,10 @@ private val en = mapOf(
     StringKey.DIST_AWAY to "%s away",
     StringKey.OSM_ATTRIBUTION to "© OpenStreetMap",
     StringKey.ERR_PLACE_NOT_FOUND to "Place not found",
+    StringKey.NOT_FOUND_TITLE to "I couldn't find «%s»",
+    StringKey.NOT_FOUND_MAYBE to "Maybe this one?",
+    StringKey.NOT_FOUND_ASK to "Tell me the neighbourhood or street",
+    StringKey.BTN_SAY_STREET to "SAY THE STREET",
     StringKey.ERR_ROUTE_UNAVAILABLE to "Route unavailable",
     StringKey.ERR_AI_UNAVAILABLE to "AI temporarily unavailable",
     StringKey.HINT_SPEAK_AGAIN to "Tap retry and speak again.",

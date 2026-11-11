@@ -67,6 +67,7 @@ import com.wgo.navigator.ui.map.RadarProjection
 import com.wgo.navigator.route.ModeEstimate
 import com.wgo.navigator.ui.screens.ScreenConfirmPlace
 import com.wgo.navigator.ui.screens.ScreenError
+import com.wgo.navigator.ui.screens.ScreenPlaceNotFound
 import com.wgo.navigator.ui.screens.ScreenWorking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
@@ -375,7 +376,16 @@ class MainActivity : ComponentActivity() {
                             ScreenState.Error -> {
                                 val error by appViewModel.error.collectAsState()
                                 val locationPermission by appViewModel.locationPermission.collectAsState()
-                                error?.let {
+                                val notFound by appViewModel.notFound.collectAsState()
+                                val missing = notFound
+                                if (error == PipelineError.PlaceNotFound && missing != null) {
+                                    ScreenPlaceNotFound(
+                                        name = missing.name,
+                                        suggestions = missing.suggestions,
+                                        onSuggestion = appViewModel::onNotFoundSuggestion,
+                                        onSayStreet = appViewModel::onSayStreet
+                                    )
+                                } else error?.let {
                                     ScreenError(
                                         error = it,
                                         onRetry = appViewModel::retry,

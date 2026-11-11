@@ -308,7 +308,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         when (result.kind) {
             IntentKind.Navigate -> {
                 val query = result.placeQuery ?: return fail(PipelineError.NotUnderstood, Step.Listen)
-                val request = PlaceRequest(query, result.placeHint, result.placeCategory)
+                // After "DIME LA CALLE" the new words locate the name that was not found (they only re-rank).
+                val retryName = hintRetryName
+                hintRetryName = null
+                hintRetryWords = if (retryName != null) listOfNotNull(query, result.placeHint).joinToString(" ") else null
+                val request = if (retryName != null) PlaceRequest(retryName, hintRetryWords)
+                else PlaceRequest(query, result.placeHint, result.placeCategory)
                 placeRequest = request
                 modeSpoken = result.mode != null
                 _selectedMode.value = result.mode
@@ -321,6 +326,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     }
 
     private suspend fun resolve(request: PlaceRequest) {
+        _notFound.value = null
         _stage.value = WorkStage.Resolving
         _screen.value = ScreenState.Working
         val near = locationSource.lastKnown()?.let { GeoCoord(it.lat, it.lon) }
@@ -338,13 +344,49 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 _screen.value = ScreenState.ConfirmPlace
                 _haptics.tryEmit(HapticEvent.Click) // spec section 8: destination understood
             }
-            is Resolution.NotFound -> fail(PipelineError.PlaceNotFound, Step.Resolve)
+            is Resolution.NotFound -> {
+                // A street / neighbourhood retry that still found nothing: search the words themselves.
+                val street = hintRetryWords
+                hintRetryWords = null
+                if (street != null) return resolve(PlaceRequest(street))
+                _notFound.value = NotFoundInfo(request.name, found.suggestions)
+                fail(PipelineError.PlaceNotFound, Step.Resolve)
+            }
             // A server error keeps the "no internet" message it always had; only a read timeout is "too slow".
             is Resolution.Failed -> fail(PipelineError.forNetwork(found.failure, PipelineError.Offline), Step.Resolve)
         }
     }
 
-    /** OTHER: the next of the (up to three) results, no request. */
+    /** What the place-not-found surface shows (null for every other error). */
+    data class NotFoundInfo(val name: String, val suggestions: List<Place>)
+
+    private val _notFound = MutableStateFlow<NotFoundInfo?>(null)
+    val notFound: StateFlow<NotFoundInfo?> = _notFound.asStateFlow()
+
+    /** Set by "DIME LA CALLE": the name the next utterance locates. */
+    private var hintRetryName: String? = null
+
+    /** The retry's own words, searched as a place when the name still has no hit. */
+    private var hintRetryWords: String? = null
+
+    /** The suggestion pill: Confirm place with the one or two partial matches (OTRO cycles them, no request). */
+    fun onNotFoundSuggestion() {
+        val s = _notFound.value?.suggestions.orEmpty()
+        if (s.isEmpty()) return
+        _places.value = s
+        _placeIndex.value = 0
+        _error.value = null
+        _screen.value = ScreenState.ConfirmPlace
+        _haptics.tryEmit(HapticEvent.Click) // spec section 8: destination understood
+    }
+
+    /** "DIME LA CALLE": listen again; the words become the hint for the name that was not found. */
+    fun onSayStreet() {
+        hintRetryName = _notFound.value?.name
+        runStep(Step.Listen)
+    }
+
+    /** OTHER: the next of the (up to two) results, no request. */
     fun onOtherPlace() {
         val n = _places.value.size
         if (n > 1) _placeIndex.value = (_placeIndex.value + 1) % n
@@ -443,6 +485,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         _error.value = null
         _transcript.value = ""
         _places.value = emptyList()
+        _notFound.value = null
+        hintRetryName = null
+        hintRetryWords = null
         _selectedMode.value = null
         modeSpoken = false
         _screen.value = ScreenState.Listening

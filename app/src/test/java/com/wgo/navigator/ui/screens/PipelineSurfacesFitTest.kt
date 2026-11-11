@@ -38,8 +38,23 @@ class PipelineSurfacesFitTest {
         Box("error retry", 120f, 32f, 170f)
     )
 
+    // P7 place-not-found surface (spec 7.1): title, hint, suggestion pill @108, mic pill @165.
+    private val notFound = listOf(
+        Box("not-found title", 130f, 40f, 26f),
+        Box("not-found maybe", 150f, 18f, 68f),
+        Box("not-found ask (no match)", 160f, 36f, 90f),
+        Box("not-found suggestion", 150f, 36f, 108f - 18f),
+        Box("not-found say street", 150f, 36f, 165f - 18f)
+    )
+
+    @Test fun notFoundRowsHitBoxesDoNotOverlapOnSmallRound() {
+        val touch = wgoMinTouchRefDp(0.846f)
+        assertTrue("rows 57 dp apart, touch $touch", 108f + touch / 2 <= 165f - touch / 2)
+        assertTrue("title ends 66, suggestion touch starts ${108f - touch / 2}", 26f + 40f <= 108f - touch / 2)
+    }
+
     @Test fun everyBoxFits() {
-        val report = (working + confirm + error).map { b -> b to wgoFit(b.w, b.h, b.top) }
+        val report = (working + confirm + error + notFound).map { b -> b to wgoFit(b.w, b.h, b.top) }
         println(report.joinToString("\n") { (b, f) -> "%-24s %5.1f".format(b.name, f) })
         val bad = report.filter { it.second > WGO_FIT_LIMIT_GW5P }
         assertTrue("over the limit: $bad", bad.isEmpty())

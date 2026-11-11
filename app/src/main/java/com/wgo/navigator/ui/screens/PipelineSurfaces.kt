@@ -22,6 +22,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.Text
 import com.wgo.navigator.PipelineError
@@ -226,6 +228,84 @@ fun ScreenConfirmPlace(
                     .semantics { stateDescription = option }
             )
         }
+    }
+}
+
+/**
+ * PLACE NOT FOUND (P7, spec 7.1): title `headline-sm` "No encontré «X»" 130x40 @26 (101.1, live region). With
+ * partial matches: hint "¿Quizá este?" 150x18 @68 (84.4) and a suggestion pill 150x36 centred at 108 (75.3) with the
+ * nearest one's name ("+1" when there are two) that opens Confirm place with them; without: the hint "Dime el barrio
+ * o la calle" 160x36 @90. The mic pill "DIME LA CALLE" 150x36 centred at 165 (94.8) listens again for a street or
+ * neighbourhood. Rows 57 dp apart: their 48 REAL dp hit boxes never overlap down to s = 0.846. Static, silent.
+ */
+@Composable
+fun ScreenPlaceNotFound(
+    name: String,
+    suggestions: List<Place>,
+    onSuggestion: () -> Unit,
+    onSayStreet: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = Wgo.palette
+    Box(modifier.fillMaxSize().background(palette.canvas)) {
+        Text(
+            text = String.format(string(StringKey.NOT_FOUND_TITLE), name),
+            style = WgoType.headlineSm,
+            color = palette.ink,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = 26.dp)
+                .width(130.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        val touch = wgoTouchSide(36.dp)
+        val first = suggestions.firstOrNull()
+        if (first != null) {
+            Text(
+                text = string(StringKey.NOT_FOUND_MAYBE),
+                style = WgoType.bodyMd,
+                color = palette.inkMuted,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = 68.dp).width(150.dp)
+            )
+            PillButton(
+                label = first.name + if (suggestions.size > 1) " +${suggestions.size - 1}" else "",
+                onClick = onSuggestion,
+                background = palette.surface,
+                content = palette.ink,
+                border = palette.ink,
+                width = 150.dp,
+                height = 36.dp,
+                textStyle = WgoType.bodyMd.copy(fontWeight = FontWeight.Bold),
+                uppercase = false,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = topFor(108f, touch))
+            )
+        } else {
+            Text(
+                text = string(StringKey.NOT_FOUND_ASK),
+                style = WgoType.bodyMd,
+                color = palette.inkMuted,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = 90.dp).width(160.dp)
+            )
+        }
+        PillButton(
+            label = string(StringKey.BTN_SAY_STREET),
+            onClick = onSayStreet,
+            background = palette.primary,
+            content = palette.onPrimary,
+            icon = WgoIcons.Mic,
+            width = 150.dp,
+            height = 36.dp,
+            textStyle = WgoType.button.copy(fontSize = 13.sp),
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = topFor(165f, touch))
+        )
     }
 }
 
