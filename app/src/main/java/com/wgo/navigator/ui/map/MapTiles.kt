@@ -40,6 +40,13 @@ object MapTiles {
         WgoMetrics.event("tiles provider=${_provider.value.name.lowercase()} reason=${if (key.isEmpty()) "no_key" else "key"}")
     }
 
+    /** CARTO refused the key: OSM for the rest of the process (logged once). */
+    fun reject(reason: String) {
+        if (_provider.compareAndSet(TileProvider.CARTO, TileProvider.OSM)) {
+            WgoMetrics.event("tiles provider=osm reason=$reason")
+        }
+    }
+
     private val keyTag: String by lazy {
         MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).take(4).joinToString("") { "%02x".format(it) }
     }
@@ -51,6 +58,23 @@ object MapTiles {
     val cartoLabels: ITileSource by lazy { CartoTileSource("wgo-carto-lab2x-$keyTag", "light_only_labels", retina = true, key) }
 
     val osmBase: ITileSource get() = TileSourceFactory.MAPNIK
+
+    /** SHA-256 of CARTO's four "API KEY REQUIRED" images (dark/light, nolabels/only_labels), 2005-2513 bytes. */
+    private val PLACEHOLDERS = setOf(
+        "cc3f31364a735d9a8179af36b3db7617cdff8bdb0248654ebcc3df91607abedc",
+        "a6d428bc422a74fe7ad9b023c85335248653c9d142939ae98b476068ce51fde4",
+        "69be4aecf9f814ba45d585801a5aa41e79b16fc88eafec5b1954a9f06a69e6be",
+        "d8602cc7a1bd26a5c3316859ed99655f0d06064cfc02a016b403c0b6cfb19843"
+    )
+    private const val PLACEHOLDER_MIN_BYTES = 1_900
+    private const val PLACEHOLDER_MAX_BYTES = 2_600
+
+    /** True when [bytes] is CARTO's key-required image. */
+    fun isPlaceholder(bytes: ByteArray): Boolean {
+        if (bytes.size !in PLACEHOLDER_MIN_BYTES..PLACEHOLDER_MAX_BYTES) return false
+        val hex = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        return hex in PLACEHOLDERS
+    }
 }
 
 /**
@@ -68,4 +92,13 @@ private class CartoTileSource(name: String, private val layer: String, private v
     override fun getTileURLString(pMapTileIndex: Long): String =
         baseUrl + layer + "/" + MapTileIndex.getZoom(pMapTileIndex) + "/" + MapTileIndex.getX(pMapTileIndex) + "/" +
             MapTileIndex.getY(pMapTileIndex) + (if (retina) "@2x" else "") + ".png?key=" + key
+
+    override fun getDrawable(aFileInputStream: InputStream): Drawable? {
+        val bytes = aFileInputStream.readBytes()
+        if (MapTiles.isPlaceholder(bytes)) {
+            MapTiles.reject("key_refused")
+            return null
+        }
+        return super.getDrawable(ByteArrayInputStream(bytes))
+    }
 }
