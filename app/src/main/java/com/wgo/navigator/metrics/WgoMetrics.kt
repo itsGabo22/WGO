@@ -103,6 +103,14 @@ object WgoMetrics {
             append(" net_").append(it.name.lowercase()).append('=').append(netCount.get(it.ordinal))
                 .append('/').append(netBytes.get(it.ordinal)).append('B')
         }
+        // Everything the app received / sent since boot (map tiles are almost all of it while navigating).
+        try {
+            val uid = android.os.Process.myUid()
+            append(" uid_rx=").append(android.net.TrafficStats.getUidRxBytes(uid)).append('B')
+            append(" uid_tx=").append(android.net.TrafficStats.getUidTxBytes(uid)).append('B')
+        } catch (e: RuntimeException) {
+            // JVM unit tests: the Android classes are stubs there.
+        }
     }
 
     private fun frame() {
