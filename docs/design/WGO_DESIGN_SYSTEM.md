@@ -37,8 +37,12 @@ Source of truth for the visual and motion design of the native Wear OS app (Kotl
 | `map-route-halo` | `#ffffff` | `#0052ff` | Contorno de la ruta y puntos de flujo animados. |
 | `map-player` | `#000000` | `#ffffff` | Chevron del usuario, siempre apuntando arriba (heading-up). |
 | `map-range-ring` | `#00000024` | `#ffffff1f` | Anillos de alcance del radar centrados en el usuario (decorativos). |
+| `ambient-canvas` | `#000000` | `#000000` | Fondo del modo ambiente (siempre negro, en ambos temas). >= 85% de la pantalla negra; sin áreas rellenas grandes. |
+| `ambient-ink` | `#b0b0b0` | `#b0b0b0` | Texto principal y trazo del icono de maniobra en ambiente: gris claro, nunca blanco puro. 9.7:1 sobre ambient-canvas. |
+| `ambient-ink-muted` | `#8a8a8a` | `#8a8a8a` | Texto secundario en ambiente (restante, ETA). 6.1:1 sobre ambient-canvas. |
+| `ambient-stroke` | `#6e6e6e` | `#6e6e6e` | Trazos finos decorativos en ambiente. 4.1:1; nunca porta texto. |
 
-Rules: `aura` is decorative only (never carries text). Cobalt as *text or stroke on canvas* is `primary-ink` (Night lightens it to #5C8DFF because #0052FF on black is only 3.65:1). Control borders use `ink` 1.5 dp, never `surface-raised`. `surface-raised` is for decorative tracks only.
+Rules: `ambient-*` are the only colours of the ambient (always-on) screen, identical in both themes (Kotlin: `WgoPalette.ambient`). `aura` is decorative only (never carries text). Cobalt as *text or stroke on canvas* is `primary-ink` (Night lightens it to #5C8DFF because #0052FF on black is only 3.65:1). Control borders use `ink` 1.5 dp, never `surface-raised`. `surface-raised` is for decorative tracks only.
 
 ### Map styles (8, original, genre-inspired)
 
@@ -125,7 +129,7 @@ Every geometry value in this document is written in **reference dp** on the 227 
 | Wear OS Large Round (reference) | 227 | 1.000 | previews and unit tests |
 | Large round sanity case | 240 | 1.057 | previews and unit tests |
 
-Runtime verification (P5, 2026-11): the Small Round emulator (192 dp, s = 0.846) runs every screen; uiautomator bounds and the fit unit tests (`PipelineSurfacesFitTest`, `NavigationSurfacesFitTest`) check the placements. The real Galaxy Watch5 Pro is still pending.
+Runtime verification (P5, 2026-11): the Small Round emulator (192 dp, s = 0.846) runs every screen; uiautomator bounds and the fit unit tests (`PipelineSurfacesFitTest`, `NavigationSurfacesFitTest`) check the placements. P6-A (2026-11-11): the real Galaxy Watch5 Pro (SM-R920, which now runs Wear OS 6 / API 36, s = 0.991) ran the pipeline and a full mocked trip (intro fit report from the device: lockup 50.9, tagline 69.1, all <= 103); its ambient screen could not be triggered over Wi-Fi debugging.
 
 ## 5. Motion
 
@@ -142,7 +146,7 @@ Runtime verification (P5, 2026-11): the Small Round emulator (192 dp, s = 0.846)
 Easings: `Standard` cubic-bezier(0.2, 0, 0, 1); `EmphasizedDecel` (0.05, 0.7, 0.1, 1); `EmphasizedAccel` (0.3, 0, 0.8, 0.15).
 Ambient loops (linear): mic breathing 1100 ms reverse (scale 1 -> 1.06); pulse rings 2400 ms (scale 1 -> 2.1, alpha 0.5 -> 0, second ring offset 1200 ms); bezel comets 3200 ms (second one reversed, 4600 ms); radar sweep 3600 ms; route flow 1000 ms; player halo 1800 ms; blip ping 2400 ms; voice bars 0.8-1.4 s each.
 
-Performance and accessibility: animate in the draw phase only (`graphicsLayer {}`, `Canvas`/`drawBehind`, read `State` inside the lambda); never animate layout size, use scale; the rule "max 2 `InfiniteTransition` per screen" is implemented by one shared `WgoClock` per screen (a single frame loop, zero `InfiniteTransition`s; pieces read it only inside draw lambdas); one shared phase for the 40 voice bars; no blur/RenderEffect. Ambient mode: stop all loops, draw outlines only in `ink`, shift content 1-2 dp per minute. Reduce motion (`Settings.Global.ANIMATOR_DURATION_SCALE == 0f`): static states and 120 ms cuts. Target 60 fps.
+Performance and accessibility: animate in the draw phase only (`graphicsLayer {}`, `Canvas`/`drawBehind`, read `State` inside the lambda); never animate layout size, use scale; the rule "max 2 `InfiniteTransition` per screen" is implemented by one shared `WgoClock` per screen (a single frame loop, zero `InfiniteTransition`s; pieces read it only inside draw lambdas); one shared phase for the 40 voice bars; no blur/RenderEffect. Ambient mode: stop all loops (no `WgoClock`, no map), draw outlines and text only in the `ambient-*` greys on `ambient-canvas`, thin strokes (1.5 dp), no gradients, no large fills; in low-bit ambient draw icons without anti-aliasing. The app does NOT shift content for burn-in (P6-A decision, current Wear OS guidance): the system shifts the display when burn-in protection is required, so every element keeps >= 10 dp inside the dial (fit <= 103). Redraw only on the ambient tick (about once a minute) or when the maneuver / guidance state changes. Reduce motion (`Settings.Global.ANIMATOR_DURATION_SCALE == 0f`): static states and 120 ms cuts. Target 60 fps.
 
 ## 6. Components
 
@@ -199,7 +203,9 @@ Fit values are against the Galaxy Watch5 Pro limit of 103 (section 4) and are ch
 - **END NAVIGATION?** (Back or CANCEL while navigating) - "¿Terminar la navegación?" 150x40 @44; destination @86; TERMINAR MassiveButton `alert` with close icon, 150 centred at 134 (79.1; 120 dp clipped the label); SEGUIR chip @176. Back on this surface = SEGUIR.
 - **ARRIVED (minimal, P5)** - section 7's ScreenArrival without its timeline (the celebration is P6): bezel closed in `go`, disc 60 `go` with check @36, "¡Llegamos!" @104, destination @134, FINALIZAR 120x48 inverted **@158** (101.4; the @160 above measures 103.2, over the Watch5 Pro limit).
 
-Under GPS LOST, LOST ROUTE and END NAVIGATION? the radar stays composed (no map rebuild on SEGUIR) with its loops stopped.
+- **AMBIENT NAVIGATION (P6-A)** - only during a trip, when the system enters ambient: `ambient-canvas`; next-maneuver outline icon 40 @30 (83.5, 1.5 dp `ambient-ink` stroke); distance to it `numeral-lg` 150x30 @76 (79.1); instruction or GPS / reroute status `body-md` 160x36 @110 (81.7, 2 lines, live region); remaining · ETA `label-md` uppercase `ambient-ink-muted` 140x14 @158 (88.4). No radar, map, frame loop, animation or gradient. Leaving ambient rebuilds the live navigation screen with no transition. On any other screen ambient draws nothing (black) and the system returns to the watch face after its timeout. Checked by `AmbientNavigationTest`.
+
+Under GPS LOST, LOST ROUTE and END NAVIGATION? the radar stays composed (no map rebuild on SEGUIR) with its loops stopped and its data frozen (no state updates below the surface).
 
 **State machine** - Intro -> Listening -> Working (interpreting -> resolving) -> ConfirmPlace -> (ModeSelection) -> Working (routing) -> Navigation -> Arrived -> Listening; Error from any pipeline step (retry repeats it); Settings <-> MapPicker from Listening. Inside Navigation the engine state picks the surface: WaitingForGps (GPS SEARCHING), Navigating, OffRoute and Rerouting (HUD status), LostRoute, GpsLost, plus the END NAVIGATION? overlay. Back: Intro skips; pipeline goes one step back; Navigation asks END NAVIGATION? (Back again keeps); Arrived goes home. Ending or arriving stops the location request and clears the saved destination; a relaunch never resumes a trip by itself.
 
@@ -219,6 +225,8 @@ Under GPS LOST, LOST ROUTE and END NAVIGATION? the radar stays composed (no map 
 | language switch | `EFFECT_CLICK` | next utterance already in the new language |
 
 Fire haptics from the navigation ViewModel on state change, never from composables. All user-facing strings go through `Strings.kt` (ES default, EN).
+
+Implementation notes (P6-A): the trip rows (turns, GPS lost, arrival) are played by the navigation host inside the foreground navigation service, so they fire once each with the screen off, in ambient or with the app in the background (verified on the emulator and on the Galaxy Watch5 Pro: vibrator records `finished`, usage TOUCH); the pipeline rows stay with the ViewModel and the Activity.
 
 Implementation notes (P5): the turn rows fire once per maneuver and only for real turns (not for "continue", the departure or the arrival), with the same 200 m / 50 m in both modes (this table does not distinguish walking). Events with no row here are silent on purpose: off route, rerouted, GPS recovered, lost route. Voice (TTS) is P6. The same mapping is machine-readable in `tokens.json` (`haptic`).
 
