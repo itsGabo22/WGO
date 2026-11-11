@@ -36,6 +36,7 @@ import com.wgo.navigator.geo.OnlinePlaceSearch
 import com.wgo.navigator.geo.PlaceRequest
 import com.wgo.navigator.geo.PlaceResolver
 import com.wgo.navigator.geo.Resolution
+import com.wgo.navigator.places.MyPlaces
 import com.wgo.navigator.places.PlaceIndex
 import com.wgo.navigator.net.HttpClient
 import com.wgo.navigator.net.WgoUserAgent
@@ -244,7 +245,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     /** My places, then the offline index (loaded on the first search), then Nominatim (docs/PLACE_SEARCH.md). */
     private val placeResolver = PlaceResolver(
         index = PlaceIndex.fromAssets(application),
-        online = OnlinePlaceSearch { q, center, bounded -> geocoder.once(q, center, pipelineLanguage, ONLINE_RESULTS, bounded) }
+        online = OnlinePlaceSearch { q, center, bounded -> geocoder.once(q, center, pipelineLanguage, ONLINE_RESULTS, bounded) },
+        privatePlaces = MyPlaces.fromAssets(application)
     )
     private val router = OsrmRouter(HttpClient(WgoUserAgent.identifying))
 

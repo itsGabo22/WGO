@@ -1,0 +1,16 @@
+[
+  {
+    "aliases": ["casa de prueba", "la casa azul"],
+    "name": "Casa Azul (ejemplo)",
+    "lat": 1.2000,
+    "lon": -77.2700,
+    "note": "Fictional example, not a real place"
+  },
+  {
+    "aliases": ["oficina de prueba"],
+    "name": "Oficina de prueba",
+    "lat": 1.2200,
+    "lon": -77.2900,
+    "note": "Fictional example, not a real place"
+  }
+]
