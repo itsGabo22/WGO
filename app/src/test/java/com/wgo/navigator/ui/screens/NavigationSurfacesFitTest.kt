@@ -107,7 +107,7 @@ class NavigationSurfacesFitTest {
 
     @Test fun theMapControlsFit() {
         val zoom = kotlin.math.hypot(72f, 150f - 113.5f) + 20f
-        val recenter = kotlin.math.abs(98f - 113.5f) + 20f
+        val recenter = kotlin.math.abs(RecenterRule.CENTER_Y_DP - 113.5f) + 20f
         val cancel = wgoFit(86f, 32f, 176f)
         println("zoom %.1f, recenter %.1f, cancel %.1f".format(zoom, recenter, cancel))
         assertTrue(zoom <= WGO_FIT_LIMIT_GW5P)
@@ -121,7 +121,7 @@ class NavigationSurfacesFitTest {
             val cancelH = maxOf(32f, (if (driving) 60f else 48f) / s)
             val hits = listOf(
                 Hit("compact pill", 113.5f, 40f, 112f, maxOf(36f, t)),
-                Hit("recenter", 113.5f, 98f, maxOf(40f, t), maxOf(40f, t)),
+                Hit("recenter", 113.5f, RecenterRule.CENTER_Y_DP, maxOf(40f, t), maxOf(40f, t)),
                 Hit("zoom -", 41.5f, 150f, maxOf(40f, t), maxOf(40f, t)),
                 Hit("zoom +", 185.5f, 150f, maxOf(40f, t), maxOf(40f, t)),
                 Hit("cancel", 113.5f, 192f, 86f, cancelH)

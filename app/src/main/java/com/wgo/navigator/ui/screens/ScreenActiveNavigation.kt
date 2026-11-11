@@ -60,6 +60,11 @@ import com.wgo.navigator.ui.components.WgoIcons
 import com.wgo.navigator.ui.formatDistance
 import com.wgo.navigator.ui.map.DemoRadarSource
 import com.wgo.navigator.ui.map.RadarMinimap
+import com.wgo.navigator.ui.map.USER_ANCHOR_Y_FRACTION
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableStateOf
 import com.wgo.navigator.ui.map.RadarSource
 import com.wgo.navigator.ui.minutesOf
 import com.wgo.navigator.ui.string
@@ -131,11 +136,13 @@ fun ScreenActiveNavigation(
         return
     }
     val covered = endConfirm || navState is NavState.LostRoute || navState is NavState.GpsLost
+    var screenSize by remember { mutableStateOf(IntSize.Zero) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Wgo.palette.canvas)
+            .onSizeChanged { screenSize = it }
     ) {
         // One clock for every looping element of the screen (radar pieces and the GPS-lost overlay).
         val clock = rememberWgoClock()
@@ -269,12 +276,23 @@ fun ScreenActiveNavigation(
                 modifier = Modifier.align(Alignment.TopCenter)
             )
 
-            // RECENTER (explore only): 40 dp `primary` circle centred at (113.5, 98), 48 real dp touch.
+            // RECENTER (explore only): 40 dp `primary` circle centred at (113.5, 108), 48 real dp touch; hidden while
+            // the user's chevron is under it (P7, RecenterRule), so it never covers the user.
             if (explore.exploring) {
-                RecenterButton(
-                    onClick = { explore.startReturn() },
-                    modifier = Modifier.align(Alignment.TopCenter).offset(y = 98.dp - wgoTouchSide(40.dp) / 2)
-                )
+                val density = LocalDensity.current.density
+                val center = explore.viewCenter(radar.location)
+                val userDp = if (center == null || screenSize == IntSize.Zero) null else RadarProjection.toScreen(
+                    radar.location, center, (explore.viewBearing(radar.bearing) ?: radar.bearing).toDouble(), zoom,
+                    screenSize.width / 2f, screenSize.height * USER_ANCHOR_Y_FRACTION, tileSize
+                ).let { p -> Offset(p.x / density, p.y / density) }
+                if (RecenterRule.visible(userDp?.x, userDp?.y)) {
+                    RecenterButton(
+                        onClick = { explore.startReturn() },
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = RecenterRule.CENTER_Y_DP.dp - wgoTouchSide(40.dp) / 2)
+                    )
+                }
             }
 
             // Z-Layer 2.5: ZOOM - at (41.5, 150) and + at (185.5, 150): fixed 40 dp circles, 48 real dp touch (fit 99.4).
