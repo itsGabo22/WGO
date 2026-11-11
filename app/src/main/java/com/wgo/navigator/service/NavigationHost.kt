@@ -6,6 +6,13 @@ import android.content.Intent
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.wgo.navigator.Language
+import com.wgo.navigator.VoiceMode
+import com.wgo.navigator.voice.GuidanceDedupe
+import com.wgo.navigator.voice.GuidancePhrases
+import com.wgo.navigator.voice.GuidancePolicy
+import com.wgo.navigator.voice.Phrase
+import com.wgo.navigator.voice.SpeechEngine
+import kotlinx.coroutines.delay
 import com.wgo.navigator.SettingsRepository
 import com.wgo.navigator.core.Fix
 import com.wgo.navigator.core.LocationProfile
@@ -177,8 +184,20 @@ class NavigationHost private constructor(context: Context) {
         val radar = LiveRadarSource(route.mode, GeoCoord(origin.lat, origin.lon), route.polyline, route.steps.getOrNull(1)?.location)
         _radar.value = radar
         _active.value = true
+        dedupe = GuidanceDedupe()
         tripJob = scope.launch {
-            launch { settings.settings.collect { language = it.language } }
+            // Spoken guidance (spec section 8, P7): the engine exists only during a trip and only when the mode is not
+            // OFF; it is built once, with the language and voice saved when the trip starts.
+            val saved = settings.load()
+            if (saved.voiceMode != VoiceMode.Off && speech == null) {
+                speech = SpeechEngine(app, saved.language, saved.voiceName)
+            }
+            launch {
+                settings.settings.collect {
+                    language = it.language
+                    voiceMode = it.voiceMode
+                }
+            }
             // Debug builds only: the active route as `lat,lon` lines (tools/sim_drive.ps1 -FromLogcat replays it).
             launch { s.route.collect { WgoMetrics.route(it.polyline) } }
             launch { s.state.collect(::onNavState) }
@@ -188,6 +207,7 @@ class NavigationHost private constructor(context: Context) {
                 s.events.collect {
                     WgoMetrics.event("nav event=${it.javaClass.simpleName}")
                     hapticFor(it)?.let(::playHaptic)
+                    speakFor(it)
                     _events.tryEmit(it)
                 }
             }
@@ -210,8 +230,16 @@ class NavigationHost private constructor(context: Context) {
     /** Ends the trip now: engine, ticks and the location request stop, and the service and its notification go away. */
     fun end(reason: TripEnd = TripEnd.Ended) {
         if (session == null) return
-        // Spec section 8: arrival = DoubleClick, played here (ending the trip cancels the event collector).
-        if (reason == TripEnd.Arrived) playHaptic(HapticEvent.DoubleClick)
+        // Spec section 8: arrival = DoubleClick (+ "Has llegado a tu destino"), played here (ending the trip cancels the
+        // event collector). The engine finishes that phrase before it shuts down.
+        if (reason == TripEnd.Arrived) {
+            playHaptic(HapticEvent.DoubleClick)
+            say(GuidancePhrases.arrived(language))
+            speech?.let { engine ->
+                speech = null
+                engine.shutdownAfterQueue(ARRIVAL_SPEECH_MS) { ms, block -> scope.launch { delay(ms); block() } }
+            }
+        }
         stopTrip()
         _lastEnd.value = reason
         WgoMetrics.event("nav end reason=$reason")
@@ -310,6 +338,12 @@ class NavigationHost private constructor(context: Context) {
 
     private fun onNavState(state: NavState) {
         if (state is NavState.Rerouting && _navState.value !is NavState.Rerouting) WgoMetrics.inc(WgoMetrics.Counter.REROUTE)
+        // Lost route is a state, not an event: its phrase once per loss.
+        if (state is NavState.LostRoute) {
+            if (dedupe.lostRoute()) say(GuidancePhrases.lostRoute(language))
+        } else if (state is NavState.Navigating) {
+            dedupe.routeBack()
+        }
         _navState.value = state
         val s = session ?: return
         when (state) {
@@ -332,6 +366,42 @@ class NavigationHost private constructor(context: Context) {
         }
     }
 
+    // ---- spoken guidance (spec section 8, P7) ----
+
+    private var speech: SpeechEngine? = null
+    private var dedupe = GuidanceDedupe()
+
+    @Volatile
+    private var voiceMode: VoiceMode = VoiceMode.Auto
+
+    /** Engine events -> phrases, with the once-only rules; the mode and the audio route decide if they are spoken. */
+    private fun speakFor(event: NavEvent) {
+        val lang = language
+        val phrase = when (event) {
+            is NavEvent.ApproachingTurn -> if (dedupe.approaching(event.step)) GuidancePhrases.approaching(event.step, event.distanceM, lang) else null
+            is NavEvent.AtTurn -> if (dedupe.atTurn(event.step)) GuidancePhrases.atTurn(event.step, lang) else null
+            NavEvent.OffRouteDetected -> GuidancePhrases.reroute(lang)
+            NavEvent.Rerouted -> {
+                dedupe.newRoute()
+                null
+            }
+            NavEvent.GpsLost -> if (dedupe.gpsLost()) GuidancePhrases.gpsLost(lang) else null
+            NavEvent.GpsRecovered -> {
+                dedupe.gpsRecovered()
+                null
+            }
+            NavEvent.Arrived -> null // spoken by end(TripEnd.Arrived)
+        } ?: return
+        say(phrase)
+    }
+
+    private fun say(phrase: Phrase) {
+        val engine = speech ?: return
+        val headset = engine.headsetConnected()
+        if (GuidancePolicy.shouldSpeak(voiceMode, headset)) engine.speak(phrase)
+        else WgoMetrics.event("tts skipped mode=$voiceMode headset=$headset")
+    }
+
     /** Built on first use (the vibrator lookup), then reused for every trip of the process. */
     private val hapticPlayer by lazy { HapticPlayer(app) }
 
@@ -348,6 +418,8 @@ class NavigationHost private constructor(context: Context) {
 
     private fun stopTrip() {
         val had = session != null
+        speech?.shutdown()
+        speech = null
         session?.stop()
         session = null
         tripJob?.cancel()
@@ -373,6 +445,9 @@ class NavigationHost private constructor(context: Context) {
     companion object {
         /** A straight run this long ahead lets the NAVIGATING request slow to 3 s above 20 km/h. */
         const val LONG_STRAIGHT_M = 300.0
+
+        /** The arrival phrase may finish speaking for this long after the trip ends. */
+        const val ARRIVAL_SPEECH_MS = 6_000L
 
         // Holds only the application context, which lives as long as the process.
         @SuppressLint("StaticFieldLeak")

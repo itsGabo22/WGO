@@ -13,15 +13,21 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
+/** Spoken guidance (spec section 8, P7): AUTO speaks only with a headset or Bluetooth audio output. */
+enum class VoiceMode { Off, Auto, Always }
+
 data class WgoSettings(
     val isDarkMode: Boolean = false,
     val language: Language = Language.ES,
-    val mapStyle: MapStyleId = MapStyleId.COBALTO
+    val mapStyle: MapStyleId = MapStyleId.COBALTO,
+    val voiceMode: VoiceMode = VoiceMode.Auto,
+    /** The text-to-speech voice the user picked (engine voice name); null = the automatic choice. */
+    val voiceName: String? = null
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "wgo_settings")
 
-/** Persists user settings. Defaults: Daylight, ES, COBALTO. */
+/** Persists user settings. Defaults: Daylight, ES, COBALTO, voice guidance AUTO with the automatic voice. */
 class SettingsRepository(context: Context) {
     private val store = context.applicationContext.settingsDataStore
 
@@ -29,7 +35,9 @@ class SettingsRepository(context: Context) {
         WgoSettings(
             isDarkMode = prefs[DARK_MODE] ?: false,
             language = prefs[LANGUAGE].toEnumOrDefault(Language.ES),
-            mapStyle = prefs[MAP_STYLE].toEnumOrDefault(MapStyleId.COBALTO)
+            mapStyle = prefs[MAP_STYLE].toEnumOrDefault(MapStyleId.COBALTO),
+            voiceMode = prefs[VOICE_MODE].toEnumOrDefault(VoiceMode.Auto),
+            voiceName = prefs[VOICE_NAME]
         )
     }
 
@@ -46,6 +54,14 @@ class SettingsRepository(context: Context) {
 
     suspend fun setMapStyle(value: MapStyleId) {
         store.edit { it[MAP_STYLE] = value.name }
+    }
+
+    suspend fun setVoiceMode(value: VoiceMode) {
+        store.edit { it[VOICE_MODE] = value.name }
+    }
+
+    suspend fun setVoiceName(value: String?) {
+        store.edit { if (value == null) it.remove(VOICE_NAME) else it[VOICE_NAME] = value }
     }
 
     /**
@@ -74,6 +90,8 @@ class SettingsRepository(context: Context) {
         val DARK_MODE = booleanPreferencesKey("dark_mode")
         val LANGUAGE = stringPreferencesKey("language")
         val MAP_STYLE = stringPreferencesKey("map_style")
+        val VOICE_MODE = stringPreferencesKey("voice_mode")
+        val VOICE_NAME = stringPreferencesKey("voice_name")
         val TRIP_NAME = stringPreferencesKey("trip_name")
         val TRIP_LAT = doublePreferencesKey("trip_lat")
         val TRIP_LON = doublePreferencesKey("trip_lon")
