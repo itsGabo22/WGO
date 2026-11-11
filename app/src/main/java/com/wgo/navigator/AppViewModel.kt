@@ -705,6 +705,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         _screen.value = ScreenState.MapPicker
     }
 
+    fun openVoicePicker() {
+        _screen.value = ScreenState.VoicePicker
+    }
+
     /** Back from the map picker to Settings (the style is unchanged unless USAR committed it). */
     fun backToSettings() {
         _screen.value = ScreenState.Settings

@@ -1,86 +1,154 @@
 package com.wgo.navigator.ui.screens
 
+import android.content.Intent
+import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.Text
 import com.wgo.navigator.Language
 import com.wgo.navigator.SettingsViewModel
+import com.wgo.navigator.VoiceMode
 import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.components.MapRow
 import com.wgo.navigator.ui.components.SegmentedToggle
+import com.wgo.navigator.ui.components.SettingRow
 import com.wgo.navigator.ui.string
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoType
 import com.wgo.navigator.ui.theme.wgoTouchSide
+import com.wgo.navigator.voice.VoiceLabels
 
 private const val REFERENCE_SIZE = 227f
 
-/** Centre-to-centre pitch of the three stacked controls: 48 real dp hit boxes (56.7 dp at s = 0.846) never overlap. */
+/** Centre-to-centre pitch of the stacked controls: 48 real dp hit boxes (56.7 dp at s = 0.846) never overlap. */
 private const val ROW_PITCH = 57f
 
+/** Centres of the P7 rows (MapRow is centred at 174): voice guidance, then voice. */
+internal const val VOICE_MODE_CENTER = 231f
+internal const val VOICE_ROW_CENTER = 288f
+
+/** Scrolled content height: the last row can reach the middle of the dial. */
+private const val CONTENT_HEIGHT = 288f + 22f + 100f
+
 /**
- * Settings, no scroll and no close button (leave with Back / swipe from the left edge). Positions are the spec's `top`
- * values on the 227 dp canvas: title @18, theme toggle @40, language toggle @97, map row @152 (centres 57 dp apart).
- * Every hit box is 48 real dp down to s = 0.846; below that (the 0.8 clamp) they are capped at the 57 dp pitch so
- * they still never overlap. Theme and language apply live and persist through [viewModel]; the map row opens the picker.
+ * Settings (spec section 7, P7 update): a vertically scrolling list (touch scroll, position indicator while
+ * scrolling), no close button (leave with Back / swipe from the left edge). Positions are the spec's `top` values on
+ * the 227 dp canvas: title @18, theme toggle @40, language toggle @97, map row @152, then the voice guidance row
+ * (centre 231, a tap cycles OFF / AUTO / ALWAYS) and the voice row (centre 288, opens the voice picker), all 57 dp apart
+ * so every hit box is 48 real dp down to s = 0.846 (below that, capped at the pitch). Values apply live and persist
+ * through [viewModel].
  */
 @Composable
 fun ScreenSettings(
     viewModel: SettingsViewModel,
     onOpenMapPicker: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenVoicePicker: () -> Unit = {}
 ) {
     val palette = Wgo.palette
     val isDarkMode by viewModel.isDarkMode.collectAsState()
     val language by viewModel.language.collectAsState()
     val mapStyle by viewModel.mapStyle.collectAsState()
+    val voiceMode by viewModel.voiceMode.collectAsState()
+    val voiceName by viewModel.voiceName.collectAsState()
+    val context = LocalContext.current
+    // Is any text-to-speech engine installed? (A package query, not an engine start.)
+    val hasEngine = remember {
+        context.packageManager.queryIntentServices(Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0).isNotEmpty()
+    }
+    val scroll = rememberScrollState()
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(palette.canvas)) {
         val scale = maxWidth.value / REFERENCE_SIZE
         fun dial(value: Float): Dp = (value * scale).dp
-
-        Text(
-            text = string(StringKey.SETTINGS_HEADER).uppercase(),
-            color = palette.ink,
-            style = WgoType.labelMd,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(18f))
-        )
-
-        // Hit boxes grow to 48 real dp around the 40 / 44 dp visuals (capped at the pitch); visuals stay on position.
         val pitch = dial(ROW_PITCH)
-        val toggleTouch = minOf(wgoTouchSide(40.dp), pitch)
-        val toggleExtra = (toggleTouch - 40.dp) / 2
-        SegmentedToggle(
-            options = listOf(string(StringKey.LIGHT), string(StringKey.DARK)),
-            selectedIndex = if (isDarkMode) 1 else 0,
-            onSelect = { index -> if ((index == 1) != isDarkMode) viewModel.toggleTheme() },
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(40f) - toggleExtra),
-            maxTouchHeight = pitch
-        )
-        SegmentedToggle(
-            options = listOf(string(StringKey.LANG_NAME_ES), string(StringKey.LANG_NAME_EN)),
-            selectedIndex = if (language == Language.ES) 0 else 1,
-            onSelect = { index -> if ((index == 0) != (language == Language.ES)) viewModel.toggleLanguage() },
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(97f) - toggleExtra),
-            maxTouchHeight = pitch
-        )
 
-        val rowTouch = minOf(wgoTouchSide(44.dp), pitch)
-        val rowExtra = (rowTouch - 44.dp) / 2
-        MapRow(
-            styleId = mapStyle,
-            onClick = onOpenMapPicker,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(152f) - rowExtra),
-            maxTouchHeight = pitch
-        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(scroll)
+                .height(dial(CONTENT_HEIGHT))
+        ) {
+            Text(
+                text = string(StringKey.SETTINGS_HEADER).uppercase(),
+                color = palette.ink,
+                style = WgoType.labelMd,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(18f))
+            )
+
+            // Hit boxes grow to 48 real dp around the 40 / 44 dp visuals (capped at the pitch); visuals stay on position.
+            val toggleTouch = minOf(wgoTouchSide(40.dp), pitch)
+            val toggleExtra = (toggleTouch - 40.dp) / 2
+            SegmentedToggle(
+                options = listOf(string(StringKey.LIGHT), string(StringKey.DARK)),
+                selectedIndex = if (isDarkMode) 1 else 0,
+                onSelect = { index -> if ((index == 1) != isDarkMode) viewModel.toggleTheme() },
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(40f) - toggleExtra),
+                maxTouchHeight = pitch
+            )
+            SegmentedToggle(
+                options = listOf(string(StringKey.LANG_NAME_ES), string(StringKey.LANG_NAME_EN)),
+                selectedIndex = if (language == Language.ES) 0 else 1,
+                onSelect = { index -> if ((index == 0) != (language == Language.ES)) viewModel.toggleLanguage() },
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(97f) - toggleExtra),
+                maxTouchHeight = pitch
+            )
+
+            val rowTouch = minOf(wgoTouchSide(44.dp), pitch)
+            val rowExtra = (rowTouch - 44.dp) / 2
+            MapRow(
+                styleId = mapStyle,
+                onClick = onOpenMapPicker,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(152f) - rowExtra),
+                maxTouchHeight = pitch
+            )
+
+            // P7: spoken guidance.
+            SettingRow(
+                label = string(StringKey.SET_VOICE_GUIDANCE),
+                value = string(
+                    when (voiceMode) {
+                        VoiceMode.Off -> StringKey.VOICE_MODE_OFF
+                        VoiceMode.Auto -> StringKey.VOICE_MODE_AUTO
+                        VoiceMode.Always -> StringKey.VOICE_MODE_ALWAYS
+                    }
+                ),
+                onClick = viewModel::cycleVoiceMode,
+                state = true,
+                maxTouchHeight = pitch,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(VOICE_MODE_CENTER - 22f) - rowExtra)
+            )
+            SettingRow(
+                label = string(StringKey.SET_VOICE),
+                value = when {
+                    !hasEngine -> string(StringKey.VOICE_NONE)
+                    voiceName == null -> string(StringKey.VOICE_AUTOMATIC)
+                    else -> VoiceLabels.shortName(voiceName.orEmpty(), language)
+                },
+                onClick = onOpenVoicePicker,
+                opens = true,
+                maxTouchHeight = pitch,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(VOICE_ROW_CENTER - 22f) - rowExtra)
+            )
+        }
+        PositionIndicator(scrollState = scroll)
     }
 }
+

@@ -13,6 +13,9 @@ import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import com.wgo.navigator.Language
 import com.wgo.navigator.metrics.WgoMetrics
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -73,6 +76,11 @@ class SpeechEngine(context: Context, private val language: Language, private val
     var voiceName: String? = null
         private set
 
+    private val _ready = MutableStateFlow(false)
+
+    /** True once the engine answered (with or without a usable voice). */
+    val ready: StateFlow<Boolean> = _ready.asStateFlow()
+
     /** Phrases asked for before the engine was ready (the newest few; an urgent one replaces them). */
     private val early = ArrayList<Phrase>()
     private var onDrained: (() -> Unit)? = null
@@ -96,8 +104,18 @@ class SpeechEngine(context: Context, private val language: Language, private val
             "tts init ok=$ok available=$available voices=${voices.size} voice=${voiceName ?: "-"} " +
                 "ms=${SystemClock.elapsedRealtime() - startedAt}"
         )
+        _ready.value = true
         val queued = synchronized(early) { early.toList().also { early.clear() } }
         if (available) queued.forEach(::speak)
+    }
+
+    /** Switches to the installed voice [name] (the picker's choice). */
+    fun useVoice(name: String) {
+        if (!_ready.value) return
+        tts.voices?.firstOrNull { it.name == name }?.let {
+            tts.voice = it
+            voiceName = it.name
+        }
     }
 
     /** True while a headset or Bluetooth audio output is connected (the AUTO mode's condition). */

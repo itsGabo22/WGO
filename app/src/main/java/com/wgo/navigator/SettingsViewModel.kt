@@ -71,6 +71,31 @@ class SettingsViewModel(
         viewModelScope.launch { repository.setMapStyle(style) }
     }
 
+    // ---- spoken guidance (spec section 8, P7) ----
+
+    private val _voiceMode = MutableStateFlow(initial.voiceMode)
+    val voiceMode: StateFlow<VoiceMode> = _voiceMode.asStateFlow()
+
+    private val _voiceName = MutableStateFlow(initial.voiceName)
+    val voiceName: StateFlow<String?> = _voiceName.asStateFlow()
+
+    /** The voice guidance row: OFF -> AUTO -> ALWAYS -> OFF, persisted at once (silent, like the theme toggle). */
+    fun cycleVoiceMode() {
+        val next = when (_voiceMode.value) {
+            VoiceMode.Off -> VoiceMode.Auto
+            VoiceMode.Auto -> VoiceMode.Always
+            VoiceMode.Always -> VoiceMode.Off
+        }
+        _voiceMode.value = next
+        viewModelScope.launch { repository.setVoiceMode(next) }
+    }
+
+    /** A voice chosen in the picker (null = automatic). */
+    fun setVoiceName(name: String?) {
+        _voiceName.value = name
+        viewModelScope.launch { repository.setVoiceName(name) }
+    }
+
     class Factory(
         private val repository: SettingsRepository,
         private val initial: WgoSettings
