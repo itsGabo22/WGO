@@ -90,8 +90,8 @@ private fun NavState.guidance(): NavState.Navigating? = when (this) {
  *   (icon, distance, instruction), remaining distance and ETA; off route and rerouting replace the instruction with a
  *   live-region status.
  * - GpsLost / LostRoute / [endConfirm]: their surface covers the radar, which stays composed (no osmdroid rebuild on
- *   KEEP) with its animations stopped (reduce motion forced under an opaque surface) and its data frozen (no state
- *   updates, so no recomposition below the surface until it goes away).
+ *   KEEP) with its animations stopped (reduce motion forced under an opaque surface). Its data keeps updating: freezing
+ *   it was measured in P6-B and gave no gain (END NAVIGATION? / GPS LOST jank identical with and without).
  * The CANCEL chip and Back ask END NAVIGATION? first. A refused location permission shows [PermissionDenied].
  * Without [navState] (previews) the radar runs on [DemoRadarSource].
  */
@@ -141,13 +141,7 @@ fun ScreenActiveNavigation(
         val clock = rememberWgoClock()
         val scope = rememberCoroutineScope()
         val source = radarSource ?: remember { DemoRadarSource(scope) }
-        // Under a modal surface the radar is frozen: no subscription to its state, so new fixes recompose nothing
-        // below the surface; the snapshot taken when it covered the radar is drawn until it goes away.
-        val radar: RadarState = if (covered) {
-            remember { source.state.value }
-        } else {
-            source.state.collectAsState().value
-        }
+        val radar: RadarState = source.state.collectAsState().value
         var zoom by remember { mutableDoubleStateOf(17.0) }
         val reduceMotion = LocalWgoReduceMotion.current
         // Explore mode (spec section 7): UI state only, dropped with this screen (trip end, ambient).
