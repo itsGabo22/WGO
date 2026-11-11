@@ -492,10 +492,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      * What the ambient navigation screen shows: the trip state, refreshed only on the ambient tick or when the maneuver
      * or the guidance state changes (AmbientSnapshot), so fixes do not redraw the low-power screen.
      */
-    val ambientNavState: StateFlow<NavState> = AmbientSnapshot(host.navState.value).let { snap ->
-        combine(host.navState, ambientTick) { state, tick -> snap.update(state, tick); snap.shown }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), snap.shown)
-    }
+    // (No flow operators inside `let {}`: that crashes Compose's lint flow-operator detector on Kotlin 2.1 metadata.)
+    private val ambientSnapshot = AmbientSnapshot(host.navState.value)
+    val ambientNavState: StateFlow<NavState> =
+        combine(host.navState, ambientTick) { state, tick -> ambientSnapshot.update(state, tick); ambientSnapshot.shown }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), ambientSnapshot.shown)
 
     /**
      * The system entered or left ambient. The trip (if any) keeps running in the host with the slower screen-off

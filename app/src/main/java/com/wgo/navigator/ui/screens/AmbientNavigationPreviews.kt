@@ -27,4 +27,4 @@ private fun Frame(dark: Boolean, language: Language, content: @Composable () -> 
 @WgoWatchPreviews @Composable private fun AmbientTurnEnNight() = Frame(true, Language.EN) { AmbientNavigationScreen(SampleNav) }
 @WgoWatchPreviews @Composable private fun AmbientGpsLostEs() = Frame(true, Language.ES) { AmbientNavigationScreen(NavState.GpsLost(SampleNav)) }
 @WgoWatchPreviews @Composable private fun AmbientLowBitEn() =
-    Frame(true, Language.EN) { AmbientNavigationScreen(SampleNav, AmbientInfo(lowBit = true, burnInProtection = true)) }
+    Frame(true, Language.EN) { AmbientNavigationScreen(SampleNav, info = AmbientInfo(lowBit = true, burnInProtection = true)) }

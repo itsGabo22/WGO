@@ -246,7 +246,7 @@ class MainActivity : ComponentActivity() {
                     if (info != null) {
                         if (screenNow == ScreenState.Navigation) {
                             val shown by appViewModel.ambientNavState.collectAsState()
-                            AmbientNavigationScreen(shown, info)
+                            AmbientNavigationScreen(shown, info = info)
                         } else {
                             Box(Modifier.fillMaxSize().background(Wgo.palette.ambient.canvas))
                         }

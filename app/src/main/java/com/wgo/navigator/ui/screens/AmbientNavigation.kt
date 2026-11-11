@@ -102,7 +102,7 @@ private val LEFT_LIKE = setOf(Maneuver.SLIGHT_LEFT, Maneuver.LEFT, Maneuver.SHAR
  * (light grey, never pure white). In low-bit ambient the icon is drawn without anti-aliasing.
  */
 @Composable
-fun AmbientNavigationScreen(navState: NavState, info: AmbientInfo = AmbientInfo(), modifier: Modifier = Modifier) {
+fun AmbientNavigationScreen(navState: NavState, modifier: Modifier = Modifier, info: AmbientInfo = AmbientInfo()) {
     val colors = Wgo.palette.ambient
     val language = LocalLanguage.current
     val nav = navState.guidance()
