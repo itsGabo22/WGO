@@ -6,9 +6,11 @@ import com.wgo.navigator.core.WgoFailure
 /**
  * What a voice session does with a [android.speech.SpeechRecognizer] error code. Pure, for unit tests.
  *
- * Only the network codes (1, 2) mean "no internet". A missing language model (12, 13) is not a user error: the session
+ * Only the network codes (1, 2) mean "no internet", and only when they come back after one silent retry (or after
+ * speech was heard). A missing language model (12, 13) is not a user error: the session
  * goes online and walks the language tags. A recognizer that is busy, disconnected or unbinding (5, 8, 10, 11) is
- * recreated once, silently, before the user sees [WgoFailure.NotStarted]. Codes above 9 are API 31+ constants, written
+ * recreated once, silently, before the user sees [WgoFailure.NotStarted]. Restarts happen only while no speech has been
+ * heard. Codes above 9 are API 31+ constants, written
  * as literals so minSdk 30 code needs no version guard.
  */
 object RecognizerErrors {
@@ -37,8 +39,12 @@ object RecognizerErrors {
 
     /** Where a session stands when an error arrives. */
     data class Attempt(
-        /** onReadyForSpeech already arrived: the user may be speaking, so nothing restarts any more. */
-        val ready: Boolean,
+        /**
+         * Speech was already detected (beginning of speech or a partial): a restart would drop what the user said.
+         * "Ready" alone does not count: the offline recognizer reports ready (microphone opened) and THEN fails with
+         * 12 when the language pack is missing (seen on the Galaxy Watch5 Pro).
+         */
+        val heardSpeech: Boolean,
         val online: Boolean,
         val tagIndex: Int,
         val tagCount: Int,
@@ -58,18 +64,25 @@ object RecognizerErrors {
     }
 
     private val RESTARTABLE = setOf(
-        LANGUAGE_NOT_SUPPORTED, LANGUAGE_UNAVAILABLE, SERVER_DISCONNECTED, TOO_MANY_REQUESTS, BUSY, CLIENT
+        NETWORK_TIMEOUT, NETWORK, LANGUAGE_NOT_SUPPORTED, LANGUAGE_UNAVAILABLE, SERVER_DISCONNECTED, TOO_MANY_REQUESTS, BUSY, CLIENT
     )
 
     fun decide(code: Int, a: Attempt): Action = when {
-        // Once listening, a restart would drop what the user said: keep the partial transcript, or ask to retry.
-        a.ready && code in RESTARTABLE ->
-            if (!a.partial.isNullOrBlank()) Action.Final(a.partial) else Action.Fail(WgoFailure.NotStarted)
+        // Once speech was heard, a restart would drop it: keep the partial transcript, or ask to retry.
+        a.heardSpeech && code in RESTARTABLE -> when {
+            !a.partial.isNullOrBlank() -> Action.Final(a.partial)
+            code == NETWORK || code == NETWORK_TIMEOUT -> Action.Fail(WgoFailure.Offline)
+            else -> Action.Fail(WgoFailure.NotStarted)
+        }
         else -> decideBeforeReady(code, a)
     }
 
     private fun decideBeforeReady(code: Int, a: Attempt): Action = when (code) {
-        NETWORK_TIMEOUT, NETWORK -> Action.Fail(WgoFailure.Offline)
+        // A cold recognizer process sometimes reports NETWORK on its first online session while the internet is fine
+        // (seen on the Galaxy Watch5 Pro): one silent fresh retry first; a second network error is real.
+        NETWORK_TIMEOUT, NETWORK ->
+            if (!a.freshRetryUsed) Action.Restart(a.online, a.tagIndex, consumesFreshRetry = true)
+            else Action.Fail(WgoFailure.Offline)
         LANGUAGE_NOT_SUPPORTED, LANGUAGE_UNAVAILABLE -> when {
             !a.online -> Action.Restart(online = true, tagIndex = a.tagIndex, consumesFreshRetry = false)
             a.tagIndex + 1 < a.tagCount -> Action.Restart(online = true, tagIndex = a.tagIndex + 1, consumesFreshRetry = false)
