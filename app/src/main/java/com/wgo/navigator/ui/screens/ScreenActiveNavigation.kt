@@ -10,6 +10,7 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
+import com.wgo.navigator.ui.map.RadarState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.remember
@@ -75,7 +76,8 @@ private fun NavState.guidance(): NavState.Navigating? = when (this) {
  *   (icon, distance, instruction), remaining distance and ETA; off route and rerouting replace the instruction with a
  *   live-region status.
  * - GpsLost / LostRoute / [endConfirm]: their surface covers the radar, which stays composed (no osmdroid rebuild on
- *   KEEP) with its animations stopped (reduce motion forced under an opaque surface).
+ *   KEEP) with its animations stopped (reduce motion forced under an opaque surface) and its data frozen (no state
+ *   updates, so no recomposition below the surface until it goes away).
  * The CANCEL chip and Back ask END NAVIGATION? first. A refused location permission shows [PermissionDenied].
  * Without [navState] (previews) the radar runs on [DemoRadarSource].
  */
@@ -121,7 +123,13 @@ fun ScreenActiveNavigation(
         val clock = rememberWgoClock()
         val scope = rememberCoroutineScope()
         val source = radarSource ?: remember { DemoRadarSource(scope) }
-        val radar by source.state.collectAsState()
+        // Under a modal surface the radar is frozen: no subscription to its state, so new fixes recompose nothing
+        // below the surface; the snapshot taken when it covered the radar is drawn until it goes away.
+        val radar: RadarState = if (covered) {
+            remember { source.state.value }
+        } else {
+            source.state.collectAsState().value
+        }
         var zoom by remember { mutableDoubleStateOf(17.0) }
 
         // Z-Layer 0: RADAR MINIMAP. Under an opaque surface its loops stop (no frames for an invisible sweep).
