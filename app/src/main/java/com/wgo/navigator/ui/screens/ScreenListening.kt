@@ -166,8 +166,9 @@ fun ScreenListening(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
                     )
+                    // Speak-now cue: "HABLA AHORA" until the first words arrive, then "ESCUCHANDO…".
                     MicState.Listening -> Text(
-                        text = string(StringKey.LISTENING_LABEL),
+                        text = string(if (transcript.isEmpty()) StringKey.SPEAK_NOW else StringKey.LISTENING_LABEL),
                         color = palette.primaryInk,
                         style = WgoType.labelMd,
                         textAlign = TextAlign.Center,

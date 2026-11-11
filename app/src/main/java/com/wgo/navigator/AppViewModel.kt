@@ -22,6 +22,7 @@ import com.wgo.navigator.core.WgoFailure
 import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.ui.components.MicState
 import com.wgo.navigator.voice.DebugUtterances
+import com.wgo.navigator.voice.SpeakNowCue
 import com.wgo.navigator.voice.SystemVoiceDialog
 import com.wgo.navigator.voice.VoiceInputChain
 import com.wgo.navigator.voice.VoiceLevel
@@ -80,8 +81,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
     private var listenJob: Job? = null
 
-    /** When the mic was last pressed (elapsedRealtime), for the debug timing events. */
-    private var pressedAt = 0L
+    /** The speak-now cue: a second Tick when the recognizer gets ready after a slow start (> 600 ms). */
+    private val speakNow = SpeakNowCue { SystemClock.elapsedRealtime() }
 
     /** The WGO lockup formed: one Click, never one per word. */
     fun onIntroLockup() {
@@ -148,8 +149,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     fun onMicTapped() {
         if (_micState.value != MicState.Idle || listenJob?.isActive == true) return
         _transcript.value = ""
-        pressedAt = SystemClock.elapsedRealtime()
-        WgoMetrics.event("voice_press at=$pressedAt")
+        speakNow.onPress()
+        WgoMetrics.event("voice_press at=${SystemClock.elapsedRealtime()}")
         _micState.value = MicState.Preparing
         _haptics.tryEmit(HapticEvent.Tick) // spec section 8: starts listening (the press is the start)
         listenJob = viewModelScope.launch {
@@ -182,8 +183,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         when (event) {
             // (The Tick already came with the press.)
             VoiceEvent.Ready -> {
+                val preparedMs = speakNow.preparingMs()
+                val cue = speakNow.onReady()
                 _micState.value = MicState.Listening
-                WgoMetrics.event("voice_listening ms_from_press=${SystemClock.elapsedRealtime() - pressedAt}")
+                if (cue) _haptics.tryEmit(HapticEvent.Tick) // spec section 8: mic ready after a slow start
+                WgoMetrics.event("voice_listening ms_from_press=$preparedMs speak_now_tick=$cue")
             }
             VoiceEvent.AwaitingSystem -> _micState.value = MicState.Waiting
             is VoiceEvent.Level -> voiceLevel.value = event.value
