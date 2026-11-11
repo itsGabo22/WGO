@@ -1,6 +1,6 @@
 # Third-party data in WGO
 
-## Overture Maps Places (`app/src/main/assets/places_pasto.tsv.gz`)
+## Overture Maps Places (`app/src/main/assets/places_pasto.tsv.gzip`)
 
 - **What**: the places index used offline by the place search (`docs/PLACE_SEARCH.md`): 6,285 places with a primary
   name and confidence >= 0.3 inside the Pasto box (lon -77.40..-77.17, lat 1.08..1.32), 413 KB.

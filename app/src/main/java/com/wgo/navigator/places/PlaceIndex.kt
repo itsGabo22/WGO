@@ -91,7 +91,11 @@ class PlaceIndex(private val open: () -> InputStream) {
     }
 
     companion object {
-        const val ASSET = "places_pasto.tsv.gz"
+        /**
+         * Not `.gz`: the Android packager gunzips `.gz` assets and drops the extension (measured on the P7 APK), so
+         * the app would not find the file. `.gzip` is stored as is (it is already compressed).
+         */
+        const val ASSET = "places_pasto.tsv.gzip"
 
         /** The box the index covers (the builder's default); outside it the index is skipped. */
         const val LON_MIN = -77.40

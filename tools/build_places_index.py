@@ -5,7 +5,7 @@ Usage (in a throwaway virtual environment OUTSIDE the repo):
     %TEMP%\\wgo-venv\\Scripts\\python tools/build_places_index.py                 # latest release, Pasto box
     %TEMP%\\wgo-venv\\Scripts\\python tools/build_places_index.py --release 2026-10-21.0 --min-confidence 0.3
 
-Output: app/src/main/assets/places_pasto.tsv.gz, one header line then one place per line, tab separated:
+Output: app/src/main/assets/places_pasto.tsv.gzip, one header line then one place per line, tab separated:
     id  name  name_norm  alt_norm  category  address  lat  lon  confidence  source
 `alt_norm` holds the normalised alternate names joined with "|". Rows need a primary name and confidence >= the
 threshold; places whose operating_status says they are closed are dropped. Sorted by id so rebuilds diff cleanly.
@@ -24,7 +24,7 @@ import urllib.request
 
 STAC = "https://stac.overturemaps.org/catalog.json"
 DEFAULT_BOX = (-77.40, -77.17, 1.08, 1.32)  # lon min, lon max, lat min, lat max (Pasto urban area, audit P7)
-OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "src" / "main" / "assets" / "places_pasto.tsv.gz"
+OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "src" / "main" / "assets" / "places_pasto.tsv.gzip"
 STOP = {"de", "la", "el", "los", "las", "del", "en", "por", "y", "a", "al"}
 
 

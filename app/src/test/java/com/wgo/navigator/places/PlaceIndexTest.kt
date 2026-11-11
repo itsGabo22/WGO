@@ -19,6 +19,12 @@ class PlaceIndexTest {
         index.search(q, at, minTier = 2).map { it.place.name }
     }
 
+    @Test fun theAssetNameSurvivesPackaging() {
+        // The packager gunzips `.gz` assets and renames them; the app would then not find the index.
+        assertFalse(PlaceIndex.ASSET.endsWith(".gz"))
+        assertTrue(File("src/main/assets/${PlaceIndex.ASSET}").isFile)
+    }
+
     @Test fun loadsTheAsset() = runBlocking {
         assertTrue(index.ensureLoaded())
         assertTrue(index.size > 6_000)

@@ -16,7 +16,7 @@ Maps Places has both places near the owner's home: a DATA gap in OSM for Cubanit
 | # | source | where | network | used for |
 |---|---|---|---|---|
 | 1 | **My places** (`assets/my_places.json`, git-ignored, owner-curated) | on the watch | none | an alias match beats everything, works offline and without the language model |
-| 2 | **Local places index** (`assets/places_pasto.tsv.gz`, Overture Maps Places filtered to Pasto) | on the watch | none | businesses, shops, schools, churches... |
+| 2 | **Local places index** (`assets/places_pasto.tsv.gzip`, Overture Maps Places filtered to Pasto) | on the watch | none | businesses, shops, schools, churches... |
 | 3 | **Nominatim** (OpenStreetMap) | online | at most 3 requests per utterance | addresses, streets, neighbourhoods, landmarks, and the fallback when 1-2 have no strong match |
 | - | the language model | online | - | **never** coordinates: it only returns text (name, hint, category) |
 
