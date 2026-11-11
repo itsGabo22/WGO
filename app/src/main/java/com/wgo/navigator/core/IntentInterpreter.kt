@@ -16,7 +16,11 @@ data class Interpretation(
     /** 0..1; at or above [ACCEPT_CONFIDENCE] the local result is used with no network call. */
     val confidence: Float,
     /** Optional short reply text (never shown as an instruction, never executed). */
-    val reply: String? = null
+    val reply: String? = null,
+    /** A landmark that locates the place ("Panamericana" in "Cubanitos de la Panamericana"); only re-ranks. */
+    val placeHint: String? = null,
+    /** A category word the user said ("restaurante"); only a soft ranking boost. */
+    val placeCategory: String? = null
 ) {
     companion object {
         const val ACCEPT_CONFIDENCE = 0.75f

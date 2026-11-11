@@ -63,14 +63,22 @@ object LocalIntentParser {
         }
         // Local nicknames ("la UDENAR", "el terminal") resolve here, with no remote call.
         PlaceAliases.resolve(placeToks.map { it.norm })?.let { return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE) }
-        val vague = placeToks.any { it.norm in VAGUE_WORDS }
+        // "X de la Y" / "X cerca de Y": name X, landmark hint Y (docs/PLACE_SEARCH.md). A vague description
+        // ("donde venden helados frente a la plaza") stays whole: the remote interpreter reads it.
+        val vagueWhole = placeToks.any { it.norm in VAGUE_WORDS && it.norm !in RELATION_WORDS }
+        val split = if (vagueWhole) PlaceHint.Split(join(placeToks), null) else PlaceHint.split(join(placeToks))
+        val nameToks = tokenize(split.name)
+        PlaceAliases.resolve(nameToks.map { it.norm })?.let {
+            return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeHint = split.hint)
+        }
+        val vague = nameToks.any { it.norm in VAGUE_WORDS }
         val confidence = when {
             vague -> 0.5f
             verb != null -> 0.9f
-            placeToks.size <= 4 -> Interpretation.ACCEPT_CONFIDENCE
+            placeToks.size <= 4 -> Interpretation.ACCEPT_CONFIDENCE // the whole phrase: long descriptions go remote
             else -> 0.55f
         }
-        return Interpretation(IntentKind.Navigate, join(placeToks), mode, confidence)
+        return Interpretation(IntentKind.Navigate, split.name, mode, confidence, placeHint = split.hint)
     }
 
     /** Cleans a place query from any source (also the remote interpreter): articles, trailing city, length, controls. */
@@ -187,6 +195,8 @@ object LocalIntentParser {
     private val CONNECTORS = setOf("a", "al", "hasta", "hacia", "para", "to", "towards", "toward", "for")
     private val ARTICLES = setOf("el", "la", "los", "las", "un", "una", "the", "a", "an")
     private val REGION_CONNECTORS = setOf("en", "de", "del", "in", "of")
+    /** Vague words that are also landmark relations ("cerca de", "frente a"): a concrete name before them splits. */
+    private val RELATION_WORDS = setOf("cerca", "frente", "junto", "near", "next", "opposite", "close")
     private val VAGUE_WORDS = setOf(
         "donde", "venden", "cerca", "frente", "junto", "esa", "ese", "aquel", "aquella", "alli", "alla", "lugar", "sitio",
         "algo", "famoso", "famosa", "queda", "llama", "where", "near", "nearby", "sell", "sells", "that", "which",

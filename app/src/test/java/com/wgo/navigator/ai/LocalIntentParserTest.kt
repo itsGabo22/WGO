@@ -73,8 +73,9 @@ class LocalIntentParserTest {
         Case("take me to that place near the stadium where they sell coffee", nav,
             "that place near the stadium where they sell coffee", local = false, lang = Language.EN),
         Case("dónde queda el Éxito", nav, "dónde queda el Éxito", local = false),
+        // P7: the landmark part becomes the hint (docs/PLACE_SEARCH.md); still long, so the remote tier is consulted.
         Case("la tienda grande de la avenida de los estudiantes al lado del parque", nav,
-            "tienda grande de la avenida de los estudiantes al lado del parque", local = false),
+            "tienda grande", local = false),
         // Commands
         Case("cancelar", IntentKind.Cancel),
         Case("Cancela la ruta", IntentKind.Cancel),

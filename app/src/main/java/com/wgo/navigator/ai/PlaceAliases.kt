@@ -21,6 +21,8 @@ object PlaceAliases {
         "universidad de nariño" to "Universidad de Nariño",
         "mariana" to "Universidad Mariana",
         "u mariana" to "Universidad Mariana",
+        "torobajo" to "Universidad de Nariño",
+        "sede torobajo" to "Universidad de Nariño",
         "terminal" to "Terminal de Transportes de Pasto",
         "terminal de transportes" to "Terminal de Transportes de Pasto",
         "bus terminal" to "Terminal de Transportes de Pasto",
