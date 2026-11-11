@@ -83,6 +83,24 @@ class NominatimGeocoder(
         return Outcome.Ok(places)
     }
 
+    /**
+     * Exactly one request (or none on a cache hit): [query] biased to the box around [center], or [bounded] to it.
+     * The place resolver drives its own budget of at most three of these per utterance (docs/PLACE_SEARCH.md).
+     * No hit is [WgoFailure.NotFound].
+     */
+    suspend fun once(query: String, center: GeoCoord, language: Language, limit: Int, bounded: Boolean): Outcome<List<Place>> {
+        val q = query.trim()
+        if (q.isEmpty()) return Outcome.Err(WgoFailure.NotFound)
+        val key = cacheKey(q, center, language, limit) + "|once|$bounded"
+        synchronized(cache) { cache[key] }?.let {
+            WgoMetrics.event("geocode cache_hit")
+            return Outcome.Ok(it)
+        }
+        val r = fetch(q, center, language, limit, bounded)
+        if (r is Outcome.Ok) synchronized(cache) { cache[key] = r.value }
+        return r
+    }
+
     private suspend fun fetch(q: String, center: GeoCoord, language: Language, limit: Int, bounded: Boolean): Outcome<List<Place>> {
         val response = limiter.run {
             http.request(

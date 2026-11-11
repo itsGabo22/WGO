@@ -62,6 +62,7 @@ import com.wgo.navigator.voice.DebugUtterances
 import com.wgo.navigator.ui.components.PermissionDenied
 import com.wgo.navigator.ui.map.GeoCoord
 import com.wgo.navigator.ui.map.PastoCentre
+import com.wgo.navigator.geo.PlaceResolver
 import com.wgo.navigator.ui.map.RadarProjection
 import com.wgo.navigator.route.ModeEstimate
 import com.wgo.navigator.ui.screens.ScreenConfirmPlace

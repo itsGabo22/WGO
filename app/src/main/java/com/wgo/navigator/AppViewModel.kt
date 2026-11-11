@@ -32,6 +32,11 @@ import com.wgo.navigator.core.IntentKind
 import com.wgo.navigator.core.Place
 import com.wgo.navigator.core.Route
 import com.wgo.navigator.geo.NominatimGeocoder
+import com.wgo.navigator.geo.OnlinePlaceSearch
+import com.wgo.navigator.geo.PlaceRequest
+import com.wgo.navigator.geo.PlaceResolver
+import com.wgo.navigator.geo.Resolution
+import com.wgo.navigator.places.PlaceIndex
 import com.wgo.navigator.net.HttpClient
 import com.wgo.navigator.net.WgoUserAgent
 import com.wgo.navigator.route.OsrmRouter
@@ -235,11 +240,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     private val tripStore = SettingsRepository(application)
     private val interpreter = TieredInterpreter.create(application, WgoUserAgent.plain)
     private val geocoder = NominatimGeocoder(HttpClient(WgoUserAgent.identifying))
+
+    /** My places, then the offline index (loaded on the first search), then Nominatim (docs/PLACE_SEARCH.md). */
+    private val placeResolver = PlaceResolver(
+        index = PlaceIndex.fromAssets(application),
+        online = OnlinePlaceSearch { q, center, bounded -> geocoder.once(q, center, pipelineLanguage, ONLINE_RESULTS, bounded) }
+    )
     private val router = OsrmRouter(HttpClient(WgoUserAgent.identifying))
 
     private var pipelineJob: Job? = null
     private var pipelineLanguage = Language.ES
-    private var placeQuery: String? = null
+    private var placeRequest: PlaceRequest? = null
     private var failedStep = Step.Listen
 
     /** True when the travel mode came from the utterance: mode selection is skipped. */
@@ -276,7 +287,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                     onMicTapped()
                 }
                 Step.Interpret -> interpret()
-                Step.Resolve -> placeQuery?.let { resolve(it) } ?: fail(PipelineError.NotUnderstood, Step.Listen)
+                Step.Resolve -> placeRequest?.let { resolve(it) } ?: fail(PipelineError.NotUnderstood, Step.Listen)
                 Step.Route -> {
                     // (A plain null check: `StateFlow.value?.let {}` crashes the Compose lint detector on Kotlin 2.1.)
                     val mode = _selectedMode.value
@@ -295,10 +306,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         when (result.kind) {
             IntentKind.Navigate -> {
                 val query = result.placeQuery ?: return fail(PipelineError.NotUnderstood, Step.Listen)
-                placeQuery = query
+                val request = PlaceRequest(query, result.placeHint, result.placeCategory)
+                placeRequest = request
                 modeSpoken = result.mode != null
                 _selectedMode.value = result.mode
-                resolve(query)
+                resolve(request)
             }
             IntentKind.Cancel, IntentKind.Repeat -> goHome()
             IntentKind.ChangeMode, IntentKind.Unknown ->
@@ -306,24 +318,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         }
     }
 
-    private suspend fun resolve(query: String) {
+    private suspend fun resolve(request: PlaceRequest) {
         _stage.value = WorkStage.Resolving
         _screen.value = ScreenState.Working
         val near = locationSource.lastKnown()?.let { GeoCoord(it.lat, it.lon) }
         _near.value = near
-        when (val found = geocoder.search(query, near, pipelineLanguage, PLACE_RESULTS)) {
-            is Outcome.Ok -> {
-                _places.value = found.value
+        val start = System.nanoTime()
+        val found = placeResolver.resolve(request, near, pipelineLanguage)
+        WgoMetrics.event(
+            "places latency_ms=${(System.nanoTime() - start) / 1_000_000} requests=${placeResolver.lastRequests} " +
+                "result=${found::class.simpleName}"
+        )
+        when (found) {
+            is Resolution.Found -> {
+                _places.value = found.places
                 _placeIndex.value = 0
                 _screen.value = ScreenState.ConfirmPlace
                 _haptics.tryEmit(HapticEvent.Click) // spec section 8: destination understood
             }
-            is Outcome.Err -> fail(
-                // A server error keeps the "no internet" message it always had; only a read timeout is "too slow".
-                if (found.failure == WgoFailure.NotFound) PipelineError.PlaceNotFound
-                else PipelineError.forNetwork(found.failure, PipelineError.Offline),
-                Step.Resolve
-            )
+            is Resolution.NotFound -> fail(PipelineError.PlaceNotFound, Step.Resolve)
+            // A server error keeps the "no internet" message it always had; only a read timeout is "too slow".
+            is Resolution.Failed -> fail(PipelineError.forNetwork(found.failure, PipelineError.Offline), Step.Resolve)
         }
     }
 
@@ -648,7 +663,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
     private companion object {
         const val ORIGIN_TIMEOUT_MS = 8_000L
-        const val PLACE_RESULTS = 3
+        /** Hits asked from Nominatim per request; the resolver keeps at most two candidates. */
+        const val ONLINE_RESULTS = 3
 
         /** Debug injections are accepted where a new request makes sense (never mid-navigation or in settings). */
         val INJECTABLE_SCREENS = setOf(
