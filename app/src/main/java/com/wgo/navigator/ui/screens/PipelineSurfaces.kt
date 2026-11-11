@@ -58,6 +58,9 @@ import com.wgo.navigator.ui.theme.wgoTouchSide
  * lists its fit value against the Galaxy Watch5 Pro limit of 103 (spec section 4, `wgoFit(w, h, top)`).
  */
 
+/** Longest place name quoted whole on the not-found title (two 130 dp lines of `headline-sm`, measured on the watch). */
+private const val NOT_FOUND_NAME_CHARS = 11
+
 /** Places the visual centre of a box whose touch side is [touch] on the spec line [centreY]. */
 private fun topFor(centreY: Float, touch: Dp): Dp = centreY.dp - touch / 2
 
@@ -249,7 +252,11 @@ fun ScreenPlaceNotFound(
     val palette = Wgo.palette
     Box(modifier.fillMaxSize().background(palette.canvas)) {
         Text(
-            text = String.format(string(StringKey.NOT_FOUND_TITLE), name),
+            // The ellipsis goes inside the quotes: shorten the name, keep the closing ».
+            text = String.format(
+                string(StringKey.NOT_FOUND_TITLE),
+                if (name.length > NOT_FOUND_NAME_CHARS) name.take(NOT_FOUND_NAME_CHARS - 1).trimEnd() + "…" else name
+            ),
             style = WgoType.headlineSm,
             color = palette.ink,
             textAlign = TextAlign.Center,
