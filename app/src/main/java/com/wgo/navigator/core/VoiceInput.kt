@@ -8,6 +8,12 @@ sealed interface VoiceEvent {
     /** The recognizer is listening (the UI may start the listening visuals). */
     data object Ready : VoiceEvent
 
+    /**
+     * The recognizer reported ready but failed before hearing anything and is being recreated (an offline engine
+     * without the language pack reports ready, then fails): the UI goes back to "preparing"; [Ready] follows again.
+     */
+    data object Restarting : VoiceEvent
+
     /** Input level, 0..1, for the voice bars. */
     data class Level(val value: Float) : VoiceEvent
 

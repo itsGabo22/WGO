@@ -10,18 +10,17 @@ import org.junit.Test
 
 class RecognizerErrorsTest {
     private fun attempt(
-        heardSpeech: Boolean = false,
         online: Boolean = false,
         tagIndex: Int = 0,
         tagCount: Int = 3,
         freshRetryUsed: Boolean = false,
         partial: String? = null
-    ) = Attempt(heardSpeech, online, tagIndex, tagCount, freshRetryUsed, partial)
+    ) = Attempt(online, tagIndex, tagCount, freshRetryUsed, partial)
 
     @Test fun onlyNetworkCodesEverMeanNoInternet() {
         val states = listOf(
             attempt(), attempt(online = true), attempt(freshRetryUsed = true), attempt(online = true, tagIndex = 2, freshRetryUsed = true),
-            attempt(heardSpeech = true), attempt(heardSpeech = true, freshRetryUsed = true)
+            attempt(partial = "calle"), attempt(partial = " ", freshRetryUsed = true)
         )
         for (code in -1..20) for (state in states) {
             val action = RecognizerErrors.decide(code, state)
@@ -74,12 +73,17 @@ class RecognizerErrorsTest {
         assertEquals(Action.Fail(WgoFailure.Unavailable), RecognizerErrors.decide(RecognizerErrors.AUDIO, attempt()))
     }
 
-    @Test fun nothingRestartsOnceSpeechWasHeard() {
-        val heard = attempt(heardSpeech = true)
-        assertEquals(Action.Final("calle 18"), RecognizerErrors.decide(RecognizerErrors.SERVER_DISCONNECTED, heard.copy(partial = "calle 18")))
-        assertEquals(Action.Fail(WgoFailure.NotStarted), RecognizerErrors.decide(RecognizerErrors.SERVER_DISCONNECTED, heard))
-        assertEquals(Action.Fail(WgoFailure.NotStarted), RecognizerErrors.decide(RecognizerErrors.LANGUAGE_NOT_SUPPORTED, heard))
-        assertEquals(Action.Fail(WgoFailure.Offline), RecognizerErrors.decide(RecognizerErrors.NETWORK, heard))
+    @Test fun transcribedWordsEndTheSessionInsteadOfARestart() {
+        val codes = listOf(
+            RecognizerErrors.NETWORK, RecognizerErrors.NETWORK_TIMEOUT, RecognizerErrors.SERVER_DISCONNECTED,
+            RecognizerErrors.BUSY, RecognizerErrors.CLIENT, RecognizerErrors.TOO_MANY_REQUESTS, RecognizerErrors.LANGUAGE_NOT_SUPPORTED
+        )
+        for (code in codes) {
+            assertEquals("code $code", Action.Final("calle 18"), RecognizerErrors.decide(code, attempt(partial = "calle 18")))
+            assertEquals("code $code", Action.Final("calle 18"), RecognizerErrors.decide(code, attempt(online = true, freshRetryUsed = true, partial = "calle 18")))
+        }
+        // A blank partial is no text: the restart rules apply.
+        assertEquals(Action.Restart(false, 0, true), RecognizerErrors.decide(RecognizerErrors.NETWORK, attempt(partial = "  ")))
     }
 
     @Test fun languageTagsInOrder() {

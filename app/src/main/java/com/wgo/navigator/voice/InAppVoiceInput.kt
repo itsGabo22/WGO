@@ -28,9 +28,10 @@ import kotlinx.coroutines.launch
  * Never two instances at once: an instance is destroyed before the next one is created.
  *
  * Errors follow [RecognizerErrors]: only network codes mean "no internet" (after one silent retry); a missing language
- * model moves the session online and through the language tags (the tag that heard speech is remembered for the
- * process); a busy, disconnected or unbinding service is recreated once, [RecognizerErrors.RESTART_DELAY_MS] after the
- * old instance was destroyed. Nothing restarts once speech was heard. Caps: [START_TIMEOUT_MS] to get ready (a cold recognizer process takes about 4 s), then [MAX_LISTEN_MS] of
+ * model moves the session online and through the language tags (both facts are kept in a [RecognizerMemory], across
+ * app restarts in the app; when a restart follows a "ready", [VoiceEvent.Restarting] puts the UI back to preparing); a busy, disconnected or unbinding service is recreated once, [RecognizerErrors.RESTART_DELAY_MS] after the
+ * old instance was destroyed. Nothing restarts once words were transcribed (they end the session). Caps:
+ * [START_TIMEOUT_MS] per attempt to get ready (a cold recognizer process takes 2-18 s), then [MAX_LISTEN_MS] of
  * listening and [SILENCE_AFTER_SPEECH_MS] of silence once speech started; after a listening cap the recognizer is
  * asked to stop and the best transcript so far is used.
  */
@@ -39,10 +40,15 @@ class InAppVoiceInput(
     private val now: () -> Long = { SystemClock.elapsedRealtime() },
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate, // the recognizer lives on the main thread
     private val pause: suspend (Long) -> Unit = { delay(it) },
-    /** False in tests, so every instance starts with an empty memory. */
-    processWideMemory: Boolean = true
+    memoryProvider: () -> RecognizerMemory = { InMemoryRecognizerMemory() }
 ) : VoiceInput {
-    constructor(context: Context) : this({ AndroidRecognizer(context.applicationContext) })
+    constructor(context: Context) : this(
+        newRecognizer = { AndroidRecognizer(context.applicationContext) },
+        memoryProvider = { PrefsRecognizerMemory.get(context) }
+    )
+
+    /** Read on the first session (after the preparing frame), never at ViewModel creation. */
+    private val memory by lazy(memoryProvider)
 
     @Volatile
     private var session: ProducerScope<VoiceEvent>? = null
@@ -56,8 +62,9 @@ class InAppVoiceInput(
         val started = now()
         val smoother = LevelSmoother()
         val tags = RecognizerErrors.tags(language)
-        var tagIndex = workingTag[language] ?: 0
-        var online = language in noOfflineModel
+        var tagIndex = memory.workingTag(language)?.coerceIn(0, tags.lastIndex) ?: 0
+        var online = memory.noOfflineModel(language)
+        var attemptStartedAt = started
         var freshRetryUsed = false
         var recognizer: Recognizer? = null
         var generation = 0
@@ -92,6 +99,7 @@ class InAppVoiceInput(
             val r = newRecognizer()
             instances++
             recognizer = r
+            attemptStartedAt = now()
             val request = RecognizerRequest(tags[tagIndex], preferOffline = !online)
             WgoMetrics.event("voice_attempt n=$instances tag=${request.languageTag} online=$online at_ms=${now() - started}")
             r.start(request, object : RecognizerListener {
@@ -112,7 +120,7 @@ class InAppVoiceInput(
                 override fun onBeginningOfSpeech() {
                     if (stale()) return
                     // Speech means this tag works (a missing model fails right after "ready", before any speech).
-                    workingTag[language] = tagIndex
+                    memory.setWorkingTag(language, tagIndex)
                     speechStarted = true
                     lastVoice = now()
                 }
@@ -126,7 +134,7 @@ class InAppVoiceInput(
 
                 override fun onPartial(text: String) {
                     if (stale()) return
-                    workingTag[language] = tagIndex
+                    memory.setWorkingTag(language, tagIndex)
                     if (text != lastPartial) lastVoice = now()
                     lastPartial = text
                     trySend(VoiceEvent.Partial(text))
@@ -140,18 +148,23 @@ class InAppVoiceInput(
 
                 override fun onError(code: Int) {
                     if (stale()) return
-                    val heard = speechStarted || !lastPartial.isNullOrBlank()
                     val action = RecognizerErrors.decide(
-                        code, RecognizerErrors.Attempt(heard, online, tagIndex, tags.size, freshRetryUsed, lastPartial)
+                        code, RecognizerErrors.Attempt(online, tagIndex, tags.size, freshRetryUsed, lastPartial)
                     )
                     WgoMetrics.event("voice_error code=$code ready=$ready online=$online tag=${tags[tagIndex]} action=$action")
                     when (action) {
                         is Action.Restart -> {
-                            if (!online && action.online) noOfflineModel += language
+                            if (!online && action.online) memory.markNoOfflineModel(language)
                             online = action.online
                             tagIndex = action.tagIndex
                             if (action.consumesFreshRetry) freshRetryUsed = true
-                            ready = false // the next instance has to report ready again (the UI keeps its state)
+                            ready = false // the next instance has to report ready again
+                            speechStarted = false // the silence cap starts over with the new instance
+                            if (readySent) {
+                                // The UI said "speak now" but nothing is listening any more: back to preparing.
+                                readySent = false
+                                trySend(VoiceEvent.Restarting)
+                            }
                             release()
                             restartJob = launch {
                                 pause(RecognizerErrors.RESTART_DELAY_MS)
@@ -175,8 +188,9 @@ class InAppVoiceInput(
                 delay(WATCHDOG_TICK_MS)
                 val t = now()
                 when {
-                    !ready -> if (t - started >= START_TIMEOUT_MS) {
-                        WgoMetrics.event("voice_stop reason=not_ready after_ms=${t - started}")
+                    // Per attempt: a restart late in a slow start still gets its full time.
+                    !ready -> if (t - attemptStartedAt >= START_TIMEOUT_MS) {
+                        WgoMetrics.event("voice_stop reason=not_ready after_ms=${t - started} attempt_ms=${t - attemptStartedAt}")
                         finish(VoiceEvent.Failed(WgoFailure.NotStarted))
                     }
                     stopAt == 0L -> {
@@ -208,30 +222,13 @@ class InAppVoiceInput(
         }
     }.flowOn(dispatcher)
 
-    /**
-     * What the process learnt about the recognizer (kept for the process, so a reopened Activity with a new ViewModel
-     * does not pay the failed offline attempt again).
-     */
-    private class Memory {
-        /** Languages whose offline model turned out to be missing: later sessions go online at once. */
-        val noOfflineModel: MutableSet<Language> = java.util.Collections.synchronizedSet(HashSet())
-
-        /** Per language, the index of the tag that last heard speech (later sessions start with it). */
-        val workingTag = java.util.concurrent.ConcurrentHashMap<Language, Int>()
-    }
-
-    private val memory = if (processWideMemory) PROCESS_MEMORY else Memory()
-    private val noOfflineModel get() = memory.noOfflineModel
-    private val workingTag get() = memory.workingTag
-
     companion object {
-        private val PROCESS_MEMORY = Memory()
         const val MAX_LISTEN_MS = 8_000L
         const val SILENCE_AFTER_SPEECH_MS = 2_000L
 
         /**
-         * Time to get ready. A cold recognizer process took 2.4-9.6 s on the Galaxy Watch5 Pro (9.6 s when the app
-         * process itself was fresh), and a restart adds about 0.5-2.5 s.
+         * Time for one recognizer instance to get ready (counted per attempt). A cold recognizer process took 2.4-18 s
+         * on the Galaxy Watch5 Pro (the slowest with a fresh app process and little free memory).
          */
         const val START_TIMEOUT_MS = 20_000L
         private const val STOP_GRACE_MS = 1_200L

@@ -189,6 +189,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 if (cue) _haptics.tryEmit(HapticEvent.Tick) // spec section 8: mic ready after a slow start
                 WgoMetrics.event("voice_listening ms_from_press=$preparedMs speak_now_tick=$cue")
             }
+            VoiceEvent.Restarting -> {
+                // The ready was false (the recognizer is being recreated): back to preparing, cue armed again.
+                _micState.value = MicState.Preparing
+                voiceLevel.value = 0f
+                speakNow.onPress()
+                WgoMetrics.event("voice_back_to_preparing")
+            }
             VoiceEvent.AwaitingSystem -> _micState.value = MicState.Waiting
             is VoiceEvent.Level -> voiceLevel.value = event.value
             is VoiceEvent.Partial -> _transcript.value = event.text

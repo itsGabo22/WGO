@@ -5,7 +5,9 @@ import com.wgo.navigator.core.VoiceEvent
 import com.wgo.navigator.core.WgoFailure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -37,14 +39,14 @@ class InAppVoiceInputTest {
         }
     }
 
+    @Volatile
     private var clock = 0L
 
     private fun input(fake: FakeRecognizers) = InAppVoiceInput(
         newRecognizer = fake::create,
         now = { clock },
         dispatcher = Dispatchers.Unconfined,
-        pause = { fake.pauses += it },
-        processWideMemory = false
+        pause = { fake.pauses += it }
     )
 
     private fun InAppVoiceInput.run(language: Language = Language.ES) = runBlocking { listen(language).toList() }
@@ -58,7 +60,14 @@ class InAppVoiceInputTest {
             { it.onReady(); it.onBeginningOfSpeech(); it.onPartial("uni"); it.onResults("unicentro") }
         )
         val events = input(fake).run()
-        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Partial("uni"), VoiceEvent.Final("unicentro")), events)
+        // Each false "ready" is taken back (Restarting) so the UI never says "speak now" while nothing listens.
+        assertEquals(
+            listOf(
+                VoiceEvent.Ready, VoiceEvent.Restarting, VoiceEvent.Ready, VoiceEvent.Restarting, VoiceEvent.Ready,
+                VoiceEvent.Partial("uni"), VoiceEvent.Final("unicentro")
+            ),
+            events
+        )
         assertEquals(
             listOf(RecognizerRequest("es-CO", true), RecognizerRequest("es-CO", false), RecognizerRequest("es-CO", false)),
             fake.requests
@@ -112,9 +121,40 @@ class InAppVoiceInputTest {
         assertEquals(RecognizerRequest("es-419", false), fake.requests.last())
     }
 
-    @Test fun networkErrorAfterSpeechIsRealNoInternet() {
-        val fake = FakeRecognizers({ it.onReady(); it.onBeginningOfSpeech(); it.onError(RecognizerErrors.NETWORK) })
-        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Failed(WgoFailure.Offline)), input(fake).run())
+    @Test fun aRestartBeforeReadySendsNoRestarting() {
+        val fake = FakeRecognizers({ it.onError(RecognizerErrors.BUSY) }, { it.onReady(); it.onResults("centro") })
+        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Final("centro")), input(fake).run())
+    }
+
+    @Test fun theReadyTimeoutCountsPerAttempt() = runBlocking {
+        // First attempt fails at 19 s; the second one must get its own 20 s, not the 1 s left of the first.
+        val fake = FakeRecognizers({ clock = 19_000L; it.onError(RecognizerErrors.SERVER_DISCONNECTED) }, { })
+        val voice = input(fake)
+        val events: MutableList<VoiceEvent> = java.util.Collections.synchronizedList(mutableListOf())
+        val job = launch(Dispatchers.Default) { voice.listen(Language.ES).toList(events) }
+        clock = 25_000L
+        Thread.sleep(400)
+        assertEquals("still preparing 6 s into the second attempt", emptyList<VoiceEvent>(), events.toList())
+        clock = 39_100L
+        withTimeout(3_000) { job.join() }
+        assertEquals(listOf(VoiceEvent.Failed(WgoFailure.NotStarted)), events)
+    }
+
+    @Test fun speechWithoutWordsBeforeAColdNetworkErrorRestartsAndCuesAgain() {
+        // Measured: the cold online engine fails with 2 ("online no progress") even when the user spoke.
+        val fake = FakeRecognizers(
+            { it.onReady(); it.onBeginningOfSpeech(); it.onError(RecognizerErrors.NETWORK) },
+            { it.onReady(); it.onPartial("uni"); it.onResults("udenar") }
+        )
+        assertEquals(
+            listOf(VoiceEvent.Ready, VoiceEvent.Restarting, VoiceEvent.Ready, VoiceEvent.Partial("uni"), VoiceEvent.Final("udenar")),
+            input(fake).run()
+        )
+    }
+
+    @Test fun networkErrorWithWordsKeepsTheWords() {
+        val fake = FakeRecognizers({ it.onReady(); it.onPartial("parque"); it.onError(RecognizerErrors.NETWORK) })
+        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Partial("parque"), VoiceEvent.Final("parque")), input(fake).run())
         assertEquals(1, fake.requests.size)
     }
 

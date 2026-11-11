@@ -48,6 +48,7 @@ class VoiceInputChain(
                 var fallBack = false
                 inApp.listen(language).collect { event ->
                     if (event == VoiceEvent.Ready) ready = true
+                    if (event == VoiceEvent.Restarting) ready = false // a false "ready": the fallback is possible again
                     val earlyUnavailable = event is VoiceEvent.Failed && !ready && event.failure == WgoFailure.Unavailable
                     if (earlyUnavailable && SystemVoiceDialog.isAvailable(app)) fallBack = true else emit(event)
                 }
