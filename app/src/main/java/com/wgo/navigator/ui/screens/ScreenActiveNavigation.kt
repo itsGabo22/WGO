@@ -21,8 +21,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import com.wgo.navigator.ui.components.HudContent
 import com.wgo.navigator.ui.components.NavigationHud
+import com.wgo.navigator.ui.map.RadarProjection
+import com.wgo.navigator.metrics.WgoMetrics
+import com.wgo.navigator.ui.theme.WgoMotion
+import com.wgo.navigator.ui.theme.atLeastRealDp
+import com.wgo.navigator.ui.theme.wgoMinTouch
+import com.wgo.navigator.ui.theme.wgoTouchSide
 import kotlinx.coroutines.delay
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
@@ -127,9 +151,13 @@ fun ScreenActiveNavigation(
             source.state.collectAsState().value
         }
         var zoom by remember { mutableDoubleStateOf(17.0) }
+        val reduceMotion = LocalWgoReduceMotion.current
+        // Explore mode (spec section 7): UI state only, dropped with this screen (trip end, ambient).
+        val explore = remember { ExploreController { SystemClock.elapsedRealtime() } }
+        var tileSize by remember { mutableDoubleStateOf(RadarProjection.DEFAULT_TILE_SIZE_PX) }
 
         // Z-Layer 0: RADAR MINIMAP. Under an opaque surface its loops stop (no frames for an invisible sweep).
-        CompositionLocalProvider(LocalWgoReduceMotion provides (LocalWgoReduceMotion.current || covered)) {
+        CompositionLocalProvider(LocalWgoReduceMotion provides (reduceMotion || covered)) {
             RadarMinimap(
                 style = wgoMapStyle(mapStyleId, Wgo.palette),
                 userLocation = radar.location,
@@ -138,7 +166,81 @@ fun ScreenActiveNavigation(
                 blips = radar.blips,
                 maneuver = radar.maneuver,
                 zoom = zoom,
-                clock = clock
+                clock = clock,
+                viewCenter = explore.viewCenter(radar.location),
+                viewBearing = explore.viewBearing(radar.bearing),
+                onTileSize = { tileSize = it }
+            )
+        }
+
+        // Explore: back to following 10 s after the last touch (paused while a finger is down), with a 420 ms glide.
+        LaunchedEffect(explore.exploring, explore.touching, explore.lastTouchMs, explore.glideFrom) {
+            if (!explore.exploring || explore.glideFrom != null) return@LaunchedEffect
+            val wait = ExploreRules.autoReturnInMs(explore.lastTouchMs, explore.touching, SystemClock.elapsedRealtime())
+                ?: return@LaunchedEffect
+            delay(wait)
+            explore.startReturn()
+        }
+        LaunchedEffect(explore.glideFrom) {
+            if (explore.glideFrom == null) return@LaunchedEffect
+            if (!reduceMotion) {
+                animate(0f, 1f, animationSpec = tween(ExploreRules.RETURN_GLIDE_MS, easing = WgoMotion.EmphasizedDecel)) { v, _ ->
+                    explore.glide = v
+                }
+            }
+            explore.finish()
+        }
+
+        if (!covered) {
+            // Z-Layer 0.5: the one-finger pan surface (above the map, below every control). Taps pass through.
+            val latestRadar by rememberUpdatedState(radar)
+            val latestZoom by rememberUpdatedState(zoom)
+            val latestTile by rememberUpdatedState(tileSize)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(explore) {
+                        val slop = viewConfiguration.touchSlop
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            explore.onTouch(true)
+                            var travelled = Offset.Zero
+                            var panning = false
+                            var applied = Offset.Zero
+                            var events = 0
+                            var endReason = "up"
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    events++
+                                    // Only the first finger pans; a second one is ignored (no pinch).
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: run { endReason = "lost"; null } ?: break
+                                    if (change.isConsumed) { endReason = "claimed"; break } // edge swipe-back
+                                    // The release can carry the last stretch of the drag: apply it before stopping.
+                                    val delta = change.positionChange()
+                                    val released = !change.pressed
+                                    if (!panning) {
+                                        travelled += delta
+                                        if (travelled.getDistance() < slop) { if (released) break else continue }
+                                        panning = true
+                                    }
+                                    val step = if (panning && travelled != Offset.Zero) travelled.also { travelled = Offset.Zero } else delta
+                                    val r = latestRadar
+                                    explore.pan(step.x, step.y, r.location, r.bearing, r.route, latestZoom, latestTile)
+                                    applied += step
+                                    change.consume()
+                                    if (released) break
+                                }
+                            } finally {
+                                explore.onTouch(false)
+                                if (panning) WgoMetrics.event(
+                                    "explore_drag px=${applied.x.toInt()},${applied.y.toInt()} events=$events end=$endReason " +
+                                        "tile=${latestTile.toInt()} center_from_user_m=" +
+                                        (explore.center?.let { RadarProjection.distanceMeters(it, latestRadar.location).toInt() } ?: -1)
+                                )
+                            }
+                        }
+                    }
             )
         }
 
@@ -153,7 +255,7 @@ fun ScreenActiveNavigation(
                 distanceToNextM = nav?.distanceToNextM,
                 maneuver = nav?.next,
                 rerouting = navState is NavState.OffRoute || navState is NavState.Rerouting,
-                exploring = false,
+                exploring = explore.exploring,
                 nowMs = SystemClock.elapsedRealtime()
             )
             val hud = tracker.update(input)
@@ -166,10 +268,22 @@ fun ScreenActiveNavigation(
             NavigationHud(
                 mode = forcedHud ?: hud.shown,
                 content = hudContent(navState),
-                onTap = { if (tracker.toggle(SystemClock.elapsedRealtime())) hudTick++ },
+                onTap = {
+                    // While exploring a tap on the HUD recenters; otherwise it forces the other state.
+                    if (explore.exploring) explore.startReturn()
+                    else if (tracker.toggle(SystemClock.elapsedRealtime())) hudTick++
+                },
                 clock = clock,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
+
+            // RECENTER (explore only): 40 dp `primary` circle centred at (113.5, 98), 48 real dp touch.
+            if (explore.exploring) {
+                RecenterButton(
+                    onClick = { explore.startReturn() },
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = 98.dp - wgoTouchSide(40.dp) / 2)
+                )
+            }
 
             // Z-Layer 2.5: ZOOM CONTROLS (known pre-P6 debt: 36 dp buttons, under the 48 real dp minimum)
             Column(
@@ -232,6 +346,63 @@ fun ScreenActiveNavigation(
             navState is NavState.GpsLost -> GpsLostOverlay(onRetry = onRetryGps, clock = clock)
         }
     }
+}
+
+/**
+ * Map control: a fixed 40 dp circle with a 48 REAL dp touch box (spec section 7). [primary] fills it with `primary`
+ * (recenter); otherwise `surface` + `edge-control` (zoom). Pressing inverts instantly. Never resized.
+ */
+@Composable
+internal fun MapControlButton(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    primary: Boolean = false,
+    iconSize: Dp = 20.dp
+) {
+    val palette = Wgo.palette
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val fill = when {
+        pressed -> palette.ink
+        primary -> palette.primary
+        else -> palette.surface
+    }
+    val tint = when {
+        pressed -> palette.inkInverse
+        primary -> palette.onPrimary
+        else -> palette.ink
+    }
+    Box(
+        modifier = modifier
+            .wgoMinTouch()
+            .semantics { contentDescription = description }
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(fill, CircleShape)
+                .border(1.5.dp.atLeastRealDp(), palette.ink, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(iconSize))
+        }
+    }
+}
+
+@Composable
+private fun RecenterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    MapControlButton(
+        icon = WgoIcons.Locate,
+        description = string(StringKey.RECENTER),
+        onClick = onClick,
+        modifier = modifier,
+        primary = true,
+        iconSize = 22.dp
+    )
 }
 
 /** What the HUD shows, from the engine state (previews without a state get a sample instruction). */

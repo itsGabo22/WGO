@@ -61,6 +61,37 @@ object RadarProjection {
         return ScreenPoint((anchorX + rx).toFloat(), (anchorY + ry).toFloat())
     }
 
+    /** Latitude of world pixel Y [wy] at [zoom] (inverse of [worldY]). */
+    fun latOfWorldY(wy: Double, zoom: Double, tileSize: Double = DEFAULT_TILE_SIZE_PX): Double {
+        val n = PI * (1.0 - 2.0 * wy / (tileSize * 2.0.pow(zoom)))
+        return Math.toDegrees(kotlin.math.atan(kotlin.math.sinh(n)))
+    }
+
+    /** Longitude of world pixel X [wx] at [zoom] (inverse of [worldX]). */
+    fun lonOfWorldX(wx: Double, zoom: Double, tileSize: Double = DEFAULT_TILE_SIZE_PX): Double =
+        wx / (tileSize * 2.0.pow(zoom)) * 360.0 - 180.0
+
+    /**
+     * The map centre after a finger drag of ([dxPx], [dyPx]) screen pixels on a map centred on [center] and rotated so
+     * [bearingDeg] points up: the content follows the finger, so the centre moves the opposite way. Inverse of the
+     * rotation in [toScreen].
+     */
+    fun panCenter(
+        center: GeoCoord,
+        dxPx: Double,
+        dyPx: Double,
+        bearingDeg: Double,
+        zoom: Double,
+        tileSize: Double = DEFAULT_TILE_SIZE_PX
+    ): GeoCoord {
+        val theta = Math.toRadians(-bearingDeg)
+        val wx = dxPx * cos(theta) + dyPx * sin(theta)
+        val wy = -dxPx * sin(theta) + dyPx * cos(theta)
+        val cx = worldX(center.lon, zoom, tileSize) - wx
+        val cy = worldY(center.lat, zoom, tileSize) - wy
+        return GeoCoord(latOfWorldY(cy, zoom, tileSize), lonOfWorldX(cx, zoom, tileSize))
+    }
+
     /** Initial bearing from [from] to [to], degrees clockwise from north in 0..360. */
     fun bearingBetween(from: GeoCoord, to: GeoCoord): Double {
         val lat1 = Math.toRadians(from.lat)

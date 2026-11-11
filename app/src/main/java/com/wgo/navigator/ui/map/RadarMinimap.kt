@@ -51,7 +51,13 @@ fun RadarMinimap(
     zoom: Double = 17.0,
     maneuver: GeoCoord? = null,
     showNorth: Boolean = false,
-    tileLayer: (@Composable (Modifier) -> Unit)? = null
+    tileLayer: (@Composable (Modifier) -> Unit)? = null,
+    /** Explore mode: the map is centred here (at the fixed anchor) instead of on the user. Null = follow the user. */
+    viewCenter: GeoCoord? = null,
+    /** Explore mode: the frozen heading. Null = the user's [bearing]. */
+    viewBearing: Float? = null,
+    /** osmdroid's real tile size in px, for pan maths outside. */
+    onTileSize: (Double) -> Unit = {}
 ) {
     val palette = Wgo.palette
     val dark = palette === NightPalette
@@ -60,27 +66,33 @@ fun RadarMinimap(
     var tileSize by remember { mutableDoubleStateOf(RadarProjection.DEFAULT_TILE_SIZE_PX) }
 
     val anchor = Offset(size.width / 2f, size.height * USER_ANCHOR_Y_FRACTION)
+    val center = viewCenter ?: userLocation
+    val heading = (viewBearing ?: bearing).toDouble()
 
-    // Re-projection happens only when one of these inputs changes (about once per second).
-    val projectedRoute = remember(route, userLocation, bearing, zoom, size, tileSize) {
+    // Re-projection happens only when one of these inputs changes (about once per second; every drag step in explore).
+    val projectedRoute = remember(route, center, heading, zoom, size, tileSize) {
         if (size == IntSize.Zero || route.size < 2) null else Path().apply {
             route.forEachIndexed { i, point ->
-                val p = RadarProjection.toScreen(point, userLocation, bearing.toDouble(), zoom, anchor.x, anchor.y, tileSize)
+                val p = RadarProjection.toScreen(point, center, heading, zoom, anchor.x, anchor.y, tileSize)
                 if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y)
             }
         }
     }
-    val projectedManeuver = remember(maneuver, userLocation, bearing, zoom, size, tileSize) {
+    val projectedManeuver = remember(maneuver, center, heading, zoom, size, tileSize) {
         maneuver?.let {
-            RadarProjection.toScreen(it, userLocation, bearing.toDouble(), zoom, anchor.x, anchor.y, tileSize)
+            RadarProjection.toScreen(it, center, heading, zoom, anchor.x, anchor.y, tileSize)
                 .let { p -> Offset(p.x, p.y) }
         }
     }
-    val projectedBlips = remember(blips, userLocation, bearing, zoom, size, tileSize) {
+    val projectedBlips = remember(blips, center, heading, zoom, size, tileSize) {
         blips.map {
-            val p = RadarProjection.toScreen(it.position, userLocation, bearing.toDouble(), zoom, anchor.x, anchor.y, tileSize)
+            val p = RadarProjection.toScreen(it.position, center, heading, zoom, anchor.x, anchor.y, tileSize)
             ProjectedBlip(Offset(p.x, p.y), it.kind)
         }
+    }
+    // The user (chevron, halo, rings, sweep): at the anchor while following, at its real place while exploring.
+    val userAnchor = if (viewCenter == null) anchor else remember(userLocation, center, heading, zoom, size, tileSize) {
+        RadarProjection.toScreen(userLocation, center, heading, zoom, anchor.x, anchor.y, tileSize).let { Offset(it.x, it.y) }
     }
 
     BoxWithConstraints(
@@ -94,11 +106,11 @@ fun RadarMinimap(
             tileLayer(Modifier.fillMaxSize())
         } else {
             RadarMapView(
-                center = userLocation,
-                bearing = bearing,
+                center = center,
+                bearing = heading.toFloat(),
                 zoom = zoom,
                 filter = filter,
-                onTileSize = { tileSize = it }
+                onTileSize = { tileSize = it; onTileSize(it) }
             )
         }
 
@@ -113,7 +125,7 @@ fun RadarMinimap(
             nodeFill = palette.canvas,
             incident = palette.alert,
             poi = palette.go,
-            anchor = anchor,
+            anchor = userAnchor,
             route = projectedRoute,
             maneuver = projectedManeuver,
             blips = projectedBlips,

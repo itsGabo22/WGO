@@ -75,6 +75,13 @@ object WgoIcons {
         "M3 3l18 18"
     )
     val Close = icon("Close", "M6 6l12 12", "M18 6L6 18")
+    /** Locate (recenter): a ring with a centre dot and four ticks. */
+    val Locate = icon(
+        "Locate",
+        "M12 5.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13z",
+        "M12 11.2a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6z",
+        "M12 2v3.5 M12 18.5V22 M2 12h3.5 M18.5 12H22"
+    )
     val DirectionsCar = icon(
         "DirectionsCar",
         "M3 13l2-5a2 2 0 0 1 2-1.5h10a2 2 0 0 1 2 1.5l2 5v4H3z",
