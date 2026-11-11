@@ -146,17 +146,25 @@ fun ScreenConfirmPlace(
     count: Int,
     onGo: () -> Unit,
     onOther: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    far: Boolean = false
 ) {
     val palette = Wgo.palette
     val language = LocalLanguage.current
     // The "DESTINO" badge is gone (P6-B: the two-line subtitle needs its room); screen readers still hear it.
     val spokenName = "${string(StringKey.CONFIRM_BADGE)}: ${place.name}"
     // Distance on line 1, neighbourhood / address on line 2; without a distance the address may use both lines.
-    val subtitle = listOfNotNull(
-        distanceM?.let { String.format(string(StringKey.DIST_AWAY), formatDistance(it, language)) },
-        place.address.takeIf { it.isNotBlank() }
-    ).joinToString("\n")
+    // P7: a candidate over 25 km away (never listed before a nearer one) shows its distance in `alert`.
+    val distanceLine = distanceM?.let { String.format(string(StringKey.DIST_AWAY), formatDistance(it, language)) }
+    val subtitle = buildAnnotatedString {
+        if (distanceLine != null) {
+            if (far) withStyle(SpanStyle(color = palette.alert)) { append(distanceLine) } else append(distanceLine)
+        }
+        place.address.takeIf { it.isNotBlank() }?.let {
+            if (distanceLine != null) append("\n")
+            append(it)
+        }
+    }
     val option = String.format(string(StringKey.CONFIRM_OPTION), index + 1, count)
 
     Box(modifier.fillMaxSize().background(palette.canvas)) {

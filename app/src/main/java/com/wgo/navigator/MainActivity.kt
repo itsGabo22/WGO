@@ -342,9 +342,14 @@ class MainActivity : ComponentActivity() {
                                 val index by appViewModel.placeIndex.collectAsState()
                                 val near by appViewModel.near.collectAsState()
                                 places.getOrNull(index)?.let { place ->
+                                    // Far = over 25 km from the fix, or from the Pasto centre without one (then shown).
+                                    val fromAnchor = RadarProjection.distanceMeters(near ?: PastoCentre, place.coord)
+                                    val far = fromAnchor > PlaceResolver.FAR_KM * 1000
                                     ScreenConfirmPlace(
                                         place = place,
-                                        distanceM = near?.let { RadarProjection.distanceMeters(it, place.coord) },
+                                        distanceM = near?.let { RadarProjection.distanceMeters(it, place.coord) }
+                                            ?: fromAnchor.takeIf { far },
+                                        far = far,
                                         index = index,
                                         count = places.size,
                                         onGo = appViewModel::onGo,
