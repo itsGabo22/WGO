@@ -2,6 +2,7 @@ package com.wgo.navigator.places
 
 import android.content.Context
 import com.wgo.navigator.core.Place
+import com.wgo.navigator.core.PlaceOrigin
 import com.wgo.navigator.geo.PrivatePlaces
 import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.ui.map.GeoCoord
@@ -30,7 +31,7 @@ class MyPlaces(private val read: () -> String?) : PrivatePlaces {
         val key = PlaceText.normalize(name)
         if (key.isEmpty()) return null
         val hit = load()[key] ?: return null
-        return Place(hit.name, hit.note, hit.coord)
+        return Place(hit.name, hit.note, hit.coord, PlaceOrigin.Private)
     }
 
     override suspend fun prewarm() {

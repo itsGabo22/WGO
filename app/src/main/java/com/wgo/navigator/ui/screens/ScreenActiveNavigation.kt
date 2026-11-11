@@ -61,6 +61,16 @@ import com.wgo.navigator.ui.formatDistance
 import com.wgo.navigator.ui.map.DemoRadarSource
 import com.wgo.navigator.ui.map.RadarMinimap
 import com.wgo.navigator.ui.map.USER_ANCHOR_Y_FRACTION
+import com.wgo.navigator.ui.map.MapTiles
+import com.wgo.navigator.ui.map.TileProvider
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
+import androidx.wear.compose.material.Text
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.layout.onSizeChanged
@@ -276,6 +286,19 @@ fun ScreenActiveNavigation(
                 modifier = Modifier.align(Alignment.TopCenter)
             )
 
+            // MAP ATTRIBUTION (P7): 164x28 @58 under the COMPACT HUD, for the first 4 s of the trip and while exploring.
+            var tripStart by remember { mutableStateOf(true) }
+            LaunchedEffect(Unit) {
+                delay(ATTRIBUTION_START_MS)
+                tripStart = false
+            }
+            val provider by MapTiles.provider.collectAsState()
+            MapAttribution(
+                visible = explore.exploring || (tripStart && (forcedHud ?: hud.shown) == HudMode.Compact),
+                provider = provider,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+
             // RECENTER (explore only): 40 dp `primary` circle centred at (113.5, 108), 48 real dp touch; hidden while
             // the user's chevron is under it (P7, RecenterRule), so it never covers the user.
             if (explore.exploring) {
@@ -373,6 +396,46 @@ internal fun MapControlButton(
         ) {
             Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(iconSize))
         }
+    }
+}
+
+private const val ATTRIBUTION_START_MS = 4_000L
+
+/**
+ * The map's data credit (spec section 9.1, map layers): "© OpenStreetMap contributors" and, with CARTO tiles, "© CARTO"
+ * on a `surface` pill 164x28 @58 (fit 93.7). Fades in and out (`base` 240 ms, a cut with reduce motion); the fade is
+ * read in the draw phase only.
+ */
+@Composable
+private fun MapAttribution(visible: Boolean, provider: TileProvider, modifier: Modifier = Modifier) {
+    val palette = Wgo.palette
+    val reduceMotion = LocalWgoReduceMotion.current
+    val alpha = animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = if (reduceMotion) snap() else tween(240, easing = WgoMotion.Standard),
+        label = "mapAttribution"
+    )
+    val lines = listOfNotNull(
+        string(StringKey.MAP_CREDIT_OSM),
+        string(StringKey.MAP_CREDIT_CARTO).takeIf { provider == TileProvider.CARTO }
+    ).joinToString("\n")
+    Box(
+        modifier = modifier
+            .offset(y = 58.dp)
+            .size(164.dp, 28.dp)
+            .graphicsLayer { this.alpha = alpha.value }
+            .clip(CircleShape)
+            .background(palette.surface)
+            .clearAndSetSemantics { if (visible) contentDescription = lines },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = lines,
+            color = palette.ink,
+            style = WgoType.labelSm.copy(letterSpacing = 0.sp, lineHeight = 12.sp),
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
     }
 }
 

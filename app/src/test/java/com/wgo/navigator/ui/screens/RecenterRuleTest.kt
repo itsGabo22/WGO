@@ -16,6 +16,12 @@ class RecenterRuleTest {
         assertTrue(RecenterRule.visible(null, null))
     }
 
+    @Test fun theMapAttributionPillFits() {
+        // 164x28 @58 (spec 9.1): fit 93.7, below the compact HUD pill (22..58).
+        assertTrue(wgoFit(164f, 28f, 58f) <= 103f)
+        assertTrue(22f + 36f <= 58f)
+    }
+
     @Test fun theSlotFitsAndClearsTheCompactPillAndTheAttribution() {
         assertTrue(wgoFit(40f, 40f, RecenterRule.CENTER_Y_DP - 20f) <= 103f)
         // Compact pill 112x36 @22: its 48 real dp touch box ends above the button's at Small Round.

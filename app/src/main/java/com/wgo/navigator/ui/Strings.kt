@@ -49,6 +49,8 @@ enum class StringKey {
     ERR_PLACE_NOT_FOUND, ERR_ROUTE_UNAVAILABLE, ERR_AI_UNAVAILABLE,
     // Place not found (P7)
     NOT_FOUND_TITLE, NOT_FOUND_MAYBE, NOT_FOUND_ASK, BTN_SAY_STREET,
+    // Data credits (P7)
+    CREDIT_OVERTURE, MAP_CREDIT_OSM, MAP_CREDIT_CARTO,
     HINT_SPEAK_AGAIN, HINT_CHECK_CONNECTION, HINT_OTHER_NAME, HINT_ROUTE, HINT_AI, HINT_VOICE_UNAVAILABLE, NAV_TOTALS,
     ERR_TIMEOUT, HINT_TIMEOUT, ETA_ABOUT, ERR_MIC_START, HINT_MIC_START, VOICE_PREPARING, MIC_STATE_PREPARING, SPEAK_NOW, HUD_EXPAND, HUD_COLLAPSE, RECENTER,
     // Live navigation states (P5-D)
@@ -137,6 +139,9 @@ private val es = mapOf(
     StringKey.CONFIRM_OPTION to "Opción %d de %d",
     StringKey.DIST_AWAY to "a %s",
     StringKey.OSM_ATTRIBUTION to "© OpenStreetMap",
+    StringKey.CREDIT_OVERTURE to "© Overture Maps",
+    StringKey.MAP_CREDIT_OSM to "© OpenStreetMap contributors",
+    StringKey.MAP_CREDIT_CARTO to "© CARTO",
     StringKey.ERR_PLACE_NOT_FOUND to "No encontré ese lugar",
     StringKey.NOT_FOUND_TITLE to "No encontré «%s»",
     StringKey.NOT_FOUND_MAYBE to "¿Quizá este?",
@@ -277,6 +282,9 @@ private val en = mapOf(
     StringKey.CONFIRM_OPTION to "Option %d of %d",
     StringKey.DIST_AWAY to "%s away",
     StringKey.OSM_ATTRIBUTION to "© OpenStreetMap",
+    StringKey.CREDIT_OVERTURE to "© Overture Maps",
+    StringKey.MAP_CREDIT_OSM to "© OpenStreetMap contributors",
+    StringKey.MAP_CREDIT_CARTO to "© CARTO",
     StringKey.ERR_PLACE_NOT_FOUND to "Place not found",
     StringKey.NOT_FOUND_TITLE to "I couldn't find «%s»",
     StringKey.NOT_FOUND_MAYBE to "Maybe this one?",

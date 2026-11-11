@@ -3,6 +3,7 @@ package com.wgo.navigator.geo
 import com.wgo.navigator.Language
 import com.wgo.navigator.core.Outcome
 import com.wgo.navigator.core.Place
+import com.wgo.navigator.core.PlaceOrigin
 import com.wgo.navigator.core.WgoFailure
 import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.places.PlaceIndex
@@ -95,12 +96,12 @@ class PlaceResolver(
             val hits = index.search(query, anchor, minTier = 1, maxKm = FAR_KM)
             hits.filter { it.tier >= 2 }.forEach {
                 candidates += PlaceCandidate(
-                    Place(it.place.name, it.place.address, it.place.coord), it.tier, it.categoryBoost, it.distanceM,
+                    Place(it.place.name, it.place.address, it.place.coord, PlaceOrigin.Overture), it.tier, it.categoryBoost, it.distanceM,
                     it.place.confidence, PlaceSource.Index
                 )
             }
             partial = hits.filter { it.tier == 1 && it.distanceM <= SUGGEST_KM * 1000 }.map {
-                PlaceCandidate(Place(it.place.name, it.place.address, it.place.coord), 1, false, it.distanceM,
+                PlaceCandidate(Place(it.place.name, it.place.address, it.place.coord, PlaceOrigin.Overture), 1, false, it.distanceM,
                     it.place.confidence, PlaceSource.Index)
             }
         }

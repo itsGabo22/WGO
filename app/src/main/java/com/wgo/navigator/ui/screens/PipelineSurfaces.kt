@@ -29,6 +29,7 @@ import androidx.wear.compose.material.Text
 import com.wgo.navigator.PipelineError
 import com.wgo.navigator.WorkStage
 import com.wgo.navigator.core.Place
+import com.wgo.navigator.core.PlaceOrigin
 import com.wgo.navigator.core.permissions.PermissionStatus
 import com.wgo.navigator.core.permissions.WgoPermission
 import com.wgo.navigator.ui.LocalLanguage
@@ -211,8 +212,15 @@ fun ScreenConfirmPlace(
                 .width(120.dp)
                 .wgoRiseIn(delayMs = 80)
         )
-        Text(
-            text = string(StringKey.OSM_ATTRIBUTION).uppercase(),
+        // The source of the shown place (P7): Overture for the local index, OpenStreetMap for Nominatim, none for
+        // my places.
+        val credit = when (place.origin) {
+            PlaceOrigin.Overture -> StringKey.CREDIT_OVERTURE
+            PlaceOrigin.OpenStreetMap -> StringKey.OSM_ATTRIBUTION
+            PlaceOrigin.Private -> null
+        }
+        if (credit != null) Text(
+            text = string(credit).uppercase(),
             color = palette.inkMuted,
             style = WgoType.labelSm,
             textAlign = TextAlign.Center,
