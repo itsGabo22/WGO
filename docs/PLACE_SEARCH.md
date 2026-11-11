@@ -20,7 +20,9 @@ Maps Places has both places near the owner's home: a DATA gap in OSM for Cubanit
 | 3 | **Nominatim** (OpenStreetMap) | online | at most 3 requests per utterance | addresses, streets, neighbourhoods, landmarks, and the fallback when 1-2 have no strong match |
 | - | the language model | online | - | **never** coordinates: it only returns text (name, hint, category) |
 
-Source 2 is skipped when the anchor is outside the index box (lon -77.40..-77.17, lat 1.08..1.32). Source 3 is skipped
+The index (and my places) load off the main thread at the first microphone press of the process, so the work overlaps
+with listening; never at app start and never on Home idle (measured on the Galaxy Watch5 Pro, release-like build:
+about 0.5 s and 4 MB of heap; the debug build is 10-50x slower). Source 2 is skipped when the anchor is outside the index box (lon -77.40..-77.17, lat 1.08..1.32). Source 3 is skipped
 when source 2 already has a strong match (tier >= 2 below) within 25 km of the anchor, so the common case is offline.
 
 ## Splitting the name from a landmark hint
