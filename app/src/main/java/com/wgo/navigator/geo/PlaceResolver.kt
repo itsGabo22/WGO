@@ -49,6 +49,9 @@ fun interface OnlinePlaceSearch {
 /** A private list of the owner's places (my_places.json); an alias match beats everything. */
 fun interface PrivatePlaces {
     suspend fun match(name: String): Place?
+
+    /** Reads the list ahead of the first search. */
+    suspend fun prewarm() {}
 }
 
 /**
@@ -66,6 +69,12 @@ class PlaceResolver(
     @Volatile
     var lastRequests: Int = 0
         private set
+
+    /** Loads the local index ahead of the search (called at the mic press, so it overlaps with listening). */
+    suspend fun prewarm() {
+        privatePlaces?.prewarm()
+        index?.ensureLoaded()
+    }
 
     suspend fun resolve(request: PlaceRequest, fix: GeoCoord?, @Suppress("UNUSED_PARAMETER") language: Language): Resolution {
         val anchor = fix ?: PastoCentre

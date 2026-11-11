@@ -33,6 +33,10 @@ class MyPlaces(private val read: () -> String?) : PrivatePlaces {
         return Place(hit.name, hit.note, hit.coord)
     }
 
+    override suspend fun prewarm() {
+        load()
+    }
+
     private suspend fun load(): Map<String, MyPlace> {
         byAlias?.let { return it }
         return mutex.withLock {

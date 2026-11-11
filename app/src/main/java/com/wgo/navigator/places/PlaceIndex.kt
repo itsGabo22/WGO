@@ -31,8 +31,10 @@ class IndexedPlace(
 class IndexHit(val place: IndexedPlace, val tier: Int, val categoryBoost: Boolean, val distanceM: Double)
 
 /**
- * The offline places index (docs/PLACE_SEARCH.md): loaded lazily off the main thread on the first place search (never at
- * app start), kept for the process. Matching is accent and case insensitive, ignores stop words and category words,
+ * The offline places index (docs/PLACE_SEARCH.md): loaded lazily off the main thread when the user first presses the
+ * microphone (or on the first place search), never at app start or on Home idle, and kept for the process. Measured on
+ * the Galaxy Watch5 Pro: about 0.5 s and 4 MB in the release-like build; the debug build is 10-50x slower (debuggable
+ * code plus the debug UI's animation work), which the mic-press start hides behind listening. Matching is accent and case insensitive, ignores stop words and category words,
  * and accepts token prefixes and one edit in tokens of 5+ characters. [open] provides the gzip TSV written by
  * `tools/build_places_index.py`.
  */
@@ -127,26 +129,55 @@ class PlaceIndex(private val open: () -> InputStream) {
             }
         }
 
-        /** Parses the gzip TSV: `#` comment lines, one header line, then id, name, name_norm, alt_norm, category, ... */
+        /**
+         * Parses the gzip TSV: `#` comment lines, one header line, then id, name, name_norm, alt_norm, category, ...
+         * Hand-rolled on purpose: Kotlin's `toDoubleOrNull` validates with a large regex and `split` allocates a list
+         * per line, which made the first load take 20 s in the debug build on the watch.
+         */
         fun parse(input: InputStream): List<IndexedPlace> {
-            val reader = BufferedReader(InputStreamReader(GZIPInputStream(input), Charsets.UTF_8))
+            val reader = BufferedReader(InputStreamReader(GZIPInputStream(input, 32 * 1024), Charsets.UTF_8), 64 * 1024)
             val out = ArrayList<IndexedPlace>(6_500)
+            val f = arrayOfNulls<String>(10)
             var headerSeen = false
-            reader.forEachLine { line ->
-                if (line.isEmpty() || line.startsWith("#")) return@forEachLine
-                if (!headerSeen) { headerSeen = true; return@forEachLine }
-                val f = line.split('\t')
-                if (f.size < 10) return@forEachLine
-                val lat = f[6].toDoubleOrNull() ?: return@forEachLine
-                val lon = f[7].toDoubleOrNull() ?: return@forEachLine
-                val core = PlaceCategories.core(f[2].split(' ').filter { it.isNotEmpty() })
-                val alts = if (f[3].isEmpty()) emptyList() else f[3].split('|').map { a ->
-                    PlaceCategories.core(a.split(' ').filter { it.isNotEmpty() })
+            while (true) {
+                val line = reader.readLine() ?: break
+                if (line.isEmpty() || line[0] == '#') continue
+                if (!headerSeen) { headerSeen = true; continue }
+                var start = 0
+                var n = 0
+                while (n < 10) {
+                    val tab = line.indexOf('\t', start)
+                    f[n++] = if (tab < 0) line.substring(start) else line.substring(start, tab)
+                    if (tab < 0) break
+                    start = tab + 1
                 }
+                if (n < 10) continue
+                val lat = number(f[6]!!) ?: continue
+                val lon = number(f[7]!!) ?: continue
+                val alt = f[3]!!
                 out += IndexedPlace(
-                    name = f[1], core = core, alts = alts, category = f[4], address = f[5],
-                    coord = GeoCoord(lat, lon), confidence = f[8].toFloatOrNull() ?: 0f, source = f[9]
+                    name = f[1]!!, core = PlaceCategories.core(words(f[2]!!, ' ')),
+                    alts = if (alt.isEmpty()) emptyList() else words(alt, '|').map { PlaceCategories.core(words(it, ' ')) },
+                    category = f[4]!!, address = f[5]!!, coord = GeoCoord(lat, lon),
+                    confidence = number(f[8]!!)?.toFloat() ?: 0f, source = f[9]!!
                 )
+            }
+            return out
+        }
+
+        private fun number(s: String): Double? = try {
+            java.lang.Double.parseDouble(s)
+        } catch (e: NumberFormatException) {
+            null
+        }
+
+        private fun words(s: String, sep: Char): List<String> {
+            val out = ArrayList<String>(4)
+            var start = 0
+            while (start <= s.length) {
+                val end = s.indexOf(sep, start).let { if (it < 0) s.length else it }
+                if (end > start) out += s.substring(start, end)
+                start = end + 1
             }
             return out
         }

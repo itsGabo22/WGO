@@ -159,6 +159,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         WgoMetrics.event("voice_press at=${SystemClock.elapsedRealtime()}")
         _micState.value = MicState.Preparing
         _haptics.tryEmit(HapticEvent.Tick) // spec section 8: starts listening (the press is the start)
+        // The offline places index loads while the user speaks (once per process; never at app start or idle).
+        viewModelScope.launch { placeResolver.prewarm() }
         listenJob = viewModelScope.launch {
             // Let the preparing frame draw first: the recognizer setup below runs on the main thread. The first frame
             // callback can run before Compose draws the new state, so wait for the next one too (~16-32 ms).
