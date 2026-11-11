@@ -10,7 +10,15 @@ import com.wgo.navigator.haptics.HapticPlayer
 import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.ui.components.MicState
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import androidx.wear.ambient.AmbientLifecycleObserver
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import com.wgo.navigator.ui.screens.AmbientInfo
+import com.wgo.navigator.ui.screens.AmbientNavigationScreen
+import com.wgo.navigator.ui.theme.Wgo
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -97,6 +105,9 @@ class MainActivity : ComponentActivity() {
             permissions.onResult(permission, granted, shouldShowRequestPermissionRationale(permission.manifest))
         }
     }
+
+    /** Non-null while the system is in ambient mode. */
+    private val ambientInfo = MutableStateFlow<AmbientInfo?>(null)
 
     /** When each permission dialog was launched (debug timing only). */
     private val permissionAskedAt = HashMap<WgoPermission, Long>()
@@ -192,9 +203,30 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Ambient (always-on). The observer enables ambient for the whole Activity (the API has no per-screen switch):
+        // during a trip the minimal ambient navigation screen is shown; on any other screen the app draws nothing (a
+        // black screen, no loops) and the system returns to the watch face after its usual timeout.
+        lifecycle.addObserver(AmbientLifecycleObserver(this, object : AmbientLifecycleObserver.AmbientLifecycleCallback {
+            override fun onEnterAmbient(ambientDetails: AmbientLifecycleObserver.AmbientDetails) {
+                ambientInfo.value = AmbientInfo(ambientDetails.deviceHasLowBitAmbient, ambientDetails.burnInProtectionRequired)
+                appViewModel.onAmbientChanged(true)
+            }
+
+            override fun onUpdateAmbient() = appViewModel.onAmbientTick()
+
+            override fun onExitAmbient() {
+                ambientInfo.value = null
+                appViewModel.onAmbientChanged(false)
+            }
+        }))
+
         // Debug-only resource counters (no-op in release): frames per screen and a WGO_METRICS line every 30 s.
+        // Frames drawn in ambient are counted under "Ambient" (the frame-loop check).
         WgoMetrics.install(this, lifecycleScope)
-        lifecycleScope.launch { appViewModel.screen.collect { WgoMetrics.screen = it.name } }
+        lifecycleScope.launch {
+            combine(appViewModel.screen, ambientInfo) { screen, ambient -> if (ambient != null) "Ambient" else screen.name }
+                .collect { WgoMetrics.screen = it }
+        }
 
         setContent {
             val isDarkMode by settingsViewModel.isDarkMode.collectAsState()
@@ -206,6 +238,20 @@ class MainActivity : ComponentActivity() {
 
             CompositionLocalProvider(LocalLanguage provides language) {
                 WgoTheme(isDarkMode = isDarkMode) {
+                    val ambient by ambientInfo.collectAsState()
+                    val screenNow by appViewModel.screen.collectAsState()
+                    // Ambient replaces the whole interactive tree (no frame loop, no map); leaving it rebuilds the
+                    // current screen as it is now, with no screen transition or intro.
+                    val info = ambient
+                    if (info != null) {
+                        if (screenNow == ScreenState.Navigation) {
+                            val shown by appViewModel.ambientNavState.collectAsState()
+                            AmbientNavigationScreen(shown, info)
+                        } else {
+                            Box(Modifier.fillMaxSize().background(Wgo.palette.ambient.canvas))
+                        }
+                        return@WgoTheme
+                    }
                     val currentScreen by appViewModel.screen.collectAsState()
                     val micState by appViewModel.micState.collectAsState()
                     val selectedMode by appViewModel.selectedMode.collectAsState()

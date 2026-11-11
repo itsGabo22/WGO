@@ -42,6 +42,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.wgo.navigator.ui.screens.AmbientSnapshot
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -480,6 +482,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
             }
             TripEnd.Ended -> Unit
         }
+    }
+
+    // ---- Ambient (always-on) ----
+
+    private val ambientTick = MutableStateFlow(0)
+
+    /**
+     * What the ambient navigation screen shows: the trip state, refreshed only on the ambient tick or when the maneuver
+     * or the guidance state changes (AmbientSnapshot), so fixes do not redraw the low-power screen.
+     */
+    val ambientNavState: StateFlow<NavState> = AmbientSnapshot(host.navState.value).let { snap ->
+        combine(host.navState, ambientTick) { state, tick -> snap.update(state, tick); snap.shown }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), snap.shown)
+    }
+
+    /**
+     * The system entered or left ambient. The trip (if any) keeps running in the host with the slower screen-off
+     * location policy; a voice session never stays open in ambient (same rule as the app going to the background).
+     */
+    fun onAmbientChanged(ambient: Boolean) {
+        host.setAmbient(ambient)
+        if (ambient && sessionActive && _micState.value != MicState.Waiting) cancelListening()
+        WgoMetrics.event("ambient=$ambient screen=${_screen.value}")
+    }
+
+    /** The system's ambient update (about once a minute). */
+    fun onAmbientTick() {
+        ambientTick.value++
     }
 
     /** Back or CANCEL while navigating: ask first (END NAVIGATION?). */
