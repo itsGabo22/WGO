@@ -44,6 +44,12 @@ private fun ListeningListeningDaylight() = ListeningPreview(false, MicState.List
 private fun ListeningListeningNight() = ListeningPreview(true, MicState.Listening, transcript = "Centro Histórico")
 
 @WgoWatchPreviews @Composable
+private fun ListeningPreparingDaylight() = ListeningPreview(false, MicState.Preparing)
+
+@WgoWatchPreviews @Composable
+private fun ListeningPreparingEnNight() = ListeningPreview(true, MicState.Preparing, Language.EN)
+
+@WgoWatchPreviews @Composable
 private fun ListeningProcessingDaylight() = ListeningPreview(false, MicState.Processing)
 
 @WgoWatchPreviews @Composable

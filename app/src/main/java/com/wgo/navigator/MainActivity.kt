@@ -321,6 +321,7 @@ class MainActivity : ComponentActivity() {
                                     ScreenListening(
                                         micState = micState,
                                         onMicClick = appViewModel::onMicTapped,
+                                        onMicPress = appViewModel::onMicTapped,
                                         onCancel = appViewModel::cancelListening,
                                         onOpenSettings = appViewModel::openSettings,
                                         onToggleLanguage = settingsViewModel::toggleLanguage,

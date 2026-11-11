@@ -3,6 +3,10 @@ package com.wgo.navigator.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -35,8 +39,12 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** [Waiting]: the system speech dialog is showing (fallback strategy); static, no loop. */
-enum class MicState { Idle, Listening, Processing, Waiting }
+/**
+ * [Preparing]: the mic was pressed and the recognizer is starting (a cold recognizer process takes about 4 s); the orb
+ * shows the processing arc until the recognizer is ready. [Waiting]: the system speech dialog is showing (fallback
+ * strategy); static, no loop.
+ */
+enum class MicState { Idle, Preparing, Listening, Processing, Waiting }
 
 /** Idle inner border of the orb (docs/design spec: 1 dp #0038B8). Not a palette token, so it lives here. */
 private val OrbIdleBorder = Color(0xFF0038B8)
@@ -59,6 +67,8 @@ private const val WAITING_RING_RADIUS_DP = 38f
  * [amplitude] maps a bar index to 0..1; without it, [level] (the live voice level, 0..1, read ONLY here in the draw
  * phase) scales a wave driven by the shared clock phase; with neither, the bars run a synthetic wave.
  * Haptics belong to the ViewModel behind [onClick]; a null [onClick] makes a display-only orb (no button role).
+ * [onPress] fires at pointer-down (before the release that triggers [onClick]) so a voice session can start, and show
+ * its preparing state, one tap-length earlier; accessibility actions still go through [onClick] only.
  */
 @Composable
 fun MicOrb(
@@ -67,10 +77,12 @@ fun MicOrb(
     modifier: Modifier = Modifier,
     amplitude: ((Int) -> Float)? = null,
     level: (() -> Float)? = null,
-    clock: WgoClock? = null
+    clock: WgoClock? = null,
+    onPress: (() -> Unit)? = null
 ) {
     val palette = Wgo.palette
-    val animated = state == MicState.Listening || state == MicState.Processing
+    val spinning = state == MicState.Processing || state == MicState.Preparing
+    val animated = state == MicState.Listening || spinning
     val sharedClock = if (animated) clock ?: rememberWgoClock() else null
     sharedClock?.Use(ClockRate.Full)
 
@@ -78,6 +90,7 @@ fun MicOrb(
     val stateLabel = string(
         when (state) {
             MicState.Idle -> StringKey.MIC_STATE_IDLE
+            MicState.Preparing -> StringKey.MIC_STATE_PREPARING
             MicState.Listening -> StringKey.MIC_STATE_LISTENING
             MicState.Processing -> StringKey.MIC_STATE_PROCESSING
             MicState.Waiting -> StringKey.MIC_STATE_WAITING
@@ -101,7 +114,7 @@ fun MicOrb(
                         drawPulseRing(palette.auraDeep, t, RING_PERIOD_MS / 2)
                         drawVoiceBars(palette.primaryInk, palette.auraDeep, t, amplitude, level?.invoke())
                     }
-                    MicState.Processing -> {
+                    MicState.Processing, MicState.Preparing -> {
                         val r = PROCESSING_RADIUS_DP.dp.toPx()
                         drawArc(
                             color = palette.primaryInk,
@@ -120,6 +133,15 @@ fun MicOrb(
                 contentDescription = label
                 stateDescription = stateLabel
             }
+            .then(
+                if (onPress != null) Modifier.pointerInput(onPress) {
+                    // Initial pass, nothing consumed: the click below still sees the whole gesture.
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        onPress()
+                    }
+                } else Modifier
+            )
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center
     ) {

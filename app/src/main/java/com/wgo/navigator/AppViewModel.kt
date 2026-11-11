@@ -1,6 +1,7 @@
 package com.wgo.navigator
 
 import android.app.Application
+import android.os.SystemClock
 import com.wgo.navigator.nav.NavState
 import com.wgo.navigator.service.NavigationHost
 import com.wgo.navigator.service.TripEnd
@@ -35,6 +36,7 @@ import com.wgo.navigator.net.WgoUserAgent
 import com.wgo.navigator.route.OsrmRouter
 import com.wgo.navigator.ui.map.GeoCoord
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -77,6 +79,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     override val haptics: SharedFlow<HapticEvent> = _haptics.asSharedFlow()
 
     private var listenJob: Job? = null
+
+    /** When the mic was last pressed (elapsedRealtime), for the debug timing events. */
+    private var pressedAt = 0L
 
     /** The WGO lockup formed: one Click, never one per word. */
     fun onIntroLockup() {
@@ -135,14 +140,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     /** The UI language, provided by the Activity (owned by the settings). */
     var language: () -> Language = { Language.ES }
 
+    /**
+     * Mic pressed (pointer-down on the orb, its click, a retry): the preparing state and the "starts listening" Tick
+     * come at once, in the same frame as the press; the live listening state follows when the recognizer is ready
+     * (a cold recognizer process takes about 4 s). Repeated calls during a session are ignored.
+     */
     fun onMicTapped() {
         if (_micState.value != MicState.Idle || listenJob?.isActive == true) return
         _transcript.value = ""
+        pressedAt = SystemClock.elapsedRealtime()
+        WgoMetrics.event("voice_press at=$pressedAt")
+        _micState.value = MicState.Preparing
+        _haptics.tryEmit(HapticEvent.Tick) // spec section 8: starts listening (the press is the start)
         listenJob = viewModelScope.launch {
+            // Let the preparing frame draw first: the recognizer setup below runs on the main thread. The first frame
+            // callback can run before Compose draws the new state, so wait for the next one too (~16-32 ms).
+            awaitFrame()
+            awaitFrame()
             // RECORD_AUDIO is asked lazily, and only for the in-app recognizer (the system dialog records by itself).
             if (voice.strategy() == VoiceStrategy.InApp) {
                 val status = permissions.ensure(WgoPermission.MICROPHONE)
                 if (status != PermissionStatus.Granted) {
+                    _micState.value = MicState.Idle
                     _micDenied.value = true
                     return@launch
                 }
@@ -153,20 +172,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 voice.listen(language()).collect(::onVoiceEvent)
             } finally {
                 sessionActive = false
+                // A session that ended without any event never leaves the preparing state hanging.
+                if (_micState.value == MicState.Preparing) _micState.value = MicState.Idle
             }
         }
     }
 
     private fun onVoiceEvent(event: VoiceEvent) {
         when (event) {
+            // (The Tick already came with the press.)
             VoiceEvent.Ready -> {
                 _micState.value = MicState.Listening
-                _haptics.tryEmit(HapticEvent.Tick) // spec section 8: starts listening
+                WgoMetrics.event("voice_listening ms_from_press=${SystemClock.elapsedRealtime() - pressedAt}")
             }
-            VoiceEvent.AwaitingSystem -> {
-                _micState.value = MicState.Waiting
-                _haptics.tryEmit(HapticEvent.Tick)
-            }
+            VoiceEvent.AwaitingSystem -> _micState.value = MicState.Waiting
             is VoiceEvent.Level -> voiceLevel.value = event.value
             is VoiceEvent.Partial -> _transcript.value = event.text
             is VoiceEvent.Final -> onTranscript(event.text, null)

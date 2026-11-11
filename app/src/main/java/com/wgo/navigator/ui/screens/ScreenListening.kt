@@ -22,7 +22,11 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
+import com.wgo.navigator.metrics.WgoMetrics
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -87,11 +91,16 @@ fun ScreenListening(
     modifier: Modifier = Modifier,
     transcript: String = "",
     level: (() -> Float)? = null,
-    clock: WgoClock = rememberWgoClock()
+    clock: WgoClock = rememberWgoClock(),
+    onMicPress: (() -> Unit)? = null
 ) {
     val palette = Wgo.palette
     val language = LocalLanguage.current
     val reduceMotion = LocalWgoReduceMotion.current
+    if (micState == MicState.Preparing) {
+        // Debug metric: when the preparing state is first on screen (compare with the ViewModel's voice_press).
+        LaunchedEffect(Unit) { withFrameNanos { WgoMetrics.event("voice_preparing_drawn at=${SystemClock.elapsedRealtime()}") } }
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(palette.canvas)) {
         val k = maxWidth.value / REFERENCE_SIZE
@@ -140,6 +149,15 @@ fun ScreenListening(
                         style = WgoType.headlineMd,
                         textAlign = TextAlign.Center,
                         maxLines = 2
+                    )
+                    // 130 wide, up to 2 lines (fit 93.5 with two lines @38, like the Working stage label).
+                    MicState.Preparing -> Text(
+                        text = string(StringKey.VOICE_PREPARING),
+                        color = palette.primaryInk,
+                        style = WgoType.labelMd,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        modifier = Modifier.width(130.dp).semantics { liveRegion = LiveRegionMode.Polite }
                     )
                     MicState.Waiting -> Text(
                         text = string(StringKey.LISTENING_SYSTEM),
@@ -204,6 +222,7 @@ fun ScreenListening(
         MicOrb(
             state = micState,
             onClick = onMicClick,
+            onPress = onMicPress,
             level = level,
             clock = clock,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(92f)).wgoRiseIn(delayMs = WgoMotion.STAGGER)
