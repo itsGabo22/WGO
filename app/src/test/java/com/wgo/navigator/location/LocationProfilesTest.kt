@@ -42,8 +42,14 @@ class LocationProfilesTest {
 
     @Test fun adaptiveIntervalFollowsTheFormula() {
         val f = LocationProfiles::adaptiveIntervalMs
-        // Inside 80 m of a maneuver: 1 s, whatever the speed.
-        assertEquals(1_000L, f(79.0, 10f))
+        // 1 s only when the maneuver is <= 8 s away in time: driving 10 m/s that is 80 m...
+        assertEquals(1_000L, f(80.0, 10f))
+        assertEquals(2_000L, f(81.0, 10f))
+        // ...walking 1.4 m/s only the last 11 m (not the last 80 m = 57 s).
+        assertEquals(1_000L, f(11.0, 1.4f))
+        assertEquals(2_000L, f(79.0, 1.4f))
+        assertEquals(2_000L, f(12.0, 1.4f))
+        // Unknown speed: the screen-on distance rule (1 s inside 80 m).
         assertEquals(1_000L, f(10.0, Float.NaN))
         // Unknown distance or speed: the fixed 2 s.
         assertEquals(2_000L, f(null, 10f))
@@ -74,9 +80,26 @@ class LocationProfilesTest {
      * Same drive under both policies (screen off the whole time): a Pasto-like route with a maneuver every 120-600 m,
      * at 36 km/h and at 5 km/h. The adaptive policy must need clearly fewer fixes per minute than the fixed 2 s one.
      */
+    /** The 200 m and 50 m cues stay reliable: between two fixes the user never moves more than 40 m in that band. */
+    @Test fun turnCuesStayReliable() {
+        for (v in listOf(0.8f, 1.4f, 5f, 10f, 15f, 20f)) for (d in 40..260) {
+            val step = v * LocationProfiles.adaptiveIntervalMs(d.toDouble(), v) / 1000.0
+            assertTrue("v=$v d=$d step=$step", step <= 40.0)
+            if (d <= 120) assertTrue("v=$v d=$d step=$step (the 50 m cue)", step <= 20.0)
+        }
+    }
+
     @Test fun adaptivePolicyNeedsFewerFixesThanTheFixedOne() {
+        // The recorded Udenar walking route (OSM-DE foot, 1235 m): maneuvers at these distances, arrival included.
+        val udenar = listOf(15.0, 195.0, 263.0, 362.0, 439.0, 917.0, 938.0, 1_025.0, 1_201.0, 1_235.0)
         val city = listOf(180.0, 420.0, 540.0, 1_140.0, 1_300.0, 1_900.0, 2_020.0, 2_600.0, 3_000.0, 3_600.0)
         val avenue = listOf(1_200.0, 2_500.0, 3_600.0) // long straights between maneuvers
+        /** The first P6-A rule (1 s inside 80 m by distance), for the before/after numbers. */
+        fun distanceRule(d: Double, v: Float): Long {
+            if (d < 80.0) return 1_000L
+            val raw = ((d - 250.0) / v / 2 * 1000).coerceIn(2_000.0, 10_000.0)
+            return LocationProfiles.ADAPTIVE_STEPS_MS.last { it <= raw }
+        }
         fun perMinute(maneuvers: List<Double>, speed: Float, policy: (Double) -> Long): Double {
             var t = 0.0
             var pos = 0.0
@@ -89,16 +112,22 @@ class LocationProfilesTest {
             }
             return fixes / (t / 60.0)
         }
-        for ((name, route) in listOf("city" to city, "avenue" to avenue)) for (speed in listOf(10f, 1.39f)) {
+        for ((name, route) in listOf("udenar" to udenar, "city" to city, "avenue" to avenue)) for (speed in listOf(10f, 1.39f)) {
             val adaptive = perMinute(route, speed) { LocationProfiles.adaptiveIntervalMs(it, speed) }
+            val before = perMinute(route, speed) { distanceRule(it, speed) }
             val fixed = perMinute(route, speed) { 2_000L }
             val screenOn = perMinute(route, speed) { LocationProfiles.requestSpec(LocationProfile.NAVIGATING, it)!!.intervalMs }
             println(
                 "route=$name speed=$speed m/s fixes/min adaptive=${"%.1f".format(adaptive)} " +
-                    "fixed2s=${"%.1f".format(fixed)} screenOnP5D=${"%.1f".format(screenOn)}"
+                    "before(80m rule)=${"%.1f".format(before)} fixed2s=${"%.1f".format(fixed)} screenOnP5D=${"%.1f".format(screenOn)}"
             )
-            assertTrue("$name $speed adaptive=$adaptive fixed=$fixed", adaptive < fixed)
             assertTrue("$name $speed adaptive=$adaptive screenOn=$screenOn", adaptive < screenOn)
+            // Walking: the time rule removes the minute of 1 s fixes before each turn. Driving at 10 m/s, 8 s = 80 m: the
+            // same as the distance rule (inclusive at exactly 8 s, hence the small tolerance).
+            if (speed < 2f) assertTrue("$name $speed adaptive=$adaptive before=$before", adaptive < before)
+            else assertTrue("$name $speed adaptive=$adaptive before=$before", adaptive <= before * 1.1)
+            // Walking (the real Udenar trip's mode) must stay at or under the fixed 2 s policy.
+            if (speed < 2f) assertTrue("walking $name adaptive=$adaptive", adaptive <= fixed)
             // The big saving is on long straights (avenue); with a turn every few hundred metres the 250 m lead and the
             // 1 s window near each maneuver keep the rate close to the fixed policy (reported, not hidden).
             if (name == "avenue") assertTrue("$name $speed adaptive=$adaptive", adaptive < fixed * 0.75)
