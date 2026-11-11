@@ -27,6 +27,7 @@ import com.wgo.navigator.net.WgoUserAgent
 import com.wgo.navigator.route.OsrmRouter
 import com.wgo.navigator.ui.map.GeoCoord
 import com.wgo.navigator.ui.map.LiveRadarSource
+import com.wgo.navigator.ui.map.RadarProjection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -116,8 +117,13 @@ class NavigationHost private constructor(context: Context) {
     /** Ground speed of the last fix (NaN when unknown), for the screen-off interval. */
     private var lastSpeedMps = Float.NaN
 
-    /** Speed along the route from the guidance's progress (for fixes that carry no usable speed). */
+    /**
+     * Speed from the distance between successive fixes (for fixes that carry no usable speed). Not the progress along
+     * the route: off route that stalls at 0 and would slow the request to 10 s exactly when a reroute is needed.
+     */
     private val progressSpeed = ProgressSpeed()
+    private var lastFixCoord: GeoCoord? = null
+    private var travelledM = 0.0
 
     /** The fix's ground speed when it has one above standing still, else the speed along the route. */
     private fun speedMps(): Float = progressSpeed.pick(lastSpeedMps)
@@ -147,9 +153,9 @@ class NavigationHost private constructor(context: Context) {
     /** A slow screen-off request must not read as a lost GPS: widen the engine's rule to match it. */
     private fun updateExpectedInterval() {
         val s = session ?: return
+        // Same function as the request itself (an unknown distance gives the normal 2 s).
         val expected = if (tripProfile() == LocationProfile.AMBIENT) {
-            // Before the first guidance the distance is unknown: assume the longest step.
-            lastDistanceToNextM?.let { LocationProfiles.adaptiveIntervalMs(it, speedMps()) } ?: LocationProfiles.ADAPTIVE_MAX_MS
+            LocationProfiles.adaptiveIntervalMs(lastDistanceToNextM, speedMps())
         } else 0L
         if (expected != expectedIntervalMs) {
             expectedIntervalMs = expected
@@ -284,6 +290,10 @@ class NavigationHost private constructor(context: Context) {
             fixJob = scope.launch {
                 locationSource.fixes.collect { fix ->
                     if (!fix.speedMps.isNaN()) lastSpeedMps = fix.speedMps
+                    // Distance walked between fixes (on or off the route), for fixes that report no speed.
+                    lastFixCoord?.let { travelledM += RadarProjection.distanceMeters(it, GeoCoord(fix.lat, fix.lon)) }
+                    lastFixCoord = GeoCoord(fix.lat, fix.lon)
+                    progressSpeed.onProgress(travelledM, SystemClock.elapsedRealtime())
                     val t0 = System.nanoTime()
                     s.onFix(fix)
                     WgoMetrics.engineFix(System.nanoTime() - t0)
@@ -305,11 +315,17 @@ class NavigationHost private constructor(context: Context) {
         when (state) {
             NavState.Arrived -> end(TripEnd.Arrived)
             is NavState.Navigating -> {
-                progressSpeed.onProgress(state.progressM, SystemClock.elapsedRealtime())
                 locationSource.setNavigationHint(
                     state.distanceToNextM, s.geometry.onLongStraight(state.progressM, LONG_STRAIGHT_M), speedMps()
                 )
                 lastDistanceToNextM = state.distanceToNextM
+                updateExpectedInterval()
+            }
+            // Off the route the next maneuver's distance means nothing: drop it, so the screen-off request uses the
+            // normal 2 s and the off-route confirmation (3 fixes) stays quick.
+            is NavState.OffRoute, is NavState.Rerouting -> {
+                locationSource.setNavigationHint(null, false, speedMps())
+                lastDistanceToNextM = null
                 updateExpectedInterval()
             }
             else -> Unit
@@ -344,6 +360,8 @@ class NavigationHost private constructor(context: Context) {
         lastDistanceToNextM = null
         lastSpeedMps = Float.NaN
         progressSpeed.reset()
+        lastFixCoord = null
+        travelledM = 0.0
         locationSource.setProfile(LocationProfile.IDLE)
         locationSource.setNavigationHint(null, false)
         if (had) {
