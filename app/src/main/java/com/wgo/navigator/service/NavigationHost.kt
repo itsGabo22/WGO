@@ -185,6 +185,8 @@ class NavigationHost private constructor(context: Context) {
         _radar.value = radar
         _active.value = true
         dedupe = GuidanceDedupe()
+        tripStartMs = SystemClock.elapsedRealtime()
+        _tripSummary.value = null
         tripJob = scope.launch {
             // Spoken guidance (spec section 8, P7): the engine exists only during a trip and only when the mode is not
             // OFF; it is built once, with the language and voice saved when the trip starts.
@@ -233,6 +235,8 @@ class NavigationHost private constructor(context: Context) {
         // Spec section 8: arrival = DoubleClick (+ "Has llegado a tu destino"), played here (ending the trip cancels the
         // event collector). The engine finishes that phrase before it shuts down.
         if (reason == TripEnd.Arrived) {
+            // The arrival surface's summary: computed now from this session, kept in memory only (never stored).
+            _tripSummary.value = TripSummary(travelledM, (SystemClock.elapsedRealtime() - tripStartMs) / 1000.0)
             playHaptic(HapticEvent.DoubleClick)
             say(GuidancePhrases.arrived(language))
             speech?.let { engine ->
@@ -366,6 +370,14 @@ class NavigationHost private constructor(context: Context) {
         }
     }
 
+    // ---- the arrival summary (spec section 7, P7) ----
+
+    private var tripStartMs = 0L
+    private val _tripSummary = MutableStateFlow<TripSummary?>(null)
+
+    /** Distance travelled and duration of the trip that just arrived (null otherwise). */
+    val tripSummary: StateFlow<TripSummary?> = _tripSummary.asStateFlow()
+
     // ---- spoken guidance (spec section 8, P7) ----
 
     private var speech: SpeechEngine? = null
@@ -458,6 +470,9 @@ class NavigationHost private constructor(context: Context) {
             instance ?: synchronized(this) { instance ?: NavigationHost(context).also { instance = it } }
     }
 }
+
+/** What the arrival surface summarises: metres travelled (fix to fix) and seconds since the trip started. */
+data class TripSummary(val distanceM: Double, val durationS: Double)
 
 /**
  * Engine events -> haptics, exactly as spec section 8 lists them: turn at 200 m = Tick, turn at 50 m = DoubleClick,

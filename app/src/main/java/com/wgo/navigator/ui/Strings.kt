@@ -57,6 +57,8 @@ enum class StringKey {
     // Voice settings (P7)
     SET_VOICE_GUIDANCE, VOICE_MODE_OFF, VOICE_MODE_AUTO, VOICE_MODE_ALWAYS, SET_VOICE, VOICE_AUTOMATIC, VOICE_NONE,
     VOICE_OFFLINE, BTN_TRY,
+    // Celebratory arrival (P7)
+    BTN_DONE, ARRIVAL_UNDER_MIN,
     HINT_SPEAK_AGAIN, HINT_CHECK_CONNECTION, HINT_OTHER_NAME, HINT_ROUTE, HINT_AI, HINT_VOICE_UNAVAILABLE, NAV_TOTALS,
     ERR_TIMEOUT, HINT_TIMEOUT, ETA_ABOUT, ERR_MIC_START, HINT_MIC_START, VOICE_PREPARING, MIC_STATE_PREPARING, SPEAK_NOW, HUD_EXPAND, HUD_COLLAPSE, RECENTER,
     // Live navigation states (P5-D)
@@ -167,6 +169,8 @@ private val es = mapOf(
     StringKey.VOICE_NONE to "Sin voz instalada",
     StringKey.VOICE_OFFLINE to "sin conexión",
     StringKey.BTN_TRY to "PROBAR",
+    StringKey.BTN_DONE to "LISTO",
+    StringKey.ARRIVAL_UNDER_MIN to "< 1 MIN",
     StringKey.ERR_PLACE_NOT_FOUND to "No encontré ese lugar",
     StringKey.NOT_FOUND_TITLE to "No encontré «%s»",
     StringKey.NOT_FOUND_MAYBE to "¿Quizá este?",
@@ -329,6 +333,8 @@ private val en = mapOf(
     StringKey.VOICE_NONE to "No voice installed",
     StringKey.VOICE_OFFLINE to "offline",
     StringKey.BTN_TRY to "TRY",
+    StringKey.BTN_DONE to "DONE",
+    StringKey.ARRIVAL_UNDER_MIN to "< 1 MIN",
     StringKey.ERR_PLACE_NOT_FOUND to "Place not found",
     StringKey.NOT_FOUND_TITLE to "I couldn't find «%s»",
     StringKey.NOT_FOUND_MAYBE to "Maybe this one?",

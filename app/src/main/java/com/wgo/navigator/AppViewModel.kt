@@ -545,6 +545,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     /** Name of the trip's destination (kept for the arrival surface after the trip ended). */
     val destinationName: StateFlow<String> = host.destinationName
 
+    /** Distance and duration of the trip that just arrived (memory only; the arrival surface's summary line). */
+    val tripSummary: StateFlow<com.wgo.navigator.service.TripSummary?> = host.tripSummary
+
     /** True while the END NAVIGATION? confirm covers the navigation screen. */
     private val _endConfirm = MutableStateFlow(false)
     val endConfirm: StateFlow<Boolean> = _endConfirm.asStateFlow()

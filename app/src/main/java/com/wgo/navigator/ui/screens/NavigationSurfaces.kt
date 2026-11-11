@@ -323,58 +323,6 @@ private fun QuestionSurface(
 }
 
 /**
- * ARRIVED, minimal (the celebratory timeline of spec section 7 is P6): bezel closed in `go`; disc 60 `go` with a 34 dp
- * check @36 (77.5); `headline-lg` "¡Llegamos!" 170x28 @104 (85.1, live region); destination `body-md` `inkMuted`
- * 160x18 @134 (85.9); FINALIZAR pill 120x48 inverted @158 (101.4; the spec's @160 measures 103.2, over the 103 limit
- * of the Watch5 Pro). Static: no clock.
- */
-@Composable
-fun ScreenArrived(destination: String, onFinish: () -> Unit, modifier: Modifier = Modifier) {
-    val palette = Wgo.palette
-    Box(modifier.fillMaxSize().background(palette.canvas)) {
-        BezelGauge(progress = { 1f }, color = palette.go)
-        Box(
-            Modifier.align(Alignment.TopCenter).offset(y = 36.dp).size(60.dp).clip(CircleShape).background(palette.go),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(WgoIcons.Check, contentDescription = null, tint = palette.onGo, modifier = Modifier.size(34.dp))
-        }
-        Text(
-            text = string(StringKey.NAV_ARRIVED),
-            color = palette.ink,
-            style = WgoType.headlineLg,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = 104.dp)
-                .width(170.dp)
-                .semantics { liveRegion = LiveRegionMode.Polite }
-        )
-        if (destination.isNotEmpty()) Text(
-            text = destination,
-            color = palette.inkMuted,
-            style = WgoType.bodyMd,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = 134.dp).width(160.dp)
-        )
-        val pillTouch = wgoTouchSide(48.dp)
-        PillButton(
-            label = string(StringKey.BTN_FINISH),
-            onClick = onFinish,
-            background = palette.ink,
-            content = palette.inkInverse,
-            width = 120.dp,
-            height = 48.dp,
-            textStyle = WgoType.button.copy(fontSize = 14.sp),
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = topAt(182f, pillTouch))
-        )
-    }
-}
-
-/**
  * A pill of any size with a 48 REAL dp touch height. Pressing swaps background and content instantly and scales to
  * 0.96 (release with [WgoMotion.pop]), as every WGO control does.
  */

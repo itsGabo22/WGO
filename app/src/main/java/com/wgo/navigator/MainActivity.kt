@@ -41,6 +41,8 @@ import com.wgo.navigator.ui.LocalLanguage
 import com.wgo.navigator.ui.wgoEdgeSwipeBack
 import com.wgo.navigator.ui.screens.ScreenActiveNavigation
 import com.wgo.navigator.ui.screens.ScreenArrived
+import com.wgo.navigator.ui.screens.ArrivalSummary
+import com.wgo.navigator.ui.screens.AmbientArrivalScreen
 import com.wgo.navigator.ui.screens.ScreenListening
 import com.wgo.navigator.ui.screens.ScreenMapPicker
 import com.wgo.navigator.ui.screens.ScreenModeSelection
@@ -250,6 +252,9 @@ class MainActivity : ComponentActivity() {
                         if (screenNow == ScreenState.Navigation) {
                             val shown by appViewModel.ambientNavState.collectAsState()
                             AmbientNavigationScreen(shown, info = info)
+                        } else if (screenNow == ScreenState.Arrived) {
+                            val arrivedAt by appViewModel.destinationName.collectAsState()
+                            AmbientArrivalScreen(arrivedAt)
                         } else {
                             Box(Modifier.fillMaxSize().background(Wgo.palette.ambient.canvas))
                         }
@@ -419,7 +424,9 @@ class MainActivity : ComponentActivity() {
                             }
                             ScreenState.Arrived -> {
                                 val destination by appViewModel.destinationName.collectAsState()
-                                ScreenArrived(destination = destination, onFinish = appViewModel::finishArrival)
+                                val trip by appViewModel.tripSummary.collectAsState()
+                                val tripLine = trip?.let { ArrivalSummary.text(it.distanceM, it.durationS, language) }
+                                ScreenArrived(destination = destination, onFinish = appViewModel::finishArrival, summary = tripLine)
                             }
                             ScreenState.MapPicker -> {
                                 ScreenMapPicker(
