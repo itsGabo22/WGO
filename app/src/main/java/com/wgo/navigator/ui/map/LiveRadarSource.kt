@@ -23,7 +23,8 @@ val PastoCentre = GeoCoord(1.2136, -77.2811)
  * The owner feeds it with [onFix] from the one location request of the trip (the radar never opens its own).
  */
 class LiveRadarSource(
-    private val mode: TravelMode?,
+    /** The trip's travel mode (the navigation screen gives CANCELAR the driving touch height from it). */
+    val mode: TravelMode?,
     initial: GeoCoord?,
     private var route: List<GeoCoord> = emptyList(),
     private var maneuver: GeoCoord? = null,

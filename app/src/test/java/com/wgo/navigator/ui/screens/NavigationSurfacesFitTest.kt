@@ -100,6 +100,40 @@ class NavigationSurfacesFitTest {
         assertTrue("visible $visible", visible >= 0.55f)
     }
 
+    /** A touch box in reference dp: centre and size. */
+    private data class Hit(val name: String, val cx: Float, val cy: Float, val w: Float, val h: Float) {
+        fun overlaps(o: Hit) = kotlin.math.abs(cx - o.cx) < (w + o.w) / 2 && kotlin.math.abs(cy - o.cy) < (h + o.h) / 2
+    }
+
+    @Test fun theMapControlsFit() {
+        val zoom = kotlin.math.hypot(72f, 150f - 113.5f) + 20f
+        val recenter = kotlin.math.abs(98f - 113.5f) + 20f
+        val cancel = wgoFit(86f, 32f, 176f)
+        println("zoom %.1f, recenter %.1f, cancel %.1f".format(zoom, recenter, cancel))
+        assertTrue(zoom <= WGO_FIT_LIMIT_GW5P)
+        assertTrue(recenter <= WGO_FIT_LIMIT_GW5P)
+        assertTrue(cancel <= WGO_FIT_LIMIT_GW5P)
+    }
+
+    @Test fun noTwoTouchBoxesOverlapAtAnyScaleOrMode() {
+        for (s in listOf(0.846f, 0.991f, 1f)) for (driving in listOf(false, true)) {
+            val t = wgoMinTouchRefDp(s)
+            val cancelH = maxOf(32f, (if (driving) 60f else 48f) / s)
+            val hits = listOf(
+                Hit("compact pill", 113.5f, 40f, 112f, maxOf(36f, t)),
+                Hit("recenter", 113.5f, 98f, maxOf(40f, t), maxOf(40f, t)),
+                Hit("zoom -", 41.5f, 150f, maxOf(40f, t), maxOf(40f, t)),
+                Hit("zoom +", 185.5f, 150f, maxOf(40f, t), maxOf(40f, t)),
+                Hit("cancel", 113.5f, 192f, 86f, cancelH)
+            )
+            for (i in hits.indices) for (j in i + 1 until hits.size) {
+                assertTrue("s=$s driving=$driving: ${hits[i].name} x ${hits[j].name}", !hits[i].overlaps(hits[j]))
+            }
+            // Every touch box is at least 48 real dp in both directions.
+            hits.forEach { assertTrue("${it.name} at s=$s", minOf(it.w, it.h) * s >= 48f - 1e-3f) }
+        }
+    }
+
     @Test fun theSpecArrivalButtonPlacementIsOverTheWatch5ProLimit() {
         // Spec section 7 places FINALIZAR 120x48 @160; on the Watch5 Pro that measures 103.2, so it moved to @158.
         assertTrue(wgoFit(120f, 48f, 160f) > WGO_FIT_LIMIT_GW5P)

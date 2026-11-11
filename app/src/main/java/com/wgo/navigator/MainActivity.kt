@@ -388,6 +388,7 @@ class MainActivity : ComponentActivity() {
                                     mapStyleId = mapStyleId,
                                     navState = navState,
                                     radarSource = radar,
+                                    driving = radar?.mode == TravelMode.Drive,
                                     destination = destination,
                                     endConfirm = endConfirm,
                                     onEnd = appViewModel::endNavigation,

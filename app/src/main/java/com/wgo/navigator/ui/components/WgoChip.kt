@@ -36,7 +36,9 @@ fun WgoChip(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    width: androidx.compose.ui.unit.Dp = 104.dp
+    width: androidx.compose.ui.unit.Dp = 104.dp,
+    /** Touch height in REAL dp (48 = `hit-min`; 60 = `hit-drive` for critical actions while driving). */
+    touchHeight: androidx.compose.ui.unit.Dp = 48.dp
 ) {
     val palette = Wgo.palette
     val reduceMotion = LocalWgoReduceMotion.current
@@ -51,7 +53,7 @@ fun WgoChip(
     Box(
         modifier = modifier
             .width(width)
-            .wgoMinTouch(height = 48.dp)
+            .wgoMinTouch(height = touchHeight)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

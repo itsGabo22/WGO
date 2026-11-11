@@ -3,9 +3,6 @@ package com.wgo.navigator.ui.screens
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +36,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import com.wgo.navigator.ui.components.WgoChip
+import com.wgo.navigator.ui.theme.LocalWgoScale
 import com.wgo.navigator.ui.components.HudContent
 import com.wgo.navigator.ui.components.NavigationHud
 import com.wgo.navigator.ui.map.RadarProjection
@@ -48,13 +47,7 @@ import com.wgo.navigator.ui.theme.atLeastRealDp
 import com.wgo.navigator.ui.theme.wgoMinTouch
 import com.wgo.navigator.ui.theme.wgoTouchSide
 import kotlinx.coroutines.delay
-import androidx.wear.compose.material.Button
-import androidx.wear.compose.material.ButtonDefaults
-import androidx.wear.compose.material.Chip
-import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.Icon
-import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.Text
 import com.wgo.navigator.core.Maneuver
 import com.wgo.navigator.core.permissions.PermissionStatus
 import com.wgo.navigator.core.permissions.WgoPermission
@@ -76,6 +69,9 @@ import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoType
 import com.wgo.navigator.ui.theme.rememberWgoClock
 import com.wgo.navigator.ui.theme.wgoMapStyle
+
+private const val MIN_ZOOM = 15.0
+private const val MAX_ZOOM = 18.0
 
 /** The guidance a state still carries (the last one before going off route, rerouting or losing GPS). */
 private fun NavState.guidance(): NavState.Navigating? = when (this) {
@@ -115,7 +111,9 @@ fun ScreenActiveNavigation(
     onRetryLocation: () -> Unit = {},
     onOpenLocationSettings: () -> Unit = {},
     /** Previews only: show this HUD state instead of the rule's. */
-    forcedHud: HudMode? = null
+    forcedHud: HudMode? = null,
+    /** Driving trip: CANCELAR gets the 60 real dp `hit-drive` touch height. */
+    driving: Boolean = false
 ) {
     if (navState != null &&
         (locationPermission == PermissionStatus.Denied || locationPermission == PermissionStatus.PermanentlyDenied)
@@ -285,59 +283,32 @@ fun ScreenActiveNavigation(
                 )
             }
 
-            // Z-Layer 2.5: ZOOM CONTROLS (known pre-P6 debt: 36 dp buttons, under the 48 real dp minimum)
-            Column(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = { zoom = (zoom + 1.0).coerceAtMost(18.0) },
-                    modifier = Modifier.size(36.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.8f),
-                        contentColor = MaterialTheme.colors.onSurface
-                    )
-                ) {
-                    Icon(imageVector = Icons.Rounded.Add, contentDescription = string(StringKey.ZOOM_IN), modifier = Modifier.size(20.dp))
-                }
-                Button(
-                    onClick = { zoom = (zoom - 1.0).coerceAtLeast(15.0) },
-                    modifier = Modifier.size(36.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.8f),
-                        contentColor = MaterialTheme.colors.onSurface
-                    )
-                ) {
-                    Icon(imageVector = Icons.Rounded.Remove, contentDescription = string(StringKey.ZOOM_OUT), modifier = Modifier.size(20.dp))
-                }
-            }
+            // Z-Layer 2.5: ZOOM - at (41.5, 150) and + at (185.5, 150): fixed 40 dp circles, 48 real dp touch (fit 99.4).
+            val controlTouch = wgoTouchSide(40.dp)
+            MapControlButton(
+                icon = WgoIcons.Minus,
+                description = string(StringKey.ZOOM_OUT),
+                onClick = { zoom = (zoom - 1.0).coerceAtLeast(MIN_ZOOM) },
+                modifier = Modifier.align(Alignment.TopStart).offset(x = 41.5.dp - controlTouch / 2, y = 150.dp - controlTouch / 2)
+            )
+            MapControlButton(
+                icon = WgoIcons.Plus,
+                description = string(StringKey.ZOOM_IN),
+                onClick = { zoom = (zoom + 1.0).coerceAtMost(MAX_ZOOM) },
+                modifier = Modifier.align(Alignment.TopStart).offset(x = 185.5.dp - controlTouch / 2, y = 150.dp - controlTouch / 2)
+            )
 
-            // Z-Layer 3: BOTTOM ACTION HUD (CANCEL asks END NAVIGATION? first)
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp)
-            ) {
-                Chip(
-                    onClick = onCancel,
-                    colors = ChipDefaults.chipColors(
-                        backgroundColor = MaterialTheme.colors.surface,
-                        contentColor = MaterialTheme.colors.onBackground
-                    ),
-                    label = {
-                        Text(
-                            text = string(StringKey.BTN_CANCEL),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth(0.7f)
-                        .height(40.dp)
-                )
-            }
+            // Z-Layer 3: CANCELAR 86x32 @176 (fit 99.0), touch 48 real dp walking / 60 (hit-drive) driving; asks
+            // END NAVIGATION? first. 86 dp keeps its touch box clear of the zoom buttons' at every scale.
+            val cancelTouchReal = if (driving) 60.dp else 48.dp
+            val cancelTouch = maxOf(32.dp, cancelTouchReal / LocalWgoScale.current)
+            WgoChip(
+                label = string(StringKey.BTN_CANCEL),
+                onClick = onCancel,
+                width = 86.dp,
+                touchHeight = cancelTouchReal,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = 192.dp - cancelTouch / 2)
+            )
         }
 
         when {
