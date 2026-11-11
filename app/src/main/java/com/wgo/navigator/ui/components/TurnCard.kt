@@ -125,9 +125,16 @@ fun TurnCard(
     }
 }
 
-/** One AnimatedContent per character, keyed from the right so digit positions stay stable when the length changes. */
+/**
+ * One AnimatedContent per character, keyed from the right so digit positions stay stable when the length changes.
+ * [style] defaults to `numeral-lg`; the compact navigation HUD uses a smaller tabular style.
+ */
 @Composable
-private fun Odometer(text: String, color: androidx.compose.ui.graphics.Color) {
+internal fun Odometer(
+    text: String,
+    color: androidx.compose.ui.graphics.Color,
+    style: androidx.compose.ui.text.TextStyle = WgoType.numeralLg
+) {
     val reduceMotion = LocalWgoReduceMotion.current
     val travel = with(LocalDensity.current) { ODOMETER_TRAVEL_DP.dp.roundToPx() }
     Row(modifier = Modifier.clipToBounds()) {
@@ -147,7 +154,7 @@ private fun Odometer(text: String, color: androidx.compose.ui.graphics.Color) {
                     },
                     label = "odometerDigit"
                 ) { c ->
-                    Text(text = c.toString(), style = WgoType.numeralLg, color = color, maxLines = 1)
+                    Text(text = c.toString(), style = style, color = color, maxLines = 1)
                 }
             }
         }

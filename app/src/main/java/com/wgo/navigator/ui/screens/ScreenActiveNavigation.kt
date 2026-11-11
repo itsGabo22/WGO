@@ -1,32 +1,29 @@
 package com.wgo.navigator.ui.screens
 
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import com.wgo.navigator.ui.map.RadarState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.wgo.navigator.ui.components.HudContent
+import com.wgo.navigator.ui.components.NavigationHud
+import kotlinx.coroutines.delay
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Chip
@@ -55,9 +52,6 @@ import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoType
 import com.wgo.navigator.ui.theme.rememberWgoClock
 import com.wgo.navigator.ui.theme.wgoMapStyle
-
-private val STRAIGHT_LIKE = setOf(Maneuver.STRAIGHT, Maneuver.DEPART, Maneuver.ARRIVE)
-private val LEFT_LIKE = setOf(Maneuver.SLIGHT_LEFT, Maneuver.LEFT, Maneuver.SHARP_LEFT, Maneuver.U_TURN)
 
 /** The guidance a state still carries (the last one before going off route, rerouting or losing GPS). */
 private fun NavState.guidance(): NavState.Navigating? = when (this) {
@@ -95,7 +89,9 @@ fun ScreenActiveNavigation(
     onRetryGps: () -> Unit = {},
     locationPermission: PermissionStatus = PermissionStatus.Granted,
     onRetryLocation: () -> Unit = {},
-    onOpenLocationSettings: () -> Unit = {}
+    onOpenLocationSettings: () -> Unit = {},
+    /** Previews only: show this HUD state instead of the rule's. */
+    forcedHud: HudMode? = null
 ) {
     if (navState != null &&
         (locationPermission == PermissionStatus.Denied || locationPermission == PermissionStatus.PermanentlyDenied)
@@ -147,7 +143,33 @@ fun ScreenActiveNavigation(
         }
 
         if (!covered) {
-            NavigationHud(navState, Modifier.align(Alignment.TopCenter))
+            // Adaptive HUD (spec section 7): the state is HudRules' pure function; taps and the end of the reroute
+            // window bump hudTick so the rule runs again.
+            val tracker = remember { HudTracker() }
+            var hudTick by remember { mutableIntStateOf(0) }
+            hudTick.let { } // read: a tap or the window's end recomposes this scope
+            val nav = navState?.guidance()
+            val input = HudRules.Input(
+                distanceToNextM = nav?.distanceToNextM,
+                maneuver = nav?.next,
+                rerouting = navState is NavState.OffRoute || navState is NavState.Rerouting,
+                exploring = false,
+                nowMs = SystemClock.elapsedRealtime()
+            )
+            val hud = tracker.update(input)
+            val windowEnd = hud.newRouteAtMs
+            LaunchedEffect(windowEnd) {
+                val left = HudRules.rerouteWindowLeftMs(hud, SystemClock.elapsedRealtime()) ?: return@LaunchedEffect
+                delay(left + 20)
+                hudTick++
+            }
+            NavigationHud(
+                mode = forcedHud ?: hud.shown,
+                content = hudContent(navState),
+                onTap = { if (tracker.toggle(SystemClock.elapsedRealtime())) hudTick++ },
+                clock = clock,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
 
             // Z-Layer 2.5: ZOOM CONTROLS (known pre-P6 debt: 36 dp buttons, under the 48 real dp minimum)
             Column(
@@ -212,75 +234,52 @@ fun ScreenActiveNavigation(
     }
 }
 
-/** The floating HUD card: next maneuver, distance to it, instruction (or the off-route status), remaining and ETA. */
+/** What the HUD shows, from the engine state (previews without a state get a sample instruction). */
 @Composable
-private fun NavigationHud(navState: NavState?, modifier: Modifier) {
-    val palette = Wgo.palette
+private fun hudContent(navState: NavState?): HudContent {
     val language = LocalLanguage.current
     val nav = navState?.guidance()
     val next = nav?.next
     val status = when (navState) {
-        is NavState.OffRoute -> StringKey.NAV_OFF_ROUTE
-        is NavState.Rerouting -> StringKey.NAV_REROUTING
+        is NavState.OffRoute -> string(StringKey.NAV_OFF_ROUTE)
+        is NavState.Rerouting -> string(StringKey.NAV_REROUTING)
         else -> null
     }
-    Box(
-        modifier = modifier
-            .padding(top = 28.dp)
-            .fillMaxWidth(0.9f)
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colors.surface.copy(alpha = 0.90f))
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                val maneuver = next?.maneuver
-                Icon(
-                    imageVector = if (maneuver == null || maneuver in STRAIGHT_LIKE) Icons.Rounded.ArrowUpward else WgoIcons.TurnRight,
-                    contentDescription = null,
-                    tint = palette.primaryInk,
-                    modifier = Modifier
-                        .size(24.dp)
-                        // Left turns mirror the right-turn glyph.
-                        .graphicsLayer { scaleX = if (maneuver in LEFT_LIKE) -1f else 1f }
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = nav?.let { formatDistance(it.distanceToNextM, language) } ?: "200m",
-                    color = MaterialTheme.colors.onSurface,
-                    style = MaterialTheme.typography.title3.copy(fontWeight = FontWeight.Bold)
-                )
-            }
-            if (status != null) {
-                Text(
-                    text = string(status),
-                    color = palette.primaryInk,
-                    style = WgoType.labelMd,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
-                )
-            } else {
-                Text(
-                    text = next?.let { ManeuverText.instruction(it, language) } ?: string(StringKey.NAV_INSTRUCTION),
-                    color = MaterialTheme.colors.onSurface,
-                    style = MaterialTheme.typography.caption2.copy(fontWeight = FontWeight.Medium),
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            if (nav != null) Text(
-                // Remaining distance and ETA, live from the engine.
-                text = String.format(string(StringKey.NAV_TOTALS), formatDistance(nav.remainingM, language), minutesOf(nav.etaS)),
-                color = MaterialTheme.colors.onSurface,
-                style = MaterialTheme.typography.caption3,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                modifier = Modifier.fillMaxWidth()
-            )
+    // "250 m" / "1,2 km": number and unit apart, for the odometer.
+    val distance = formatDistance(nav?.distanceToNextM ?: 200.0, language)
+    val split = distance.lastIndexOf(' ')
+    return HudContent(
+        maneuver = next?.maneuver ?: if (nav == null) Maneuver.RIGHT else null,
+        distanceM = nav?.distanceToNextM,
+        distanceNumber = if (split > 0) distance.substring(0, split) else distance,
+        distanceUnit = if (split > 0) distance.substring(split + 1) else "",
+        instruction = next?.let { ManeuverText.instruction(it, language) } ?: string(StringKey.NAV_INSTRUCTION),
+        status = status,
+        totals = nav?.let {
+            String.format(string(StringKey.NAV_TOTALS), formatDistance(it.remainingM, language), minutesOf(it.etaS))
         }
+    )
+}
+
+/**
+ * Keeps the [HudRules] state between frames. [update] runs during composition: [HudRules.step] is idempotent, so a
+ * repeated composition with the same input changes nothing.
+ */
+private class HudTracker {
+    var state: HudRules.State? = null
+        private set
+    private var lastInput: HudRules.Input? = null
+
+    fun update(input: HudRules.Input): HudRules.State {
+        lastInput = input
+        return (state?.let { HudRules.step(it, input) } ?: HudRules.initial(input)).also { state = it }
+    }
+
+    /** A tap with the latest input; false when there is nothing to toggle yet. */
+    fun toggle(nowMs: Long): Boolean {
+        val s = state ?: return false
+        val input = lastInput?.copy(nowMs = nowMs) ?: return false
+        state = HudRules.toggle(s, input)
+        return true
     }
 }
