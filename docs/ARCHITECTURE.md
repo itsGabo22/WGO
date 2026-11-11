@@ -15,7 +15,8 @@ resource budgets with their measured values. Visual design lives in `docs/design
 | `voice` | `VoiceInputChain`: in-app `SpeechRecognizer` first, the system speech dialog as fallback; voice level; test-build utterance injection. | yes |
 | `ai` | `TieredInterpreter`: `LocalIntentParser` + `PlaceAliases` (Pasto nicknames) first, the OpenAI-compatible `LlmInterpreter` only for low-confidence requests; `AiCallBudget` (200 calls/day, cool-down on 429). | plain Kotlin + DataStore for the budget |
 | `geo` / `route` / `net` | `NominatimGeocoder` (1 request/s, cache, local retry), `OsrmRouter` (OSM-DE foot/car, OSRM demo fallback for car), `Polyline`, `ModeEstimate`, the minimal `HttpClient` over `HttpURLConnection` (no HTTP/JSON framework). | `org.json` from the platform |
-| `haptics` | `HapticEvent` and `HapticPlayer` (predefined effects). Only `MainActivity` plays them. | yes |
+| `service` | **`NavigationHost`** (process-wide owner of a trip: session, the trip's location request, radar data, trip haptics, screen-off power policy), **`NavigationService`** (foreground service, type `location`), `NavigationNotification` (channel + ongoing activity), `OngoingStatus`, `ProgressSpeed`. | yes (the engine inside stays framework-free) |
+| `haptics` | `HapticEvent` and `HapticPlayer` (predefined effects). Trip haptics are played by `NavigationHost`; pipeline haptics by `MainActivity`. | yes |
 | `metrics` | `WgoMetrics`: debug-only counters, frame counts per screen, the `WGO_METRICS` log line every 30 s, the `WGO_ROUTE` dump. No-ops outside debug builds. | yes |
 | `ui` | Theme (palette, type, motion, responsive scale, the shared `WgoClock`), components, the radar (`RadarMinimap`, `LiveRadarSource`), the screens and surfaces, `Strings.kt` (ES/EN). | Compose |
 | root | `MainActivity` (the only Activity: permissions, haptics, Back, lifecycle), `AppViewModel` (the screen state machine), `SettingsViewModel`, `SettingsRepository`. | yes |
@@ -39,6 +40,46 @@ Intro ──> Listening ──(voice / injected utterance)──> Working[interp
              └──────────────────────┴──────────── Arrived ──FINALIZAR / Back──┘
 ```
 
+## Navigation service, ambient mode and power policy (P6-A)
+
+```
+ Activity (visible / ambient)                 process-wide                              foreground service
+ ┌──────────────────────────┐   commands   ┌──────────────────────────────┐  start   ┌──────────────────────────┐
+ │ MainActivity             │ ───────────> │ NavigationHost               │ ───────> │ NavigationService        │
+ │  AmbientLifecycleObserver│  start/end/  │  NavigationSession (engine)  │          │  type=location, not      │
+ │ AppViewModel (observes)  │  retry       │  one LocationSource request  │ <─────── │  sticky; notification +  │
+ │  navState, radar, ambient│ <─────────── │  trip haptics (HapticPlayer) │  active  │  OngoingActivity (status │
+ │  snapshot, lastEnd       │   flows      │  NAVIGATING / AMBIENT profile│  = false │  <= 1 post per 5 s)      │
+ └──────────────────────────┘              └──────────────────────────────┘  → stop  └──────────────────────────┘
+```
+
+- **Start**: when the route is ready the ViewModel calls `host.start()`, which starts the service with
+  `startForegroundService` from the foreground app; the service calls `startForeground(location)` at once (measured
+  0.2-1.2 s after the trip starts). No background-location permission: the service always starts while the app is
+  visible. If the platform refuses the start, the trip runs only while the app is visible (the P5 behaviour).
+- **Stop** (service, notification and location request together): END, arrival, the service losing its permission
+  (`pm revoke` kills the process; it is not sticky, so nothing restarts), and **task removal**: swiping WGO away from
+  Recents ends the trip (`onTaskRemoved`), because that gesture means "close the app" on a watch and a trip with no
+  way back to its UI except the notification would be surprising.
+- **Observe only**: the Activity/ViewModel never own the trip. A reopened Activity (same process) reconnects to the
+  live trip, or to its unread arrival. After process death the app starts at Home (unchanged).
+- **Haptics**: one collector of the engine events, in the host: spec section 8 mapping, played from the process the
+  service keeps in the foreground, so they fire once each with the screen off, in ambient or in the background
+  (default attributes: usage TOUCH; delivered on the API 37 emulator and the API 36 Galaxy Watch5 Pro).
+- **Notification permission** (API 33+): asked once, lazily, the first time a route is requested; a denial never
+  blocks the trip (the foreground service runs; its notification and ongoing activity are only hidden).
+- **Ambient**: the observer enables ambient for the whole Activity. During a trip, `AmbientNavigationScreen` replaces
+  the radar and map (no frame loop), redrawn on the ambient tick or when the maneuver / guidance state changes;
+  leaving ambient rebuilds the live screen with no transition. On other screens ambient draws nothing (black) and a
+  voice session is cancelled.
+- **Location policy**: screen on and interactive = NAVIGATING (P5-D: 1 s inside 80 m of a maneuver, 3 s fast on long
+  straights, else 2 s). Screen off, ambient or background = AMBIENT, high accuracy with
+  `interval = clamp((distanceToNext - 250 m) / speed / 2, 2 s, 10 s)`, **1 s only when the maneuver is <= 8 s away
+  in time** (distance / speed), rounded down to 2/3/4/6/8/10 s so the request is replaced only when the step changes;
+  unknown speed: 1 s inside 80 m else 2 s; standing still: 10 s. Speed = the fix's speed, or the speed along the
+  route when fixes report none. The engine's GPS-lost rule widens to two expected intervals + 2 s (no false GPS-lost
+  cue between 10 s fixes) and is switched before the request slows down.
+
 Back: Intro skips; the pipeline goes one step back (routing back to the place or mode choice, earlier stages home);
 Navigation asks END NAVIGATION? (Back again = KEEP); Arrived goes home; Settings goes home; the picker returns to
 Settings. Ending or arriving stops the engine and the location request and clears the saved destination. After process
@@ -52,7 +93,7 @@ transcript ──LocalIntentParser + PlaceAliases──> place query (+ mode)   
           └─(low confidence only)──> LLM provider: transcript text only, no location, no identifiers
 place query + coarse bias box ──> Nominatim (identifying User-Agent, 1 request/s) ──> up to 3 places
 origin fix + destination + mode ──> OSRM (OSM-DE) ──> route polyline + steps
-fixes (one request, only while the app is visible) ──> NavigationSession ──> NavState / NavEvent ──> UI + haptics
+fixes (one request per trip, screen on or off) ──> NavigationHost ──> NavigationSession ──> NavState / NavEvent ──> UI + haptics + ongoing activity
                                                      └─(off route, at most 1 per 20 s, 3 in a row)──> OSRM again
 ```
 
@@ -83,6 +124,12 @@ Nothing is logged outside debug builds, and debug logs never contain transcripts
   `.\tools\sim_drive.ps1 -FromLogcat -SpeedKmh 36` (the route the debug build is following, from the `WGO_ROUTE` dump);
   `-OffsetAfterM 150 -OffsetM 80` leaves the route, `-StopAfterM` stops early, `-Points` / `-PolylineFile` take any
   polyline.
+- Real watch (no `geo fix`): `.\tools\mock_drive.ps1 -Serial <ip:port> -Setup -Hold "lat,lon"` before a trip, then
+  `-FromLogcat -SpeedKmh 36` (debug build; fused mock mode, partial wake lock, stops 30 s after the route's end).
+  Wi-Fi debugging on the Galaxy Watch5 Pro drops when its screen turns off (it switches to Bluetooth), so
+  screen-off runs read the device's logcat afterwards.
+- Ambient: `adb shell input keyevent KEYCODE_SLEEP` with always-on enabled (`KEYCODE_WAKEUP` leaves it); frames drawn
+  in ambient are counted under `Ambient` in WGO_METRICS.
 - GPS loss: `adb shell cmd location set-location-enabled false` (and `true` to recover).
 - No internet: `adb shell svc wifi disable; adb shell svc data disable` (and `enable`).
 - Counters: `adb logcat -s WGO_METRICS` (a snapshot every 30 s and at the end of each trip).
@@ -96,8 +143,14 @@ counters below stand in for it. The real Galaxy Watch5 Pro is the final judge.
 |---|---|---|---|
 | Screen 01 idle | 0 location / 0 network / 0 recogniser | two WGO_METRICS snapshots 30 s apart identical; no location request in `dumpsys location` | PASS |
 | Location while navigating | exactly 1 request, NAVIGATING profile | 1 fused request, HIGH_ACCURACY, 1-2 s | PASS |
-| Location after END / arrival | stops within 2 s | GPS provider OFF 150 ms after the END tap | PASS |
-| Location with the screen off | stops within 2 s (current policy) | OFF 1.29 s after screen off; back 0.39 s after wake, no false GPS-lost | PASS (P6 changes the policy) |
+| Location after END / arrival | stops within 2 s | P6-A: END tap -> GPS registration removed 90 ms, service + notification gone 280 ms; arrival (screen off) -> service stopped 24 ms | PASS |
+| Location with the screen off (P6-A) | keeps guiding | one request stays open in the foreground service (screen off, ambient or background); P5-D removed it 0.86 s after screen off | PASS |
+| Stop on task removal / permission loss (P6-A) | within 2 s | swipe from Recents: trip ended 0.22 s, GPS off 0.27 s, service gone 0.69 s; `pm revoke`: process killed, GPS off 0.23 s, no crash, reopens at Home | PASS |
+| Trip haptics with the screen off (P6-A) | spec section 8, once each | emulator 9/9 and later full drives all `finished`; Galaxy Watch5 Pro 17/17 `finished` (usage TOUCH) | PASS |
+| Fixes per minute, screen off (P6-A) | below the fixed 2 s policy (30/min) | recorded Udenar route (1235 m, 10 maneuvers): drive 36 km/h 29.1/min (first P6-A rule: 36.4); walk 5 km/h 20.8/min over 9 min; simulation: walk 28.2 (was 40.6), long straights 11.5 walk / 14.5 drive | PASS (drive marginal on dense routes) |
+| Ambient frames (P6-A) | no frame loop | 12 frames in 8.5 min of ambient (radar: about 30 fps) | PASS |
+| Reroute with the screen off (P6-A) | >= 20 s apart | off route -> request at 2 s at once; reroutes 20.8 s apart | PASS |
+| PSS while navigating, screen off (P6-A) | <= 140 MB, growth <= 15 MB | 105.1-105.4 MB; minute 1 -> minute 9: -0.2 MB | PASS |
 | Network while navigating | 0 except reroutes, <= 1 per 20 s | only route requests on reroutes, spaced 20.0-37 s; map tiles: about 500 KB received for a 3.6 km drive (not counted by WgoMetrics) | PASS (tiles reported) |
 | Engine cost per fix | (report) | 1.98 us on the JVM (300-point route); 250-490 us in the debug build on the emulator (debuggable, includes state publishing) | reported |
 | Frames | loop only while something animates | radar at the 30 fps ambience tier (about 30 fps measured); loops stop under the opaque surfaces | PASS |
@@ -108,16 +161,21 @@ counters below stand in for it. The real Galaxy Watch5 Pro is the final judge.
 | PSS while navigating | <= 140 MB | 105-118 MB | PASS |
 | PSS growth minute 1 -> minute 10 | <= 15 MB | +3.0 MB (moving drive, 111.4 -> 114.4 MB); +0.3 MB over 14 min of stationary navigation | PASS |
 | logcat `*:E` | clean | 0 crash-buffer entries, 0 error lines from the app process in the buffers checked | PASS (partial: buffers were cleared between runs) |
-| Benchmark APK / cold start | (report) | 2.52 MB; cold start median 366 ms (debug 4024 ms) | reported |
+| Benchmark APK / cold start | (report) | 2.52 MB; cold start median 366 ms (debug 4024 ms). P6-A: 2.536 MB with the service, ongoing activity and androidx.wear (+16 KB); cold start not re-measured | reported |
 
 Counters for a 6.5-minute moving drive (3.6 km at 36 km/h; the planned 10-minute run was cut short by the test harness): 192 fixes, 191 engine updates, 1 geocode (551 B), 1 route (7.7 KB), 0 reroutes, 178 map re-projections, about 500 KB received and 20 KB sent by the app in total (mostly map tiles).
 
 Known misses: the END NAVIGATION? surface spends 2-3 slow UI-thread frames composing over the radar (the forced reduce-motion switch recomposes the radar subtree); to be fixed with the P6 HUD rebuild. The pre-P6 navigation screen still has 36 dp zoom buttons (39 x 37.5 real dp) and a 41 real dp CANCELAR chip whose label measures fit 109.1.
 
+P6-A: the radar is frozen under the modal surfaces (no state updates below them); its effect on the END NAVIGATION? and GPS LOST jank was **not measured** (the screen is rebuilt in P6-B, where the jank check moves, on the real watch). Known open issue on the real watch: the first microphone press after a cold start can wait about 6 s (the system recognizer process cold-starts) and then show "Sin internet": the offline recognizer has no es-CO pack (error 12) and the online retry races the service unbinding (error 11, mapped to Offline); RETRY works.
+
 ## Top remaining power and resource risks (real watch)
 
-1. **No guidance with the wrist down**: location stops with the screen off; a navigator needs a foreground service with an ongoing activity and ambient mode (P6), and that service will keep the GPS on, so its interval policy becomes the main battery cost.
-2. **High-accuracy GPS at 1-2 s for the whole trip**: no minimum distance (needed so standing still is not a GPS loss) means steady wakeups; P6 should lower the rate on long straights and in ambient.
+1. **GPS for the whole trip, wrist down included** (P6-A): the foreground service keeps one high-accuracy request; the
+   screen-off interval (2-10 s, 1 s only <= 8 s before a maneuver) is now the main battery cost. On dense routes it
+   stays near 30 fixes/min; battery on the real watch is not measured yet (Wi-Fi debugging drops with the screen off).
+2. **Request swaps**: each interval step change replaces the request (21 registrations on a 2-min drive); cheap in the
+   fused provider, but worth watching on the real watch.
 3. **Map tiles over the network**: about 140 KB per km with no prefetch or size cap visible; on LTE/Bluetooth-proxied phones this costs radio time. A tile prefetch along the route or a smaller zoom range would help.
-4. **Radar animation at 30 fps while navigating**: the sweep and flow run for the whole trip; on the Exynos W920 this keeps the GPU awake. Ambient (P6) must stop them, and the interactive screen could drop them on long straights.
+4. **Radar animation at 30 fps while navigating**: the sweep and flow run while the screen is on and interactive; ambient (P6-A) stops them. The interactive screen could drop them on long straights (P6-B HUD rebuild).
 5. **Fused-location dependency and cached origins**: the origin may be a fused fix up to 60 s old, and without Play services the platform fallback has not been measured on a real watch.
