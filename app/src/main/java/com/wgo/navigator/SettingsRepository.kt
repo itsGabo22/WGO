@@ -18,6 +18,9 @@ import kotlinx.coroutines.flow.map
 /** Spoken guidance (spec section 8, P7): AUTO speaks only with a headset or Bluetooth audio output. */
 enum class VoiceMode { Off, Auto, Always }
 
+/** Map orientation (spec section 6, P8): north up by default; heading up turns the map with the heading. */
+enum class MapOrientation { NorthUp, HeadingUp }
+
 data class WgoSettings(
     val isDarkMode: Boolean = false,
     val language: Language = Language.ES,
@@ -29,7 +32,8 @@ data class WgoSettings(
     val ttsEngine: String? = null,
     /** Pitch and speed of every phrase (P8). */
     val voicePitch: VoicePitch = VoicePitch.Normal,
-    val voiceRate: VoiceRate = VoiceRate.Normal
+    val voiceRate: VoiceRate = VoiceRate.Normal,
+    val mapOrientation: MapOrientation = MapOrientation.NorthUp
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "wgo_settings")
@@ -47,7 +51,8 @@ class SettingsRepository(context: Context) {
             voiceName = prefs[VOICE_NAME],
             ttsEngine = prefs[TTS_ENGINE],
             voicePitch = prefs[VOICE_PITCH].toEnumOrDefault(VoicePitch.Normal),
-            voiceRate = prefs[VOICE_RATE].toEnumOrDefault(VoiceRate.Normal)
+            voiceRate = prefs[VOICE_RATE].toEnumOrDefault(VoiceRate.Normal),
+            mapOrientation = prefs[MAP_ORIENTATION].toEnumOrDefault(MapOrientation.NorthUp)
         )
     }
 
@@ -68,6 +73,10 @@ class SettingsRepository(context: Context) {
 
     suspend fun setVoiceMode(value: VoiceMode) {
         store.edit { it[VOICE_MODE] = value.name }
+    }
+
+    suspend fun setMapOrientation(value: MapOrientation) {
+        store.edit { it[MAP_ORIENTATION] = value.name }
     }
 
     suspend fun setVoicePitch(value: VoicePitch) {
@@ -117,6 +126,7 @@ class SettingsRepository(context: Context) {
         val TTS_ENGINE = stringPreferencesKey("tts_engine")
         val VOICE_PITCH = stringPreferencesKey("voice_pitch")
         val VOICE_RATE = stringPreferencesKey("voice_rate")
+        val MAP_ORIENTATION = stringPreferencesKey("map_orientation")
         val TRIP_NAME = stringPreferencesKey("trip_name")
         val TRIP_LAT = doublePreferencesKey("trip_lat")
         val TRIP_LON = doublePreferencesKey("trip_lon")

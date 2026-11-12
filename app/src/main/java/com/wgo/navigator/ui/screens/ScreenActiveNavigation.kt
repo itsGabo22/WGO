@@ -129,7 +129,9 @@ fun ScreenActiveNavigation(
     /** Previews only: show this HUD state instead of the rule's. */
     forcedHud: HudMode? = null,
     /** Driving trip: CANCELAR gets the 60 real dp `hit-drive` touch height. */
-    driving: Boolean = false
+    driving: Boolean = false,
+    /** P8: north up (default; the map never turns) or heading up. */
+    northUp: Boolean = true
 ) {
     if (navState != null &&
         (locationPermission == PermissionStatus.Denied || locationPermission == PermissionStatus.PermanentlyDenied)
@@ -179,6 +181,7 @@ fun ScreenActiveNavigation(
                 clock = clock,
                 viewCenter = explore.viewCenter(radar.location),
                 viewBearing = explore.viewBearing(radar.bearing),
+                northUp = northUp,
                 onTileSize = { tileSize = it }
             )
         }
@@ -236,7 +239,7 @@ fun ScreenActiveNavigation(
                                     }
                                     val step = if (panning && travelled != Offset.Zero) travelled.also { travelled = Offset.Zero } else delta
                                     val r = latestRadar
-                                    explore.pan(step.x, step.y, r.location, r.bearing, r.route, latestZoom, latestTile)
+                                    explore.pan(step.x, step.y, r.location, if (northUp) 0f else r.bearing, r.route, latestZoom, latestTile)
                                     applied += step
                                     change.consume()
                                     if (released) break
@@ -303,7 +306,7 @@ fun ScreenActiveNavigation(
                 val density = LocalDensity.current.density
                 val center = explore.viewCenter(radar.location)
                 val userDp = if (center == null || screenSize == IntSize.Zero) null else RadarProjection.toScreen(
-                    radar.location, center, (explore.viewBearing(radar.bearing) ?: radar.bearing).toDouble(), zoom,
+                    radar.location, center, if (northUp) 0.0 else (explore.viewBearing(radar.bearing) ?: radar.bearing).toDouble(), zoom,
                     screenSize.width / 2f, screenSize.height * USER_ANCHOR_Y_FRACTION, tileSize
                 ).let { p -> Offset(p.x / density, p.y / density) }
                 if (RecenterRule.visible(userDp?.x, userDp?.y)) {

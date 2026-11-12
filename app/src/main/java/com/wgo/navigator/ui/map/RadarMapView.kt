@@ -54,6 +54,8 @@ fun RadarMapView(
     modifier: Modifier = Modifier,
     provider: TileProvider = TileProvider.OSM,
     labelFilter: ColorMatrixColorFilter? = null,
+    /** The raster street-name layer (P8: hidden in heading-up, where its names would turn upside down). */
+    showLabels: Boolean = true,
     onTileSize: (Double) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -109,18 +111,18 @@ fun RadarMapView(
 
     // The provider decides the base source, its loading colour (the base's land, so the filter shows `ground`) and
     // whether the labels layer exists. Runs again only if the provider changes (the OSM fallback).
-    DisposableEffect(mapView, provider) {
+    DisposableEffect(mapView, provider, showLabels) {
         val base = if (provider == TileProvider.CARTO) MapTiles.cartoBase else MapTiles.osmBase
         mapView.setTileSource(base)
         mapView.overlayManager.tilesOverlay.loadingBackgroundColor = provider.base.loadingArgb
         mapView.overlayManager.tilesOverlay.loadingLineColor = provider.base.loadingArgb
-        if (provider == TileProvider.CARTO) {
+        if (provider == TileProvider.CARTO && showLabels) {
             if (!mapView.overlayManager.contains(labels)) mapView.overlayManager.add(labels)
         } else {
             mapView.overlayManager.remove(labels)
         }
         mapView.invalidate()
-        WgoMetrics.event("tiles map provider=${provider.name.lowercase()}")
+        WgoMetrics.event("tiles map provider=${provider.name.lowercase()} labels=$showLabels")
         onDispose { }
     }
 

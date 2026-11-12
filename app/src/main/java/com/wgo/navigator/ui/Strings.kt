@@ -56,7 +56,7 @@ enum class StringKey {
     SAY_LOST_ROUTE, SAY_SAMPLE,
     // Voice settings (P7)
     SET_VOICE_GUIDANCE, VOICE_MODE_OFF, VOICE_MODE_AUTO, VOICE_MODE_ALWAYS, SET_VOICE, VOICE_AUTOMATIC, VOICE_NONE,
-    VOICE_OFFLINE, BTN_TRY, VOICE_FEMALE, VOICE_MALE, SET_VOICE_PITCH, PITCH_LOW, PITCH_NORMAL, PITCH_HIGH, SET_VOICE_RATE, RATE_SLOW, RATE_NORMAL, RATE_FAST, SET_TTS_ENGINE, SET_MORE_VOICES, MORE_VOICES_VALUE,
+    VOICE_OFFLINE, BTN_TRY, VOICE_FEMALE, VOICE_MALE, SET_VOICE_PITCH, PITCH_LOW, PITCH_NORMAL, PITCH_HIGH, SET_VOICE_RATE, RATE_SLOW, RATE_NORMAL, RATE_FAST, SET_TTS_ENGINE, SET_MORE_VOICES, MORE_VOICES_VALUE, SET_MAP_ORIENTATION, ORIENT_NORTH, ORIENT_HEADING,
     // Celebratory arrival (P7)
     BTN_DONE, ARRIVAL_UNDER_MIN,
     // Credits (P7)
@@ -184,6 +184,9 @@ private val es = mapOf(
     StringKey.SET_TTS_ENGINE to "Motor de voz",
     StringKey.SET_MORE_VOICES to "Más voces",
     StringKey.MORE_VOICES_VALUE to "Descargar voces",
+    StringKey.SET_MAP_ORIENTATION to "Orientación",
+    StringKey.ORIENT_NORTH to "NORTE ARRIBA",
+    StringKey.ORIENT_HEADING to "RUMBO ARRIBA",
     StringKey.BTN_TRY to "PROBAR",
     StringKey.BTN_DONE to "LISTO",
     StringKey.ARRIVAL_UNDER_MIN to "< 1 MIN",
@@ -372,6 +375,9 @@ private val en = mapOf(
     StringKey.SET_TTS_ENGINE to "Voice engine",
     StringKey.SET_MORE_VOICES to "More voices",
     StringKey.MORE_VOICES_VALUE to "Download voices",
+    StringKey.SET_MAP_ORIENTATION to "Orientation",
+    StringKey.ORIENT_NORTH to "NORTH UP",
+    StringKey.ORIENT_HEADING to "HEADING UP",
     StringKey.BTN_TRY to "TRY",
     StringKey.BTN_DONE to "DONE",
     StringKey.ARRIVAL_UNDER_MIN to "< 1 MIN",

@@ -95,6 +95,16 @@ class SettingsViewModel(
     /** The chosen voice's engine (package); null = the system's default engine. */
     val ttsEngine: StateFlow<String?> = _ttsEngine.asStateFlow()
 
+    private val _mapOrientation = MutableStateFlow(initial.mapOrientation)
+    val mapOrientation: StateFlow<MapOrientation> = _mapOrientation.asStateFlow()
+
+    /** The orientation row: NORTH UP <-> HEADING UP, persisted at once (silent). */
+    fun toggleMapOrientation() {
+        val next = if (_mapOrientation.value == MapOrientation.NorthUp) MapOrientation.HeadingUp else MapOrientation.NorthUp
+        _mapOrientation.value = next
+        viewModelScope.launch { repository.setMapOrientation(next) }
+    }
+
     private val _voicePitch = MutableStateFlow(initial.voicePitch)
     val voicePitch: StateFlow<com.wgo.navigator.voice.VoicePitch> = _voicePitch.asStateFlow()
 

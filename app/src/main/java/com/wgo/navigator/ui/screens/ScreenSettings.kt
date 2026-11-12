@@ -24,6 +24,7 @@ import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.Text
 import com.wgo.navigator.Language
 import com.wgo.navigator.SettingsViewModel
+import com.wgo.navigator.MapOrientation
 import com.wgo.navigator.VoiceMode
 import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.components.MapRow
@@ -46,11 +47,12 @@ private const val REFERENCE_SIZE = 227f
 private const val ROW_PITCH = 57f
 
 /** Centres of the P7 rows (MapRow is centred at 174): voice guidance, then voice. */
-internal const val VOICE_MODE_CENTER = 231f
-internal const val VOICE_ROW_CENTER = 288f
-internal const val PITCH_ROW_CENTER = 345f
-internal const val RATE_ROW_CENTER = 402f
-internal const val CREDITS_ROW_CENTER = 459f
+/** P8: the orientation row right after MAPA; every row below moved down one pitch. */
+internal const val ORIENTATION_ROW_CENTER = 231f
+internal const val VOICE_MODE_CENTER = 288f
+internal const val VOICE_ROW_CENTER = 345f
+internal const val PITCH_ROW_CENTER = 402f
+internal const val RATE_ROW_CENTER = 459f
 
 /** Scrolled content height: the last row can reach the middle of the dial. */
 
@@ -77,6 +79,7 @@ fun ScreenSettings(
     val voiceMode by viewModel.voiceMode.collectAsState()
     val voiceName by viewModel.voiceName.collectAsState()
     val voicePitch by viewModel.voicePitch.collectAsState()
+    val mapOrientation by viewModel.mapOrientation.collectAsState()
     val voiceRate by viewModel.voiceRate.collectAsState()
     val context = LocalContext.current
     // Is any text-to-speech engine installed? (A package query, not an engine start.)
@@ -143,6 +146,16 @@ fun ScreenSettings(
                 onClick = onOpenMapPicker,
                 modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(152f) - rowExtra),
                 maxTouchHeight = pitch
+            )
+
+            // P8: map orientation (north up / heading up).
+            SettingRow(
+                label = string(StringKey.SET_MAP_ORIENTATION),
+                value = string(if (mapOrientation == MapOrientation.NorthUp) StringKey.ORIENT_NORTH else StringKey.ORIENT_HEADING),
+                onClick = viewModel::toggleMapOrientation,
+                state = true,
+                maxTouchHeight = pitch,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(ORIENTATION_ROW_CENTER - 22f) - rowExtra)
             )
 
             // P7: spoken guidance.

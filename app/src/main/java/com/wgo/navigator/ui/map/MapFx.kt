@@ -282,14 +282,19 @@ fun DrawScope.drawBlip(color: Color, at: Offset, u: Float, ping: Float?, look: M
     }
 }
 
-/** User chevron (never rotated) at the paint's anchor with its 15 u halo: pulse 0..1. */
-fun DrawScope.drawUser(palette: WgoMapPalette, paint: RadarPaint, pulse: Float) {
+/**
+ * User chevron at the paint's anchor with its 15 u halo: pulse 0..1. [degrees] turns the chevron (north-up maps, P8);
+ * 0 in heading-up, where the map turns instead.
+ */
+fun DrawScope.drawUser(palette: WgoMapPalette, paint: RadarPaint, pulse: Float, degrees: Float = 0f) {
     val anchor = paint.anchor
     val haloR = 15f * paint.u * (1f + 0.2f * pulse)
     if (paint.look.square) drawRect(paint.haloColor, Offset(anchor.x - haloR, anchor.y - haloR), Size(2 * haloR, 2 * haloR))
     else drawCircle(paint.haloColor, haloR, anchor)
-    drawPath(paint.chevron, palette.ground, style = paint.chevronOutline)
-    drawPath(paint.chevron, palette.player)
+    rotate(degrees, pivot = anchor) {
+        drawPath(paint.chevron, palette.ground, style = paint.chevronOutline)
+        drawPath(paint.chevron, palette.player)
+    }
 }
 
 /** Conic radar sweep from the paint's anchor; the leading edge rotates with [turn] (0..1). */

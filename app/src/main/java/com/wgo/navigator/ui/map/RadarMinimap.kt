@@ -58,7 +58,12 @@ fun RadarMinimap(
     /** Explore mode: the frozen heading. Null = the user's [bearing]. */
     viewBearing: Float? = null,
     /** osmdroid's real tile size in px, for pan maths outside. */
-    onTileSize: (Double) -> Unit = {}
+    onTileSize: (Double) -> Unit = {},
+    /**
+     * North up (P8, the default): the map never turns, the chevron turns to [bearing] and the raster street names stay
+     * upright. False: heading up, the map turns and the raster names are hidden (upright landmark labels instead).
+     */
+    northUp: Boolean = false
 ) {
     val palette = Wgo.palette
     val dark = palette === NightPalette
@@ -70,7 +75,7 @@ fun RadarMinimap(
 
     val anchor = Offset(size.width / 2f, size.height * USER_ANCHOR_Y_FRACTION)
     val center = viewCenter ?: userLocation
-    val heading = (viewBearing ?: bearing).toDouble()
+    val heading = if (northUp) 0.0 else (viewBearing ?: bearing).toDouble()
 
     // Re-projection happens only when one of these inputs changes (about once per second; every drag step in explore).
     val projectedRoute = remember(route, center, heading, zoom, size, tileSize) {
@@ -115,6 +120,7 @@ fun RadarMinimap(
                 filter = filter,
                 provider = provider,
                 labelFilter = labelFilter,
+                showLabels = northUp,
                 onTileSize = { tileSize = it; onTileSize(it) }
             )
         }
@@ -133,7 +139,8 @@ fun RadarMinimap(
             route = projectedRoute,
             maneuver = projectedManeuver,
             blips = projectedBlips,
-            clock = clock
+            clock = clock,
+            chevronDegrees = if (northUp) bearing else 0f
         )
 
         if (dark && style.id.dimsInNight()) {

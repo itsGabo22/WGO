@@ -274,6 +274,7 @@ class MainActivity : ComponentActivity() {
                     val micState by appViewModel.micState.collectAsState()
                     val selectedMode by appViewModel.selectedMode.collectAsState()
                     val mapStyleId by settingsViewModel.mapStyle.collectAsState()
+                    val mapOrientation by settingsViewModel.mapOrientation.collectAsState()
                     val introSkipped by appViewModel.introSkipped.collectAsState()
                     val reduceMotion = LocalWgoReduceMotion.current
 
@@ -421,6 +422,7 @@ class MainActivity : ComponentActivity() {
                                     navState = navState,
                                     radarSource = radar,
                                     driving = radar?.mode == TravelMode.Drive,
+                                    northUp = mapOrientation == MapOrientation.NorthUp,
                                     destination = destination,
                                     endConfirm = endConfirm,
                                     onEnd = appViewModel::endNavigation,

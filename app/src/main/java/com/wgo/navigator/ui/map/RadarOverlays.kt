@@ -44,7 +44,9 @@ fun RadarOverlays(
     maneuver: Offset?,
     blips: List<ProjectedBlip>,
     clock: WgoClock,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** The chevron's rotation in degrees (north-up maps, P8). */
+    chevronDegrees: Float = 0f
 ) {
     val reduceMotion = LocalWgoReduceMotion.current
     val ringStroke = 1.2.dp.atLeastRealDp()
@@ -92,7 +94,7 @@ fun RadarOverlays(
                         drawBlip(color, blip.position, u, ping, look)
                     }
 
-                    drawUser(palette, paint, pulse = if (reduceMotion) 0f else anim.ping(1800))
+                    drawUser(palette, paint, pulse = if (reduceMotion) 0f else anim.ping(1800), degrees = chevronDegrees)
 
                     if (!reduceMotion) {
                         val turn = (t % 3600L).toFloat() / 3600f
