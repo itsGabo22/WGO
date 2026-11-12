@@ -90,6 +90,7 @@ class InAppVoiceInput(
         fun finish(event: VoiceEvent) {
             if (finished) return
             finished = true
+            VoiceLog.event("outcome ${outcomeOf(event)} session_ms=${now() - started} instances=$instances")
             trySend(event)
             close()
         }
@@ -101,7 +102,7 @@ class InAppVoiceInput(
             recognizer = r
             attemptStartedAt = now()
             val request = RecognizerRequest(tags[tagIndex], preferOffline = !online)
-            WgoMetrics.event("voice_attempt n=$instances tag=${request.languageTag} online=$online at_ms=${now() - started}")
+            VoiceLog.event("recognizer_created n=$instances tag=${request.languageTag} online=$online session_ms=${now() - started}")
             r.start(request, object : RecognizerListener {
                 private fun stale() = gen != generation || finished
 
@@ -110,7 +111,10 @@ class InAppVoiceInput(
                     ready = true
                     readyAt = now()
                     lastVoice = readyAt
-                    WgoMetrics.event("voice_ready ms=${readyAt - started} instances=$instances tag=${tags[tagIndex]} online=$online")
+                    VoiceLog.event(
+                        "ready n=$instances attempt_ms=${readyAt - attemptStartedAt} session_ms=${readyAt - started} " +
+                            "tag=${tags[tagIndex]} online=$online"
+                    )
                     if (!readySent) {
                         readySent = true
                         trySend(VoiceEvent.Ready)
@@ -121,6 +125,7 @@ class InAppVoiceInput(
                     if (stale()) return
                     // Speech means this tag works (a missing model fails right after "ready", before any speech).
                     memory.setWorkingTag(language, tagIndex)
+                    if (!speechStarted) VoiceLog.event("speech n=$instances after_ready_ms=${now() - readyAt}")
                     speechStarted = true
                     lastVoice = now()
                 }
@@ -142,6 +147,7 @@ class InAppVoiceInput(
 
                 override fun onResults(text: String?) {
                     if (stale()) return
+                    VoiceLog.event("results n=$instances len=${text?.length ?: -1} partial_len=${lastPartial?.length ?: -1}")
                     val best = text ?: lastPartial
                     finish(if (best.isNullOrBlank()) VoiceEvent.Failed(WgoFailure.NotFound) else VoiceEvent.Final(best))
                 }
@@ -151,7 +157,10 @@ class InAppVoiceInput(
                     val action = RecognizerErrors.decide(
                         code, RecognizerErrors.Attempt(online, tagIndex, tags.size, freshRetryUsed, lastPartial)
                     )
-                    WgoMetrics.event("voice_error code=$code ready=$ready online=$online tag=${tags[tagIndex]} action=$action")
+                    VoiceLog.event(
+                        "error code=$code n=$instances ready=$ready speech=$speechStarted online=$online " +
+                            "tag=${tags[tagIndex]} attempt_ms=${now() - attemptStartedAt} action=$action"
+                    )
                     when (action) {
                         is Action.Restart -> {
                             if (!online && action.online) memory.markNoOfflineModel(language)
@@ -190,14 +199,14 @@ class InAppVoiceInput(
                 when {
                     // Per attempt: a restart late in a slow start still gets its full time.
                     !ready -> if (t - attemptStartedAt >= START_TIMEOUT_MS) {
-                        WgoMetrics.event("voice_stop reason=not_ready after_ms=${t - started} attempt_ms=${t - attemptStartedAt}")
+                        VoiceLog.event("stop reason=not_ready session_ms=${t - started} attempt_ms=${t - attemptStartedAt}")
                         finish(VoiceEvent.Failed(WgoFailure.NotStarted))
                     }
                     stopAt == 0L -> {
                         val overTime = t - readyAt >= MAX_LISTEN_MS
                         val silent = speechStarted && t - lastVoice >= SILENCE_AFTER_SPEECH_MS
                         if (overTime || silent) {
-                            WgoMetrics.event("voice_stop reason=${if (overTime) "cap" else "silence"} after_ms=${t - started}")
+                            VoiceLog.event("stop reason=${if (overTime) "cap" else "silence"} session_ms=${t - started}")
                             stopAt = t
                             recognizer?.stop()
                         }
@@ -216,11 +225,19 @@ class InAppVoiceInput(
             val t0 = now()
             release()
             if (session === this) session = null
-            WgoMetrics.event(
-                "voice_destroyed session_ms=${t0 - started} destroy_ms=${now() - t0} instances=$instances online=$online"
+            VoiceLog.event(
+                "destroyed session_ms=${t0 - started} destroy_ms=${now() - t0} instances=$instances online=$online" +
+                    if (finished) "" else " outcome=closed_by_app"
             )
         }
     }.flowOn(dispatcher)
+
+    /** The outcome for the log: the event kind and the transcript LENGTH only (never its text). */
+    private fun outcomeOf(event: VoiceEvent): String = when (event) {
+        is VoiceEvent.Final -> "final len=${event.text.length}"
+        is VoiceEvent.Failed -> "failed=${event.failure::class.simpleName ?: event.failure}"
+        else -> event::class.simpleName ?: "other"
+    }
 
     companion object {
         const val MAX_LISTEN_MS = 8_000L
@@ -242,7 +259,7 @@ class InAppVoiceInput(
         fun isAvailable(context: Context): Boolean {
             val available = SpeechRecognizer.isRecognitionAvailable(context)
             val selected = Settings.Secure.getString(context.contentResolver, "voice_recognition_service")
-            WgoMetrics.event("voice_inapp available=$available selected=${!selected.isNullOrEmpty()}")
+            VoiceLog.event("inapp available=$available selected=${!selected.isNullOrEmpty()}")
             return available && !selected.isNullOrEmpty()
         }
     }

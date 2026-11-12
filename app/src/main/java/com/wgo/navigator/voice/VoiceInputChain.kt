@@ -5,7 +5,6 @@ import com.wgo.navigator.Language
 import com.wgo.navigator.core.VoiceEvent
 import com.wgo.navigator.core.VoiceInput
 import com.wgo.navigator.core.WgoFailure
-import com.wgo.navigator.metrics.WgoMetrics
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -41,7 +40,7 @@ class VoiceInputChain(
 
     override fun listen(language: Language): Flow<VoiceEvent> = flow {
         val strategy = strategy()
-        WgoMetrics.event("voice_strategy=${strategy.name}")
+        VoiceLog.event("strategy=${strategy.name}")
         when (strategy) {
             VoiceStrategy.InApp -> {
                 var ready = false
@@ -54,7 +53,7 @@ class VoiceInputChain(
                 }
                 if (fallBack) {
                     inAppBroken = true
-                    WgoMetrics.event("voice_strategy=SystemDialog reason=inapp_failed_before_ready")
+                    VoiceLog.event("strategy=SystemDialog reason=inapp_failed_before_ready")
                     emit(VoiceEvent.AwaitingSystem)
                     emit(dialog.request(language))
                 }

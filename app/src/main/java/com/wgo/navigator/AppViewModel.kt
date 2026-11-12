@@ -22,7 +22,9 @@ import com.wgo.navigator.core.WgoFailure
 import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.ui.components.MicState
 import com.wgo.navigator.voice.DebugUtterances
+import com.wgo.navigator.voice.RecognizerWarmUp
 import com.wgo.navigator.voice.SpeakNowCue
+import com.wgo.navigator.voice.VoiceLog
 import com.wgo.navigator.voice.SystemVoiceDialog
 import com.wgo.navigator.voice.VoiceInputChain
 import com.wgo.navigator.voice.VoiceLevel
@@ -167,7 +169,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         if (_micState.value != MicState.Idle || listenJob?.isActive == true) return
         _transcript.value = ""
         speakNow.onPress()
-        WgoMetrics.event("voice_press at=${SystemClock.elapsedRealtime()}")
+        VoiceLog.press(" warm=${RecognizerWarmUp.isWarm}")
         _micState.value = MicState.Preparing
         _haptics.tryEmit(HapticEvent.Tick) // spec section 8: starts listening (the press is the start)
         listenJob = viewModelScope.launch {
@@ -207,14 +209,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 // The offline places index loads while the user speaks (once per process). Started at ready, not at the
                 // press: on the watch the load competed with the recognizer's cold start (P7, measured).
                 viewModelScope.launch { placeResolver.prewarm() }
-                WgoMetrics.event("voice_listening ms_from_press=$preparedMs speak_now_tick=$cue")
+                VoiceLog.event("ui_speak_now preparing_ms=$preparedMs speak_now_tick=$cue")
             }
             VoiceEvent.Restarting -> {
                 // The ready was false (the recognizer is being recreated): back to preparing, cue armed again.
                 _micState.value = MicState.Preparing
                 voiceLevel.value = 0f
                 speakNow.onPress()
-                WgoMetrics.event("voice_back_to_preparing")
+                VoiceLog.event("ui_back_to_preparing")
             }
             VoiceEvent.AwaitingSystem -> _micState.value = MicState.Waiting
             is VoiceEvent.Level -> voiceLevel.value = event.value
@@ -223,6 +225,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
             is VoiceEvent.Failed -> {
                 voiceLevel.value = 0f
                 _micState.value = MicState.Idle
+                // What the user sees: the error surface (or nothing for a cancel).
+                VoiceLog.event("ui_error shown=${event.failure != WgoFailure.Cancelled} failure=${event.failure::class.simpleName}")
                 when (event.failure) {
                     WgoFailure.Cancelled -> Unit
                     WgoFailure.NoPermission -> _micDenied.value = true

@@ -9,7 +9,6 @@ import android.speech.RecognitionSupportCallback
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.annotation.RequiresApi
-import com.wgo.navigator.metrics.WgoMetrics
 
 /**
  * Binds the system recognition service during the cold-start intro (API 33+ `checkRecognitionSupport`, which never
@@ -19,6 +18,9 @@ import com.wgo.navigator.metrics.WgoMetrics
  */
 object RecognizerWarmUp {
     private var recognizer: SpeechRecognizer? = null
+
+    /** True while the warm-up holds the recognition service bound (for the voice log). */
+    val isWarm: Boolean get() = recognizer != null
 
     fun start(context: Context, languageTag: String) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || recognizer != null) return
@@ -34,20 +36,20 @@ object RecognizerWarmUp {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
         r.checkRecognitionSupport(intent, context.mainExecutor, object : RecognitionSupportCallback {
             override fun onSupportResult(support: RecognitionSupport) {
-                WgoMetrics.event("voice_warm ok ms=${SystemClock.elapsedRealtime() - t0}")
+                VoiceLog.event("warm ok ms=${SystemClock.elapsedRealtime() - t0}")
             }
 
             override fun onError(error: Int) {
-                WgoMetrics.event("voice_warm error=$error ms=${SystemClock.elapsedRealtime() - t0}")
+                VoiceLog.event("warm error=$error ms=${SystemClock.elapsedRealtime() - t0}")
             }
         })
-        WgoMetrics.event("voice_warm start")
+        VoiceLog.event("warm start tag=$languageTag")
     }
 
     fun stop() {
         val r = recognizer ?: return
         r.destroy()
         recognizer = null
-        WgoMetrics.event("voice_warm released")
+        VoiceLog.event("warm released")
     }
 }

@@ -33,6 +33,7 @@ class SystemVoiceDialog {
         pending?.complete(VoiceEvent.Failed(WgoFailure.Cancelled))
         val deferred = CompletableDeferred<VoiceEvent>()
         pending = deferred
+        VoiceLog.event("dialog_requested")
         _requests.trySend(intent(language))
         return try {
             deferred.await()
@@ -49,11 +50,13 @@ class SystemVoiceDialog {
             resultCode == Activity.RESULT_OK -> VoiceEvent.Failed(WgoFailure.NotFound)
             else -> VoiceEvent.Failed(WgoFailure.Cancelled)
         }
+        if (pending != null) VoiceLog.event("dialog_result code=$resultCode len=${text?.length ?: -1}")
         pending?.complete(event)
     }
 
     /** Called by the Activity when no activity could be launched. */
     fun onUnavailable() {
+        VoiceLog.event("dialog_unavailable")
         pending?.complete(VoiceEvent.Failed(WgoFailure.Unavailable))
     }
 
