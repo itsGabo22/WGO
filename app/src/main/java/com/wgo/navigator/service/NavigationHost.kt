@@ -192,7 +192,9 @@ class NavigationHost private constructor(context: Context) {
             // OFF; it is built once, with the language and voice saved when the trip starts.
             val saved = settings.load()
             if (saved.voiceMode != VoiceMode.Off && speech == null) {
-                speech = SpeechEngine(app, saved.language, saved.voiceName, saved.ttsEngine)
+                speech = SpeechEngine(
+                    app, saved.language, saved.voiceName, saved.ttsEngine, saved.voicePitch.value, saved.voiceRate.value
+                )
             }
             launch {
                 settings.settings.collect {

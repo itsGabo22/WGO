@@ -9,6 +9,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.wgo.navigator.ui.theme.MapStyleId
+import com.wgo.navigator.voice.VoicePitch
+import com.wgo.navigator.voice.VoiceRate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -24,7 +26,10 @@ data class WgoSettings(
     /** The text-to-speech voice the user picked (engine voice name); null = the automatic choice. */
     val voiceName: String? = null,
     /** The engine of that voice (package, P8); null = the system's default engine. */
-    val ttsEngine: String? = null
+    val ttsEngine: String? = null,
+    /** Pitch and speed of every phrase (P8). */
+    val voicePitch: VoicePitch = VoicePitch.Normal,
+    val voiceRate: VoiceRate = VoiceRate.Normal
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "wgo_settings")
@@ -40,7 +45,9 @@ class SettingsRepository(context: Context) {
             mapStyle = prefs[MAP_STYLE].toEnumOrDefault(MapStyleId.COBALTO),
             voiceMode = prefs[VOICE_MODE].toEnumOrDefault(VoiceMode.Auto),
             voiceName = prefs[VOICE_NAME],
-            ttsEngine = prefs[TTS_ENGINE]
+            ttsEngine = prefs[TTS_ENGINE],
+            voicePitch = prefs[VOICE_PITCH].toEnumOrDefault(VoicePitch.Normal),
+            voiceRate = prefs[VOICE_RATE].toEnumOrDefault(VoiceRate.Normal)
         )
     }
 
@@ -61,6 +68,14 @@ class SettingsRepository(context: Context) {
 
     suspend fun setVoiceMode(value: VoiceMode) {
         store.edit { it[VOICE_MODE] = value.name }
+    }
+
+    suspend fun setVoicePitch(value: VoicePitch) {
+        store.edit { it[VOICE_PITCH] = value.name }
+    }
+
+    suspend fun setVoiceRate(value: VoiceRate) {
+        store.edit { it[VOICE_RATE] = value.name }
     }
 
     /** The voice and its engine together (null voice = automatic for [engine]; null engine = the default one). */
@@ -100,6 +115,8 @@ class SettingsRepository(context: Context) {
         val VOICE_MODE = stringPreferencesKey("voice_mode")
         val VOICE_NAME = stringPreferencesKey("voice_name")
         val TTS_ENGINE = stringPreferencesKey("tts_engine")
+        val VOICE_PITCH = stringPreferencesKey("voice_pitch")
+        val VOICE_RATE = stringPreferencesKey("voice_rate")
         val TRIP_NAME = stringPreferencesKey("trip_name")
         val TRIP_LAT = doublePreferencesKey("trip_lat")
         val TRIP_LON = doublePreferencesKey("trip_lon")

@@ -95,6 +95,26 @@ class SettingsViewModel(
     /** The chosen voice's engine (package); null = the system's default engine. */
     val ttsEngine: StateFlow<String?> = _ttsEngine.asStateFlow()
 
+    private val _voicePitch = MutableStateFlow(initial.voicePitch)
+    val voicePitch: StateFlow<com.wgo.navigator.voice.VoicePitch> = _voicePitch.asStateFlow()
+
+    private val _voiceRate = MutableStateFlow(initial.voiceRate)
+    val voiceRate: StateFlow<com.wgo.navigator.voice.VoiceRate> = _voiceRate.asStateFlow()
+
+    /** The "Tono" row: LOW -> NORMAL -> HIGH, persisted at once (silent). */
+    fun cycleVoicePitch() {
+        val next = _voicePitch.value.next()
+        _voicePitch.value = next
+        viewModelScope.launch { repository.setVoicePitch(next) }
+    }
+
+    /** The "Velocidad" row: SLOW -> NORMAL -> FAST, persisted at once (silent). */
+    fun cycleVoiceRate() {
+        val next = _voiceRate.value.next()
+        _voiceRate.value = next
+        viewModelScope.launch { repository.setVoiceRate(next) }
+    }
+
     /** A voice chosen in the picker, with its engine (null name = automatic for that engine). */
     fun setVoice(name: String?, engine: String?) {
         _voiceName.value = name

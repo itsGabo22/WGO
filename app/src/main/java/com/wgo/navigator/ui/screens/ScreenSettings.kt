@@ -33,6 +33,8 @@ import com.wgo.navigator.ui.string
 import com.wgo.navigator.ui.theme.Wgo
 import com.wgo.navigator.ui.theme.WgoType
 import com.wgo.navigator.ui.theme.wgoTouchSide
+import com.wgo.navigator.voice.VoicePitch
+import com.wgo.navigator.voice.VoiceRate
 import com.wgo.navigator.voice.VoiceLabels
 
 private const val REFERENCE_SIZE = 227f
@@ -43,10 +45,12 @@ private const val ROW_PITCH = 57f
 /** Centres of the P7 rows (MapRow is centred at 174): voice guidance, then voice. */
 internal const val VOICE_MODE_CENTER = 231f
 internal const val VOICE_ROW_CENTER = 288f
-internal const val CREDITS_ROW_CENTER = 345f
+internal const val PITCH_ROW_CENTER = 345f
+internal const val RATE_ROW_CENTER = 402f
+internal const val CREDITS_ROW_CENTER = 459f
 
 /** Scrolled content height: the last row can reach the middle of the dial. */
-private const val CONTENT_HEIGHT = 345f + 22f + 100f
+private const val CONTENT_HEIGHT = 459f + 22f + 100f
 
 /**
  * Settings (spec section 7, P7 update): a vertically scrolling list (touch scroll, position indicator while
@@ -70,6 +74,8 @@ fun ScreenSettings(
     val mapStyle by viewModel.mapStyle.collectAsState()
     val voiceMode by viewModel.voiceMode.collectAsState()
     val voiceName by viewModel.voiceName.collectAsState()
+    val voicePitch by viewModel.voicePitch.collectAsState()
+    val voiceRate by viewModel.voiceRate.collectAsState()
     val context = LocalContext.current
     // Is any text-to-speech engine installed? (A package query, not an engine start.)
     val hasEngine = remember {
@@ -149,13 +155,45 @@ fun ScreenSettings(
                 maxTouchHeight = pitch,
                 modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(VOICE_ROW_CENTER - 22f) - rowExtra)
             )
+            // P8: pitch and speed of every phrase (spec section 7, voice settings).
+            if (hasEngine) {
+                SettingRow(
+                    label = string(StringKey.SET_VOICE_PITCH),
+                    value = string(
+                        when (voicePitch) {
+                            VoicePitch.Low -> StringKey.PITCH_LOW
+                            VoicePitch.Normal -> StringKey.PITCH_NORMAL
+                            VoicePitch.High -> StringKey.PITCH_HIGH
+                        }
+                    ),
+                    onClick = viewModel::cycleVoicePitch,
+                    state = true,
+                    maxTouchHeight = pitch,
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(PITCH_ROW_CENTER - 22f) - rowExtra)
+                )
+                SettingRow(
+                    label = string(StringKey.SET_VOICE_RATE),
+                    value = string(
+                        when (voiceRate) {
+                            VoiceRate.Slow -> StringKey.RATE_SLOW
+                            VoiceRate.Normal -> StringKey.RATE_NORMAL
+                            VoiceRate.Fast -> StringKey.RATE_FAST
+                        }
+                    ),
+                    onClick = viewModel::cycleVoiceRate,
+                    state = true,
+                    maxTouchHeight = pitch,
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(RATE_ROW_CENTER - 22f) - rowExtra)
+                )
+            }
+            val creditsCenter = if (hasEngine) RATE_ROW_CENTER + ROW_PITCH else VOICE_ROW_CENTER + ROW_PITCH
             SettingRow(
                 label = string(StringKey.SET_CREDITS),
                 value = "OpenStreetMap · CARTO · Overture",
                 onClick = onOpenCredits,
                 opens = true,
                 maxTouchHeight = pitch,
-                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(CREDITS_ROW_CENTER - 22f) - rowExtra)
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(creditsCenter - 22f) - rowExtra)
             )
         }
         PositionIndicator(scrollState = scroll)

@@ -459,10 +459,14 @@ class MainActivity : ComponentActivity() {
                             ScreenState.Credits -> ScreenCredits()
                             ScreenState.VoicePicker -> {
                                 val voiceName by settingsViewModel.voiceName.collectAsState()
+                                val voicePitch by settingsViewModel.voicePitch.collectAsState()
+                                val voiceRate by settingsViewModel.voiceRate.collectAsState()
                                 ScreenVoicePicker(
                                     language = language,
                                     selected = voiceName,
-                                    onChoose = settingsViewModel::setVoice
+                                    onChoose = settingsViewModel::setVoice,
+                                    pitch = voicePitch.value,
+                                    rate = voiceRate.value
                                 )
                             }
                         }
