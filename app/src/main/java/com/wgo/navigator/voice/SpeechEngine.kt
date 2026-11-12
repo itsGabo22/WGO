@@ -38,6 +38,27 @@ object VoiceChooser {
             .take(limit)
     }
 
+    private val NAME_TAG = Regex("^([a-zA-Z]{2,3})[-_]([a-zA-Z]{2}|\\d{3})(?:[-_]|$)")
+
+    /**
+     * A "language-REGION" tag for a voice. Engines differ (measured on the Galaxy Watch5 Pro, 2026-11-11): Samsung TTS
+     * reports ISO-3 locales without the region ("spa-x-lvariant-f00") but names its voices "es-US-SMTf00"; Google TTS
+     * names them "es-us-x-sfb-local". The name's prefix wins; otherwise the locale, with an ISO-3 language mapped to
+     * its 2-letter code.
+     */
+    fun tagOf(name: String, locale: Locale): String {
+        NAME_TAG.find(name)?.let { m ->
+            return iso2(m.groupValues[1].lowercase(Locale.ROOT)) + "-" + m.groupValues[2].uppercase(Locale.ROOT)
+        }
+        val lang = iso2(locale.language)
+        return if (locale.country.isNullOrEmpty()) lang else "$lang-${locale.country}"
+    }
+
+    private fun iso2(code: String): String {
+        if (code.length != 3) return code
+        return Locale.getISOLanguages().firstOrNull { runCatching { Locale(it).isO3Language }.getOrNull() == code } ?: code
+    }
+
     fun choose(voices: List<VoiceInfo>, language: Language, preferredName: String?): VoiceInfo? {
         val ranked = ranked(voices, language)
         return ranked.firstOrNull { it.name == preferredName } ?: ranked.firstOrNull()
@@ -93,6 +114,8 @@ class SpeechEngine(context: Context, private val language: Language, private val
             tts.setAudioAttributes(attributes)
             tts.setOnUtteranceProgressListener(listener)
             voices = runCatching { tts.voices.orEmpty().map(::info) }.getOrDefault(emptyList())
+            // Debug builds: which voices the device really has (names and locales only).
+            voices.forEach { WgoMetrics.event("tts voice name=${it.name} tag=${it.languageTag} net=${it.network} installed=${it.installed}") }
             val pick = VoiceChooser.choose(voices, language, preferredVoice)
             val voice = pick?.let { p -> tts.voices?.firstOrNull { it.name == p.name } }
             if (voice != null) tts.voice = voice
@@ -186,7 +209,7 @@ class SpeechEngine(context: Context, private val language: Language, private val
 
         fun info(v: Voice): VoiceInfo = VoiceInfo(
             name = v.name,
-            languageTag = v.locale.toLanguageTag(),
+            languageTag = VoiceChooser.tagOf(v.name, v.locale),
             network = v.isNetworkConnectionRequired,
             installed = TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in v.features.orEmpty()
         )

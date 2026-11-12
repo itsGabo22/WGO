@@ -108,6 +108,18 @@ class SpokenGuidanceTest {
         assertNull(VoiceChooser.choose(emptyList(), Language.ES, null))
     }
 
+    @Test fun voiceTagsFromSamsungAndGoogleNames() {
+        // Measured on the Galaxy Watch5 Pro: Samsung TTS reports "spa" without a region; the name carries it.
+        assertEquals("es-US", VoiceChooser.tagOf("es-US-SMTf00", java.util.Locale("spa")))
+        assertEquals("es-ES", VoiceChooser.tagOf("es-ES-default", java.util.Locale("spa")))
+        assertEquals("es-US", VoiceChooser.tagOf("es-us-x-sfb-local", java.util.Locale("es", "US")))
+        assertEquals("es", VoiceChooser.tagOf("voice7", java.util.Locale("spa")))
+        val watch = listOf("es-ES-default", "es-US-SMTf00", "es-US-default", "es-ES-SMTf00", "en-US-SMTf00")
+            .map { VoiceInfo(it, VoiceChooser.tagOf(it, java.util.Locale("spa")), network = false) }
+        assertEquals(listOf("es-US-SMTf00", "es-US-default", "es-ES-SMTf00", "es-ES-default"),
+            VoiceChooser.ranked(watch, Language.ES, 4).map { it.name })
+    }
+
     @Test fun voiceLabels() {
         assertEquals("Español (Colombia) 1", VoiceLabels.label(VoiceInfo("x", "es-CO", false), 1, Language.ES))
         assertEquals("Spanish (United States)", VoiceLabels.shortName("es-us-x-sfb-local", Language.EN))
