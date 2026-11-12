@@ -12,7 +12,8 @@ import kotlin.math.sqrt
  * Feed it consecutive 20 ms frames of 16 kHz mono PCM16 with [push]. Leading all-zero frames (the microphone ramp) are
  * skipped; the first 300 ms of real audio calibrate the noise floor (capped, so talking over the calibration still
  * leaves room); speech starts after 150 ms above floor + margin and ends after 900 ms below it. [clip] tells which
- * samples to send: from 500 ms before the start (pre-roll) to 300 ms after the last loud frame.
+ * samples to send: from 500 ms before the start (pre-roll) to 300 ms after the last loud frame. A steady loud
+ * background is followed with minimum statistics (the quietest frame of the last 1.5 s), so speech still ends over it.
  */
 class SpeechEndpointer(private val config: Config = Config()) {
     data class Config(
@@ -29,7 +30,11 @@ class SpeechEndpointer(private val config: Config = Config()) {
         val noSpeechMs: Int = 6_000,
         val tailMs: Int = 300,
         val floorDown: Float = 0.2f,
-        val floorUp: Float = 0.02f
+        val floorUp: Float = 0.02f,
+        /** Minimum statistics: a steady background louder than the floor by [steadyRiseDb] for [steadyWindowMs]. */
+        val steadyWindowMs: Int = 1_500,
+        val steadyRiseDb: Float = 6f,
+        val steadyBelowDb: Float = 3f
     ) {
         val frameSamples: Int get() = sampleRate * frameMs / 1000
         fun samples(ms: Int): Long = sampleRate.toLong() * ms / 1000
@@ -80,6 +85,8 @@ class SpeechEndpointer(private val config: Config = Config()) {
     private var silenceSamples = 0L
 
     private val calibrationTarget = max(1, config.calibrationMs / config.frameMs)
+    private val recent = FloatArray(max(1, config.steadyWindowMs / config.frameMs))
+    private var recentCount = 0
     private val startFrames = (config.startMs + config.frameMs - 1) / config.frameMs
 
     /** The threshold now (NaN before calibration). */
@@ -139,6 +146,8 @@ class SpeechEndpointer(private val config: Config = Config()) {
             }
         }
 
+        if (!floorDb.isNaN() && firstAudioSample >= 0 && calibrationFrames == calibrationTarget) followSteadyBackground(db)
+
         if (ended == null) {
             if (!hasSpeech && totalSamples >= config.samples(config.noSpeechMs)) step = end(EndReason.NoSpeech)
             else if (totalSamples >= config.samples(config.maxCaptureMs)) step = end(if (hasSpeech) EndReason.MaxLength else EndReason.NoSpeech)
@@ -172,7 +181,18 @@ class SpeechEndpointer(private val config: Config = Config()) {
 
     private fun adaptFloor(db: Float) {
         val k = if (db < floorDb) config.floorDown else config.floorUp
-        floorDb = min(floorDb + (db - floorDb) * k, config.floorCapDb)
+        floorDb += (db - floorDb) * k
+    }
+
+    /** Speech has quieter gaps between words; a steady background has none: when even the quietest recent frame is
+     * well above the floor, the floor moves up to just below it. */
+    private fun followSteadyBackground(db: Float) {
+        recent[recentCount % recent.size] = db
+        recentCount++
+        if (recentCount < recent.size) return
+        var quietest = recent[0]
+        for (v in recent) if (v < quietest) quietest = v
+        if (quietest > floorDb + config.steadyRiseDb) floorDb = quietest - config.steadyBelowDb
     }
 
     companion object {
