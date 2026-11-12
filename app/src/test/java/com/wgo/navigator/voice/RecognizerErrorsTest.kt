@@ -18,9 +18,8 @@ class RecognizerErrorsTest {
         networkRetryUsed: Boolean = false,
         partial: String? = null,
         serviceRetryUsed: Boolean = false,
-        speechHeard: Boolean = false,
         quietRestarts: Int = 0
-    ) = Attempt(online, tagIndex, tagCount, networkRetryUsed, partial, serviceRetryUsed, speechHeard, quietRestarts)
+    ) = Attempt(online, tagIndex, tagCount, networkRetryUsed, partial, serviceRetryUsed, quietRestarts)
 
     /** Every budget used: what the user finally sees. */
     private fun spent(online: Boolean = false, partial: String? = null) = attempt(
@@ -31,7 +30,7 @@ class RecognizerErrorsTest {
     @Test fun onlyNetworkCodesEverMeanNoInternet() {
         val states = listOf(
             attempt(), attempt(online = true), spent(), spent(online = true), attempt(online = true, tagIndex = 2, networkRetryUsed = true),
-            attempt(partial = "calle"), attempt(partial = " ", networkRetryUsed = true), attempt(speechHeard = true)
+            attempt(partial = "calle"), attempt(partial = " ", networkRetryUsed = true)
         )
         for (code in -1..20) for (state in states) {
             val action = RecognizerErrors.decide(code, state)
@@ -88,10 +87,12 @@ class RecognizerErrorsTest {
         }
     }
 
-    @Test fun noMatchAfterSpeechIsNotUnderstoodAtOnce() {
+    @Test fun noMatchWithWordsKeepsThemAndWithoutWordsUsesTheQuietBudget() {
+        // Measured (P8): cold sessions detected speech, transcribed nothing and answered no match; the next press
+        // understood the same phrase. Detected speech alone does not end the session.
         for (code in listOf(RecognizerErrors.SPEECH_TIMEOUT, RecognizerErrors.NO_MATCH)) {
-            assertEquals(Action.Fail(WgoFailure.NotFound), RecognizerErrors.decide(code, attempt(speechHeard = true)))
             assertEquals(Action.Final("unicentro"), RecognizerErrors.decide(code, attempt(partial = "unicentro")))
+            assertEquals(Action.Restart(false, 0, Budget.Quiet), RecognizerErrors.decide(code, attempt(partial = " ")))
         }
     }
 
@@ -100,7 +101,6 @@ class RecognizerErrorsTest {
         assertEquals(Action.Restart(false, 0, Budget.Quiet), RecognizerErrors.decide(RecognizerErrors.AUDIO, attempt()))
         assertEquals(Action.Fail(WgoFailure.Server(0)), RecognizerErrors.decide(RecognizerErrors.SERVER, spent()))
         assertEquals(Action.Fail(WgoFailure.Unavailable), RecognizerErrors.decide(RecognizerErrors.AUDIO, spent()))
-        assertEquals(Action.Fail(WgoFailure.Server(0)), RecognizerErrors.decide(RecognizerErrors.SERVER, attempt(speechHeard = true)))
     }
 
     @Test fun otherCodesKeepTheirSurfaces() {
@@ -108,9 +108,8 @@ class RecognizerErrorsTest {
         assertEquals(Action.Fail(WgoFailure.Unavailable), RecognizerErrors.decide(99, attempt()))
     }
 
-    @Test fun theListeningCapRestartsQuietlyOnlyWhenNothingWasHeard() {
+    @Test fun theListeningCapRestartsQuietlyOnlyWithoutAWord() {
         assertEquals(Action.Restart(true, 1, Budget.Quiet), RecognizerErrors.onListeningCap(attempt(online = true, tagIndex = 1)))
-        assertNull(RecognizerErrors.onListeningCap(attempt(speechHeard = true)))
         assertNull(RecognizerErrors.onListeningCap(attempt(partial = "plaza")))
         assertNull(RecognizerErrors.onListeningCap(attempt(quietRestarts = RecognizerErrors.MAX_QUIET_RESTARTS)))
     }

@@ -98,7 +98,7 @@ class InAppVoiceInput(
         }
 
         fun attempt() = RecognizerErrors.Attempt(
-            online, tagIndex, tags.size, networkRetryUsed, lastPartial, serviceRetryUsed, speechStarted, quietRestarts
+            online, tagIndex, tags.size, networkRetryUsed, lastPartial, serviceRetryUsed, quietRestarts
         )
 
         lateinit var begin: () -> Unit

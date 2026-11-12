@@ -194,10 +194,19 @@ class InAppVoiceInputTest {
         assertEquals(1 + RecognizerErrors.MAX_QUIET_RESTARTS, fake.requests.size)
     }
 
-    @Test fun noMatchAfterSpeechIsNotUnderstoodWithoutARestart() {
-        val fake = FakeRecognizers({ it.onReady(); it.onBeginningOfSpeech(); it.onError(RecognizerErrors.NO_MATCH) })
-        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Failed(WgoFailure.NotFound)), input(fake).run())
-        assertEquals(1, fake.requests.size)
+    @Test fun speechWithoutWordsOnAColdSessionIsAskedAgainQuietly() {
+        // Measured (P8, cold press): speech detected, nothing transcribed, no match at 6.5 s; the next press worked.
+        val fake = FakeRecognizers(
+            { it.onReady(); it.onBeginningOfSpeech(); it.onError(RecognizerErrors.NO_MATCH) },
+            { it.onReady(); it.onBeginningOfSpeech(); it.onPartial("llévame"); it.onResults("llévame a la cooperativa") }
+        )
+        assertEquals(
+            listOf(
+                VoiceEvent.Ready, VoiceEvent.Restarting, VoiceEvent.Ready, VoiceEvent.Partial("llévame"),
+                VoiceEvent.Final("llévame a la cooperativa")
+            ),
+            input(fake).run()
+        )
     }
 
     @Test fun aColdNetworkErrorThenABusyServiceAreBothRetried() {

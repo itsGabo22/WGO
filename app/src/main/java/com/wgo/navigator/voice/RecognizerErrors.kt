@@ -10,8 +10,8 @@ import com.wgo.navigator.core.WgoFailure
  * - A missing language model (12, 13) is not a user error: the session goes online and walks the language tags.
  * - A recognizer that is busy, disconnected or unbinding (5, 8, 10, 11) is recreated once, silently, before the user
  *   sees [WgoFailure.NotStarted] (its own budget: a cold start can also hit a network code).
- * - Before any speech (P8): no match, speech timeout, server, audio and the listening cap restart quietly up to
- *   [MAX_QUIET_RESTARTS] times; the user only sees an error once the budget is spent or after speaking.
+ * - Until a word is transcribed (P8): no match, speech timeout, server, audio and the listening cap restart quietly up
+ *   to [MAX_QUIET_RESTARTS] times; the user only sees an error once that budget is spent.
  * - What decides between "restart" and "end" is the partial transcript: with text, the session ends with it (a restart
  *   would drop it); without text nothing is lost, so the session restarts (the UI goes back to preparing and cues
  *   "speak now" again). Neither "ready" nor detected speech counts, both measured on the Galaxy Watch5 Pro: the
@@ -63,8 +63,8 @@ object RecognizerErrors {
     }
 
     /**
-     * Where a session stands when an error arrives. [partial] is the best transcript so far (null or blank: none);
-     * [speechHeard] is true once the recognizer detected speech; the counters are the budgets already used.
+     * Where a session stands when an error arrives. [partial] is the best transcript so far (null or blank: none); the
+     * other fields are the budgets already used.
      */
     data class Attempt(
         val online: Boolean,
@@ -73,7 +73,6 @@ object RecognizerErrors {
         val networkRetryUsed: Boolean = false,
         val partial: String? = null,
         val serviceRetryUsed: Boolean = false,
-        val speechHeard: Boolean = false,
         val quietRestarts: Int = 0
     )
 
@@ -103,14 +102,17 @@ object RecognizerErrors {
     }
 
     /**
-     * The listening cap was reached: with no speech and quiet restarts left the session starts over silently (null
+     * The listening cap was reached: with no word yet and quiet restarts left the session starts over silently (null
      * means it ends with what it has).
      */
     fun onListeningCap(a: Attempt): Action? = quietly(a)
 
-    /** A quiet restart while nothing was heard and the budget lasts; null otherwise. */
+    /**
+     * A quiet restart while no word was transcribed and the budget lasts; null otherwise. Detected speech does not
+     * count: a cold recognizer can hear the user and still answer no match (measured on the watch, P8).
+     */
     private fun quietly(a: Attempt): Action? =
-        if (!a.speechHeard && a.partial.isNullOrBlank() && a.quietRestarts < MAX_QUIET_RESTARTS) {
+        if (a.partial.isNullOrBlank() && a.quietRestarts < MAX_QUIET_RESTARTS) {
             Action.Restart(a.online, a.tagIndex, Budget.Quiet)
         } else null
 
