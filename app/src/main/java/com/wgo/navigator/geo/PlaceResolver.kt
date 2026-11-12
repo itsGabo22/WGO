@@ -1,6 +1,9 @@
 package com.wgo.navigator.geo
 
 import com.wgo.navigator.Language
+import com.wgo.navigator.ai.ChoiceOption
+import com.wgo.navigator.ai.LlmPlaceChooser
+import com.wgo.navigator.ai.PlaceChooser
 import com.wgo.navigator.core.Outcome
 import com.wgo.navigator.core.Place
 import com.wgo.navigator.core.PlaceOrigin
@@ -20,7 +23,11 @@ data class PlaceRequest(
     val hint: String? = null,
     val category: String? = null,
     /** The name came from a Pasto nickname: a search string verified on Nominatim, asked there first. */
-    val fromAlias: Boolean = false
+    val fromAlias: Boolean = false,
+    /** The whole transcript (what the language model may read for a place choice); null: the name alone. */
+    val utterance: String? = null,
+    /** Language-model calls this utterance already used (the interpreter's); the place search keeps the total <= 2. */
+    val aiCallsUsed: Int = 0
 )
 
 /** Where a candidate came from. */
@@ -82,11 +89,18 @@ fun interface PrivatePlaces {
 class PlaceResolver(
     private val index: PlaceIndex?,
     private val online: OnlinePlaceSearch?,
-    private val privatePlaces: PrivatePlaces? = null
+    private val privatePlaces: PrivatePlaces? = null,
+    /** The language model's roles (P8); null without an API key: the local ranking decides alone. */
+    private val chooser: PlaceChooser? = null
 ) {
     /** Requests used by the last [resolve] (debug metric and tests). */
     @Volatile
     var lastRequests: Int = 0
+        private set
+
+    /** Language-model calls made by the last [resolve] (tests and the place log). */
+    @Volatile
+    var lastAiCalls: Int = 0
         private set
 
     /** Loads the local index ahead of the search (called at the mic press, so it overlaps with listening). */
@@ -95,10 +109,12 @@ class PlaceResolver(
         index?.ensureLoaded()
     }
 
-    suspend fun resolve(request: PlaceRequest, fix: GeoCoord?, @Suppress("UNUSED_PARAMETER") language: Language): Resolution {
+    suspend fun resolve(request: PlaceRequest, fix: GeoCoord?, language: Language): Resolution {
         val anchor = fix ?: PastoCentre
         var requests = 0
         lastRequests = 0
+        lastAiCalls = 0
+        var aiLeft = (MAX_AI_CALLS - request.aiCallsUsed).coerceAtLeast(0)
         val name = request.name.trim()
         if (name.isEmpty()) return Resolution.NotFound(emptyList())
 
@@ -175,8 +191,21 @@ class PlaceResolver(
             }
         }
 
+        var ordered = dedupe(sortedCandidates(ranked))
+        // Role 2 (P8): the language model picks among the real candidates by id when the ranking is ambiguous.
+        if (chooser != null && aiLeft > 0 && ChoiceTriggers.shouldChoose(request, ordered)) {
+            aiLeft--
+            lastAiCalls++
+            val options = ordered.take(LlmPlaceChooser.MAX_OPTIONS).mapIndexed { i, c ->
+                ChoiceOption("c${i + 1}", c.place.name, c.place.category, c.place.address)
+            }
+            val id = chooser.choose(request.utterance ?: name, options, language)
+            ordered = promote(ordered, options.indexOfFirst { it.id == id })
+            WgoMetrics.event("places ai_choice options=${options.size} picked=${options.indexOfFirst { it.id == id }}")
+        }
+
         lastRequests = requests
-        val best = dedupe(sortedCandidates(ranked)).take(MAX_CANDIDATES)
+        val best = ordered.take(MAX_CANDIDATES)
         WgoMetrics.event(
             "places resolved n=${best.size} sources=${best.joinToString("+") { it.source.name }} requests=$requests " +
                 "hint=${request.hint != null}"
@@ -193,6 +222,20 @@ class PlaceResolver(
     companion object {
         const val MAX_REQUESTS = 3
         const val MAX_CANDIDATES = 2
+
+        /** Language-model calls per utterance, the interpreter's included (docs/PLACE_SEARCH.md, P8). */
+        const val MAX_AI_CALLS = 2
+
+        /**
+         * Moves the candidate at [index] first (the model's pick); out of range: unchanged. A candidate beyond
+         * [FAR_KM] never moves ahead of a nearer one.
+         */
+        fun promote(ordered: List<PlaceCandidate>, index: Int): List<PlaceCandidate> {
+            if (index <= 0 || index >= ordered.size) return ordered
+            val pick = ordered[index]
+            if (pick.distanceM > FAR_KM * 1000 && ordered[0].distanceM <= FAR_KM * 1000) return ordered
+            return listOf(pick) + ordered.filterIndexed { i, _ -> i != index }
+        }
         const val FAR_KM = 25.0
         const val SUGGEST_KM = 5.0
         const val DEDUPE_M = 150.0

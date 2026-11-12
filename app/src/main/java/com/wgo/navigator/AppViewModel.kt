@@ -29,6 +29,9 @@ import com.wgo.navigator.voice.SystemVoiceDialog
 import com.wgo.navigator.voice.VoiceInputChain
 import com.wgo.navigator.voice.VoiceLevel
 import com.wgo.navigator.voice.VoiceStrategy
+import com.wgo.navigator.ai.AiCallBudget
+import com.wgo.navigator.ai.DataStoreAiCounterStore
+import com.wgo.navigator.ai.LlmPlaceChooser
 import com.wgo.navigator.ai.TieredInterpreter
 import com.wgo.navigator.core.IntentKind
 import com.wgo.navigator.core.Place
@@ -257,14 +260,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     private enum class Step { Listen, Interpret, Resolve, Route }
 
     private val tripStore = SettingsRepository(application)
-    private val interpreter = TieredInterpreter.create(application, WgoUserAgent.plain)
+
+    /** One daily cap and one 429 cool-down for every language-model call (interpreter and place choice). */
+    private val aiBudget = AiCallBudget(DataStoreAiCounterStore(application))
+    private val interpreter = TieredInterpreter.create(application, WgoUserAgent.plain, aiBudget)
     private val geocoder = NominatimGeocoder(HttpClient(WgoUserAgent.identifying))
 
-    /** My places, then the offline index (loaded on the first search), then Nominatim (docs/PLACE_SEARCH.md). */
+    /**
+     * My places, then the offline index (loaded on the first search), then Nominatim; the language model only expands
+     * nicknames as text or picks among real candidates by id (docs/PLACE_SEARCH.md).
+     */
     private val placeResolver = PlaceResolver(
         index = PlaceIndex.fromAssets(application),
         online = OnlinePlaceSearch { q, center, bounded -> geocoder.once(q, center, pipelineLanguage, ONLINE_RESULTS, bounded) },
-        privatePlaces = MyPlaces.fromAssets(application)
+        privatePlaces = MyPlaces.fromAssets(application),
+        chooser = LlmPlaceChooser.create(application, WgoUserAgent.plain, aiBudget)
     )
     private val router = OsrmRouter(HttpClient(WgoUserAgent.identifying))
 
@@ -330,8 +340,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 val retryName = hintRetryName
                 hintRetryName = null
                 hintRetryWords = if (retryName != null) listOfNotNull(query, result.placeHint).joinToString(" ") else null
-                val request = if (retryName != null) PlaceRequest(retryName, hintRetryWords)
-                else PlaceRequest(query, result.placeHint, result.placeCategory, fromAlias = result.placeFromAlias)
+                val request = if (retryName != null) PlaceRequest(retryName, hintRetryWords, aiCallsUsed = interpreter.lastRemoteCalls)
+                else PlaceRequest(
+                    query, result.placeHint, result.placeCategory, fromAlias = result.placeFromAlias, utterance = text,
+                    aiCallsUsed = interpreter.lastRemoteCalls
+                )
                 placeRequest = request
                 modeSpoken = result.mode != null
                 _selectedMode.value = result.mode

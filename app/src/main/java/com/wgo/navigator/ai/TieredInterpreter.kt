@@ -32,10 +32,16 @@ class TieredInterpreter(
     var lastRemoteFailed: Boolean = false
         private set
 
+    /** Remote calls the last utterance made (0 or 1): the place search keeps the total per utterance <= 2 (P8). */
+    @Volatile
+    var lastRemoteCalls: Int = 0
+        private set
+
     override suspend fun interpret(transcript: String, language: Language): Interpretation {
         val local = LocalIntentParser.parse(transcript, language)
         lastTier = InterpreterTier.Local
         lastRemoteFailed = false
+        lastRemoteCalls = 0
         if (local.confidence >= Interpretation.ACCEPT_CONFIDENCE || remote == null || !online()) {
             WgoMetrics.event("interpret tier=Local kind=${local.kind} conf=${local.confidence}")
             return local
@@ -44,6 +50,7 @@ class TieredInterpreter(
             lastRemoteFailed = true
             return local
         }
+        lastRemoteCalls = 1
         return when (val r = remote.interpret(transcript, language)) {
             is LlmInterpreter.Result.Ok -> merge(local, r.value)
             LlmInterpreter.Result.RateLimited -> {
@@ -73,8 +80,11 @@ class TieredInterpreter(
     }
 
     companion object {
-        /** The app's interpreter: the remote tier exists only when local.properties provided an API key. */
-        fun create(context: Context, userAgent: String): TieredInterpreter {
+        /**
+         * The app's interpreter: the remote tier exists only when local.properties provided an API key. [budget] is
+         * shared with the place chooser (one daily cap and one cool-down for every model call).
+         */
+        fun create(context: Context, userAgent: String, budget: AiCallBudget): TieredInterpreter {
             val app = context.applicationContext
             val key = BuildConfig.LLM_API_KEY
             val remote = if (key.isBlank()) null else LlmInterpreter(
@@ -84,7 +94,7 @@ class TieredInterpreter(
                 http = HttpClient(userAgent)
             )
             WgoMetrics.event("interpreter remote=${remote != null}")
-            return TieredInterpreter(remote, { isOnline(app) }, AiCallBudget(DataStoreAiCounterStore(app)))
+            return TieredInterpreter(remote, { isOnline(app) }, budget)
         }
     }
 }
