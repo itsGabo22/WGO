@@ -86,7 +86,9 @@ fun ScreenVoicePicker(language: Language, selected: String?, onChoose: (String?)
             voices.forEachIndexed { i, v ->
                 val n = (counts[v.languageTag] ?: 0) + 1
                 counts[v.languageTag] = n
-                val label = VoiceLabels.label(v, n, language) + if (!v.network) " · " + string(StringKey.VOICE_OFFLINE) else ""
+                // "sin conexión" only tells voices apart when the list mixes offline and network ones.
+                val mixed = voices.any { it.network } && voices.any { !it.network }
+                val label = VoiceLabels.label(v, n, language) + if (mixed && !v.network) " · " + string(StringKey.VOICE_OFFLINE) else ""
                 val chosen = v.name == current
                 PillButton(
                     label = label,

@@ -13,8 +13,16 @@ object VoiceLabels {
         return name.replaceFirstChar { it.titlecase(ui(language)) }
     }
 
-    /** "Español (Colombia) 2" for the [index]-th voice of that locale (1-based). */
-    fun label(voice: VoiceInfo, index: Int, language: Language): String = "${localeName(voice.languageTag, language)} $index"
+    /**
+     * "Colombia 2" for the [index]-th voice of that locale (1-based): the picker lists only voices of the UI language,
+     * so the region names the voice (the full "Español (Estados Unidos) 1" did not fit the 156 dp pill on the watch).
+     * Without a region, the language name.
+     */
+    fun label(voice: VoiceInfo, index: Int, language: Language): String {
+        val locale = Locale.forLanguageTag(voice.languageTag)
+        val region = locale.getDisplayCountry(ui(language)).ifEmpty { localeName(voice.languageTag, language) }
+        return "${region.replaceFirstChar { it.titlecase(ui(language)) }} $index"
+    }
 
     /**
      * A short name from an engine voice name alone (Settings row): engines start names with the locale ("es-us-x-sfb",
