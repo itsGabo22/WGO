@@ -1,6 +1,6 @@
-# Merge plan (prepared in P7, refreshed in P8; nothing merged)
+# Merge plan (prepared in P7, refreshed in P8 and P9; nothing merged)
 
-State on 2026-11-12 after P8 (read-only analysis: `git rev-list`, `git merge-tree --write-tree`).
+State on 2026-11-12 after P9 (read-only analysis: `git rev-list`, `git merge-tree --write-tree`).
 
 ## Branch graph
 
@@ -11,12 +11,13 @@ origin/main    ── 0c5bcff feat: integrate real OSM ───┤   main is an
                                                       │
 design/foundations (255 behind HEAD, 0 ahead) ─┐      │
 design/pieces      (242 behind, 0 ahead)       │      │
-design/screens-01-02 (231 behind, 0 ahead)     ├──> feat/live-engine (HEAD, 326 commits ahead of master, 4 behind)
+design/screens-01-02 (231 behind, 0 ahead)     ├──> feat/live-engine (HEAD, 353 commits ahead of master, 4 behind)
 design/responsive  (214 behind, 0 ahead)       │      P5 live engine, P6-A service/ambient, P6-B HUD/explore/
 design/radar       (194 behind, 0 ahead)       │      legibility, P7 places/labels/voice/arrival/release prep
 design/map-styles  (162 behind, 0 ahead) ──────┘      P8 (40 commits): first-press mic fixes, AI place choice,
                                                       attribution arc, marquee, voices, orientation, @2x labels,
-                                                      targetSdk 35
+                                                      targetSdk 35; P9: instant mic (own capture, cloud
+                                                      transcription, recognizer fallback, notice, setting)
 ```
 
 Every `design/*` branch is already fully contained in `feat/live-engine` (0 commits ahead): merging them separately
@@ -28,7 +29,7 @@ adds nothing. `main` is an ancestor of `feat/live-engine`. `master` holds only t
    history tags (`git tag design/foundations-final origin/design/foundations`).
 2. `feat/live-engine` -> `main`: a fast-forward (main is an ancestor), through a pull request so CI and review run.
 3. `main` -> `master`: `git merge-tree --write-tree origin/master HEAD` reports **no conflicts** (exit 0); the merge
-   commit brings 274 files changed (+25,846 / -9,352), most of it the native app replacing the old web prototype
+   commit brings 292 files changed (+28,097 / -9,352; P9 run), most of it the native app replacing the old web prototype
    (`legacy_web_app/` stays local and git-ignored).
 
 Before step 2: `assembleDebug`, `assembleRelease`, `testDebugUnitTest` and `lintDebug` green; the P7 report reviewed;
@@ -37,7 +38,8 @@ persistent map attribution are not).
 
 ## Predicted conflicts
 
-None (`git merge-tree` against `origin/master`, 2026-11-12: exit 0, no conflicted files). Re-run it right before merging:
+None (`git merge-tree` against `origin/master`, 2026-11-12 after P9: exit 0, no conflicted files). P9 touches only
+files that `master` does not have or did not change (the app sources and `docs/`), so no new conflict is expected. Re-run it right before merging:
 `git fetch origin; git merge-tree --write-tree --name-only origin/master origin/feat/live-engine`.
 
 ## Draft pull request (feat/live-engine -> main)
@@ -46,7 +48,7 @@ None (`git merge-tree` against `origin/master`, 2026-11-12: exit 0, no conflicte
 
 **Summary**
 - Native Kotlin + Compose for Wear OS app replacing the web prototype; design system and 8 original map styles.
-- Live pipeline: on-device speech, local + remote interpretation (text only), place search (private places, offline
+- Live pipeline: instant mic (own capture + cloud transcription, the system recognizer as fallback), local + remote interpretation (text only), place search (private places, offline
   Overture index of Pasto, Nominatim with ranking and far-result rules), OSRM routes.
 - Navigation engine in a foreground service: haptics and optional spoken guidance with the screen off, ambient
   screen, ongoing activity, adaptive HUD, explore mode, celebratory arrival, credits.
@@ -56,7 +58,8 @@ None (`git merge-tree` against `origin/master`, 2026-11-12: exit 0, no conflicte
 **Verification**: unit tests (places, voice, map contrast, fit rules, HUD, engine), on a Galaxy Watch5 Pro and the
 Wear OS Small Round emulator; budgets in `docs/ARCHITECTURE.md`.
 
-**Not in this PR**: publishing (the key proxy, a persistent map attribution), vector tiles.
+**Not in this PR**: publishing (the key proxy, now mandatory because every press uploads with the key; a persistent
+map attribution), vector tiles, a compressed audio upload.
 
 ## Commit messages that do not match their content
 
