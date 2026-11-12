@@ -47,7 +47,11 @@ android {
             buildConfigField("boolean", "TEST_HOOKS", "true")
         }
         release {
-            isMinifyEnabled = false
+            // P7: R8 + resource shrinking. Signed with the DEBUG key for local testing only: a published build needs
+            // the owner's upload key and no API keys inside (docs/RELEASE_CHECKLIST.md).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
