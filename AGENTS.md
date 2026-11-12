@@ -61,6 +61,30 @@ WGO is a **100% native Wear OS app** (Kotlin + Jetpack Compose for Wear OS; no w
 * Haptics: ViewModels emit `HapticEvent`s through a `SharedFlow`; `MainActivity` plays them. Trip haptics (spec §8 turn, GPS-lost and arrival rows) are played by `NavigationHost` instead, so they work with the screen off. Composables never touch the vibrator.
 * Every commit must compile (`assembleDebug` exit 0), so history stays bisectable. Changes that must land together go in one commit.
 
+## Rules learned in P6-P7
+
+* **Data and privacy**: the language model returns text only (name, hint, category); coordinates in its replies are
+  ignored. User coordinates, private places (`assets/my_places.json`, git-ignored) and the places index never go to
+  the model or any server. Never invent coordinates for a real place. Nominatim: <= 1 request/s, <= 3 per utterance.
+* **Keys**: `MAP_TILE_KEY`, `LLM_API_KEY` and anything in `local.properties` reach the code only through `BuildConfig`;
+  never log, print or commit them, nor full tile URLs. CARTO answers a bad key with HTTP 200 and a placeholder image:
+  keep the hash check in `MapTiles`.
+* **Assets**: never name an asset `*.gz`; the Android packager gunzips it and drops the extension (use `.gzip`).
+* **Performance**: the debug build is 10-50x slower for CPU work on the watch (index load 20-30 s vs 0.5 s); measure
+  speed on the benchmark or release build. Jank comes from the emulator with the host GPU, compared on the same day
+  with a baseline screen (the intro), because the emulator's speed drifts between sessions.
+* **Text-to-speech**: engines differ; Samsung TTS reports ISO-3 locales without the region (`spa`), so the voice
+  region comes from the voice name (`es-US-SMTf00`). Speech is spoken by `NavigationHost` only; never play TTS
+  through the PC.
+* **Map labels**: labels come from their own tile layer with a hue-free stretch, never through the style filter
+  (`WgoTileFilter.labelArray`); contrast is checked by `MapContrastTest` for both tile bases.
+* **Watch testing**: adb lives in `%LOCALAPPDATA%\Android\Sdk\platform-tools`; `adb shell svc power stayon true` while
+  testing; Wi-Fi debugging drops with the screen off (read logcat afterwards); skip the intro with a tap at (225, 60)
+  px (the centre hits the mic); `input swipe` moves about twice its distance; the debug `MAP_STYLE` receiver only
+  persists (restart the app). Restore the owner's settings after a test session.
+* **Windows tooling**: PowerShell 5.1 splits `git commit -m` at double quotes (use `git commit -F <file>`); most
+  sources are CRLF, so scripted string replacements must match `\r\n` (or use an editor that does).
+
 ## Git
 
 * Atomic Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...), one concern per commit.
