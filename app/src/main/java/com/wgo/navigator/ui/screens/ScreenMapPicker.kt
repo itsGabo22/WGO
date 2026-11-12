@@ -49,8 +49,11 @@ import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.Text
 import com.wgo.navigator.ui.StringKey
+import androidx.compose.runtime.collectAsState
+import com.wgo.navigator.ui.components.MapAttributionArc
 import com.wgo.navigator.ui.components.WgoIcons
 import com.wgo.navigator.ui.map.MapPickerDisc
+import com.wgo.navigator.ui.map.MapTiles
 import com.wgo.navigator.ui.map.MapPickerMath
 import com.wgo.navigator.ui.map.MapPickerRing
 import com.wgo.navigator.ui.map.RadarSchematic
@@ -223,6 +226,10 @@ fun ScreenMapPicker(
             onClick = { onUse(explored) },
             modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(170f) - useExtra)
         )
+
+        // The map credit along the bottom arc, below USAR (spec 9.1, P8): the preview stands for the real map.
+        val provider by MapTiles.provider.collectAsState()
+        MapAttributionArc(visible = true, provider = provider)
     }
 }
 

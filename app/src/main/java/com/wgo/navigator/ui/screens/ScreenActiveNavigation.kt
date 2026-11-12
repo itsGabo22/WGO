@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import com.wgo.navigator.ui.components.MapAttributionArc
 import com.wgo.navigator.ui.components.WgoChip
 import com.wgo.navigator.ui.theme.LocalWgoScale
 import com.wgo.navigator.ui.components.HudContent
@@ -286,18 +287,15 @@ fun ScreenActiveNavigation(
                 modifier = Modifier.align(Alignment.TopCenter)
             )
 
-            // MAP ATTRIBUTION (P7): 164x28 @58 under the COMPACT HUD, for the first 4 s of the trip and while exploring.
+            // MAP ATTRIBUTION (P8): along the bottom arc, 2.5 s when the map first appears and while exploring; never
+            // under the HUD (spec 9.1).
             var tripStart by remember { mutableStateOf(true) }
             LaunchedEffect(Unit) {
                 delay(ATTRIBUTION_START_MS)
                 tripStart = false
             }
             val provider by MapTiles.provider.collectAsState()
-            MapAttribution(
-                visible = explore.exploring || (tripStart && (forcedHud ?: hud.shown) == HudMode.Compact),
-                provider = provider,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
+            MapAttributionArc(visible = explore.exploring || tripStart, provider = provider)
 
             // RECENTER (explore only): 40 dp `primary` circle centred at (113.5, 108), 48 real dp touch; hidden while
             // the user's chevron is under it (P7, RecenterRule), so it never covers the user.
@@ -399,45 +397,8 @@ internal fun MapControlButton(
     }
 }
 
-private const val ATTRIBUTION_START_MS = 4_000L
-
-/**
- * The map's data credit (spec section 9.1, map layers): "© OpenStreetMap contributors" and, with CARTO tiles, "© CARTO"
- * on a `surface` pill 164x28 @58 (fit 93.7). Fades in and out (`base` 240 ms, a cut with reduce motion); the fade is
- * read in the draw phase only.
- */
-@Composable
-private fun MapAttribution(visible: Boolean, provider: TileProvider, modifier: Modifier = Modifier) {
-    val palette = Wgo.palette
-    val reduceMotion = LocalWgoReduceMotion.current
-    val alpha = animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = if (reduceMotion) snap() else tween(240, easing = WgoMotion.Standard),
-        label = "mapAttribution"
-    )
-    val lines = listOfNotNull(
-        string(StringKey.MAP_CREDIT_OSM),
-        string(StringKey.MAP_CREDIT_CARTO).takeIf { provider == TileProvider.CARTO }
-    ).joinToString("\n")
-    Box(
-        modifier = modifier
-            .offset(y = 58.dp)
-            .size(164.dp, 28.dp)
-            .graphicsLayer { this.alpha = alpha.value }
-            .clip(CircleShape)
-            .background(palette.surface)
-            .clearAndSetSemantics { if (visible) contentDescription = lines },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = lines,
-            color = palette.ink,
-            style = WgoType.labelSm.copy(letterSpacing = 0.sp, lineHeight = 12.sp),
-            textAlign = TextAlign.Center,
-            maxLines = 2
-        )
-    }
-}
+/** The attribution shows this long when the trip's map first appears (spec 9.1, P8). */
+private const val ATTRIBUTION_START_MS = 2_500L
 
 @Composable
 private fun RecenterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
