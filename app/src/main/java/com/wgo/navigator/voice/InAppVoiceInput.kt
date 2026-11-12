@@ -40,11 +40,14 @@ class InAppVoiceInput(
     private val now: () -> Long = { SystemClock.elapsedRealtime() },
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate, // the recognizer lives on the main thread
     private val pause: suspend (Long) -> Unit = { delay(it) },
-    memoryProvider: () -> RecognizerMemory = { InMemoryRecognizerMemory() }
+    memoryProvider: () -> RecognizerMemory = { InMemoryRecognizerMemory() },
+    /** Starts the recognizer's process when the system holds it back ([RecognizerRevive]); false: nothing to do. */
+    private val revive: () -> Boolean = { false }
 ) : VoiceInput {
     constructor(context: Context) : this(
         newRecognizer = { AndroidRecognizer(context.applicationContext) },
-        memoryProvider = { PrefsRecognizerMemory.get(context) }
+        memoryProvider = { PrefsRecognizerMemory.get(context) },
+        revive = { RecognizerRevive.poke(context) }
     )
 
     /** Read on the first session (after the preparing frame), never at ViewModel creation. */
@@ -68,6 +71,7 @@ class InAppVoiceInput(
         var networkRetryUsed = false
         var serviceRetryUsed = false
         var quietRestarts = 0
+        var revived = false
         var recognizer: Recognizer? = null
         var generation = 0
         var instances = 0
@@ -221,8 +225,12 @@ class InAppVoiceInput(
                 delay(WATCHDOG_TICK_MS)
                 val t = now()
                 when {
-                    // Per attempt: a restart late in a slow start still gets its full time.
-                    !ready -> if (t - attemptStartedAt >= START_TIMEOUT_MS) {
+                    // Per attempt: a restart late in a slow start still gets its full time. Once per session, a start
+                    // that is still silent after REVIVE_AFTER_MS gets the recognizer's process started.
+                    !ready -> if (!revived && t - attemptStartedAt >= REVIVE_AFTER_MS) {
+                        revived = true
+                        VoiceLog.event("revive poked=${revive()} n=$instances attempt_ms=${t - attemptStartedAt}")
+                    } else if (t - attemptStartedAt >= START_TIMEOUT_MS) {
                         VoiceLog.event("stop reason=not_ready session_ms=${t - started} attempt_ms=${t - attemptStartedAt}")
                         finish(VoiceEvent.Failed(WgoFailure.NotStarted))
                     }
@@ -278,6 +286,9 @@ class InAppVoiceInput(
          * on the Galaxy Watch5 Pro (the slowest with a fresh app process and little free memory).
          */
         const val START_TIMEOUT_MS = 20_000L
+
+        /** No ready this long after an attempt started: poke the recognizer's process once per session (P8). */
+        const val REVIVE_AFTER_MS = 4_000L
         private const val STOP_GRACE_MS = 1_200L
         private const val WATCHDOG_TICK_MS = 100L
         private const val VOICE_LEVEL = 0.35f

@@ -226,6 +226,42 @@ class InAppVoiceInputTest {
         )
     }
 
+    @Test fun aSilentStartPokesTheRecognizerProcessOnceAfterFourSeconds() = runBlocking {
+        // Measured (P8): the service's process was dead and its restart postponed; nothing ever called back.
+        var pokes = 0
+        val fake = FakeRecognizers({ }, { })
+        val voice = InAppVoiceInput(
+            newRecognizer = fake::create, now = { clock }, dispatcher = Dispatchers.Unconfined, pause = { },
+            revive = { pokes++; true }
+        )
+        clock = 0L
+        val events: MutableList<VoiceEvent> = java.util.Collections.synchronizedList(mutableListOf())
+        val job = launch(Dispatchers.Default) { voice.listen(Language.ES).toList(events) }
+        while (fake.requests.isEmpty()) Thread.sleep(10) // the attempt starts at clock 0
+        clock = 3_900L
+        Thread.sleep(300)
+        assertEquals("not before 4 s", 0, pokes)
+        clock = 4_100L
+        Thread.sleep(300)
+        assertEquals(1, pokes)
+        clock = 12_000L
+        Thread.sleep(300)
+        assertEquals("once per session", 1, pokes)
+        voice.cancel()
+        withTimeout(3_000) { job.join() }
+    }
+
+    @Test fun aQuickReadyNeverPokes() {
+        var pokes = 0
+        val fake = FakeRecognizers({ it.onReady(); it.onResults("centro") })
+        val voice = InAppVoiceInput(
+            newRecognizer = fake::create, now = { clock }, dispatcher = Dispatchers.Unconfined, pause = { },
+            revive = { pokes++; true }
+        )
+        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Final("centro")), voice.run())
+        assertEquals(0, pokes)
+    }
+
     @Test fun englishUsesItsOwnTags() {
         val fake = FakeRecognizers({ it.onError(RecognizerErrors.LANGUAGE_UNAVAILABLE) }, { it.onReady(); it.onResults("downtown") })
         input(fake).run(Language.EN)
