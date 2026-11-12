@@ -180,6 +180,44 @@ P7 measurements (Galaxy Watch5 Pro unless noted, 2026-11-11):
 | TTS | report | Samsung engine, 26 voices (es-US, es-ES offline; no es-CO), init 1.2-4.3 s, 8 phrases on a drive all `SUCCESS` | reported (speech not heard) |
 | Lint / tests | 0 errors / all pass | lint 0 errors, 0 NewApi, 13 warnings; 264+ unit tests pass | PASS |
 
+### First mic press (P8 live session, Galaxy Watch5 Pro, release build, 2026-11-11)
+
+The owner pressed the mic and said "llévame a la cooperativa"; "cold" = recognizer host and app force-stopped, app
+relaunched (intro warm-up runs; "bound" when the press came while it still held the service). Times are from the
+press (`adb logcat -s WgoVoice`). "Error shown" = the user saw an error surface and had to press again.
+
+| round | press | ready | what happened | result | error shown |
+|---|---|---|---|---|---|
+| A (before) | cold, warm-up released | 1.10 s | error 2 at 6.3 s, nothing heard -> silent restart, ready 7.8 s | text at 11.6 s | no (bounce to preparing) |
+| A | cold, bound | 1.23 s | - | text at 6.6 s | no |
+| A | cold, bound | 1.14 s | - | text at 6.9 s | no |
+| A | warm | 0.67 s | **no match at 6.0 s, no speech detected** | "not understood" | **yes** |
+| A | warm x2 | ~1.2 s | - | text at 4.6 / 6.0 s | no |
+| A | cold, system dialog | - | dialog shown 15.7 s, never listened (owner), cancelled | no text | **yes** |
+| B (quiet restarts) | cold | 1.98 s | first press closed by the app at 1.1 s (cause not logged yet); next: 8 s cap without a word -> quiet restart; then speech without words, no match | "not understood" | **yes** |
+| B | cold | 1.37 s | - | text at 7.0 s | no |
+| B | cold, bound | 0.69 s | first press closed by the app at 1.4 s; next: speech without words, no match | "not understood" | **yes** |
+| B | warm | 0.72 s | - | text at 5.4 s | no |
+| B | warm | 0.67 s | two no matches without speech -> 2 quiet restarts | text at 19.2 s | no |
+| B | warm, silent 8 s on purpose | 0.5 s | no match -> quiet restart | text at 15.0 s | no |
+| C (speech-without-words rule) | cold | 1.13 s | error 2 -> restart; speech without words -> quiet restart; **`cancel reason=stop` at 15.4 s** (display timeout) | closed | yes (pressed again) |
+| C | cold | 1.46 s | error 2 -> restart; 3 no matches with no speech detected | "not understood" at 26.7 s | **yes** |
+| C | cold | 1.11 s | - | text at 7.0 s | no |
+
+Strategy chosen: the in-app recognizer for every press, including the first after a cold start. The system dialog lost
+its only cold trial (it never listened), and the watch re-selects its recognition service by itself, so the dialog stays
+the fallback for a device without a selected service. Fixes, each from a logged failure: quiet restarts until a word is
+transcribed (2 per session, separate one-restart budgets for network and service codes); the screen stays on while a
+session runs (the 30 s display timeout stopped the Activity mid-phrase; verified: flag on during a 33 s silent session,
+cleared at its end); recognizer revival (a press waited 20 s for a service whose dead process the system kept
+postponing under memory pressure, then showed "mic could not start"; the TTS-engine poke fires at 4.06 s on the watch,
+the backoff itself could not be reproduced on demand).
+
+Remaining gap (reported, not fixed): right after a cold error 2, the online recognizer sometimes detects no speech for
+three sessions in a row while the owner speaks (round C, press 2); the next press hears at once. Cause unknown (the
+recognizer gives no more than code 7). The two early "closed by the app" presses of round B predate the cancel-reason
+log; round C shows the same symptom as `reason=stop`.
+
 Counters for a 6.5-minute moving drive (3.6 km at 36 km/h; the planned 10-minute run was cut short by the test harness): 192 fixes, 191 engine updates, 1 geocode (551 B), 1 route (7.7 KB), 0 reroutes, 178 map re-projections, about 500 KB received and 20 KB sent by the app in total (mostly map tiles).
 
 Known misses: the END NAVIGATION? surface spends 2-3 slow UI-thread frames composing over the radar (the forced reduce-motion switch recomposes the radar subtree); to be fixed with the P6 HUD rebuild. The pre-P6 navigation screen still has 36 dp zoom buttons (39 x 37.5 real dp) and a 41 real dp CANCELAR chip whose label measures fit 109.1 (P6-B replaces them: 40 dp zoom with 48 real dp touch, an 86x32 CANCELAR at fit 99.0 with 48 / 60 real dp touch).
