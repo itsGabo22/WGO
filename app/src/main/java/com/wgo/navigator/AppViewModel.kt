@@ -512,7 +512,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     }
 
     /** CANCEL, Back, or the app going to the background: ends the session now and releases the microphone. */
-    fun cancelListening() {
+    fun cancelListening(reason: String = "app") {
+        if (sessionActive) VoiceLog.event("cancel reason=$reason state=${_micState.value}")
         listenJob?.cancel()
         voice.cancel()
         voiceLevel.value = 0f
@@ -530,7 +531,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      * is what stopped us), and not while the permission dialog is up (no session has started yet).
      */
     fun onAppStopped() {
-        if (sessionActive && _micState.value != MicState.Waiting) cancelListening()
+        if (sessionActive && _micState.value != MicState.Waiting) cancelListening("stop")
         // A running trip goes on in the navigation service; without the service it pauses until the app is back.
         host.setVisible(false)
     }
@@ -618,7 +619,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      */
     fun onAmbientChanged(ambient: Boolean) {
         host.setAmbient(ambient)
-        if (ambient && sessionActive && _micState.value != MicState.Waiting) cancelListening()
+        if (ambient && sessionActive && _micState.value != MicState.Waiting) cancelListening("ambient")
         WgoMetrics.event("ambient=$ambient screen=${_screen.value}")
     }
 
@@ -682,7 +683,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         if (BuildConfig.TEST_HOOKS) viewModelScope.launch {
             DebugUtterances.utterances.collect { u ->
                 if (_screen.value !in INJECTABLE_SCREENS) return@collect
-                cancelListening()
+                cancelListening("inject")
                 _micDenied.value = false
                 WgoMetrics.event("voice_strategy=Injected")
                 onTranscript(u.text, u.language)

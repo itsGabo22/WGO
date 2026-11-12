@@ -280,7 +280,7 @@ class MainActivity : ComponentActivity() {
                             ScreenState.Intro -> appViewModel.skipIntro()
                             ScreenState.MapPicker, ScreenState.VoicePicker, ScreenState.Credits -> appViewModel.backToSettings()
                             ScreenState.Listening ->
-                                if (micDenied) appViewModel.dismissMicDenied() else appViewModel.cancelListening()
+                                if (micDenied) appViewModel.dismissMicDenied() else appViewModel.cancelListening("back")
                             ScreenState.Working, ScreenState.ConfirmPlace, ScreenState.ModeSelection, ScreenState.Error ->
                                 appViewModel.backInPipeline()
                             ScreenState.Navigation ->
@@ -331,7 +331,7 @@ class MainActivity : ComponentActivity() {
                                         micState = micState,
                                         onMicClick = appViewModel::onMicTapped,
                                         onMicPress = appViewModel::onMicTapped,
-                                        onCancel = appViewModel::cancelListening,
+                                        onCancel = { appViewModel.cancelListening("chip") },
                                         onOpenSettings = appViewModel::openSettings,
                                         onToggleLanguage = settingsViewModel::toggleLanguage,
                                         transcript = transcript,
