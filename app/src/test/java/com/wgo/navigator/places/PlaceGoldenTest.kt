@@ -174,6 +174,31 @@ class PlaceGoldenTest {
         assertTrue(online.queries.isEmpty())
     }
 
+    @Test fun aCategoryWordTheUserDidNotSayIsNotAnExactMatch() {
+        // Measured on the watch (P7): "Plaza de Nariño" picked "Drogueria Plaza De Nariño", a pharmacy.
+        val pharmacy = listOf(row("Drogueria Plaza De Nariño", "pharmacy", "Cl 18", 1.2140, -77.2810, 0.9))
+        val tsv = "# f\nid\tname\tname_norm\talt_norm\tcategory\taddress\tlat\tlon\tconfidence\tsource\n" + pharmacy.joinToString("\n") + "\n"
+        val out = ByteArrayOutputStream().also { o -> GZIPOutputStream(o).use { it.write(tsv.toByteArray()) } }.toByteArray()
+        val idx = PlaceIndex { ByteArrayInputStream(out) }
+        val hits = runBlocking { idx.ensureLoaded(); idx.search("Plaza de Nariño", home) }
+        assertTrue(hits.all { it.tier < 3 })
+        val asked = runBlocking { idx.search("droguería Plaza de Nariño", home) }
+        assertEquals(3, asked.first().tier)
+    }
+
+    @Test fun aNicknameGoesToTheVerifiedOnlineNameFirst() {
+        val square = Place("Plaza de Nariño", "Centro", GeoCoord(1.2147, -77.2783))
+        val online = FakeOnline(mapOf("Plaza de Nariño" to listOf(square)))
+        val r = resolve(PlaceRequest("Plaza de Nariño", fromAlias = true), online) as Resolution.Found
+        assertEquals(square, r.places.first())
+        assertEquals("Plaza de Nariño|bounded=false", online.queries.first())
+        // Offline, the nickname still resolves through the local index.
+        val offline = OnlinePlaceSearch { _, _, _ -> Outcome.Err(WgoFailure.Offline) }
+        val r2 = runBlocking { PlaceResolver(index(), offline).resolve(PlaceRequest("Cubanitos", fromAlias = true), home, Language.ES) }
+        assertTrue(r2 is Resolution.Found)
+        assertTrue(LocalIntentParser.parse("llévame a la plaza", Language.ES).placeFromAlias)
+    }
+
     @Test fun aNicknameStillResolves() {
         val i = LocalIntentParser.parse("llévame a torobajo", Language.ES)
         assertEquals("Universidad de Nariño", i.placeQuery)

@@ -20,7 +20,9 @@ data class Interpretation(
     /** A landmark that locates the place ("Panamericana" in "Cubanitos de la Panamericana"); only re-ranks. */
     val placeHint: String? = null,
     /** A category word the user said ("restaurante"); only a soft ranking boost. */
-    val placeCategory: String? = null
+    val placeCategory: String? = null,
+    /** [placeQuery] came from a Pasto nickname (PlaceAliases): a search string verified on Nominatim. */
+    val placeFromAlias: Boolean = false
 ) {
     companion object {
         const val ACCEPT_CONFIDENCE = 0.75f

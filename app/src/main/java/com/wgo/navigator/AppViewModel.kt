@@ -315,7 +315,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 hintRetryName = null
                 hintRetryWords = if (retryName != null) listOfNotNull(query, result.placeHint).joinToString(" ") else null
                 val request = if (retryName != null) PlaceRequest(retryName, hintRetryWords)
-                else PlaceRequest(query, result.placeHint, result.placeCategory)
+                else PlaceRequest(query, result.placeHint, result.placeCategory, fromAlias = result.placeFromAlias)
                 placeRequest = request
                 modeSpoken = result.mode != null
                 _selectedMode.value = result.mode

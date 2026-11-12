@@ -62,14 +62,16 @@ object LocalIntentParser {
             return if (mode != null) Interpretation(IntentKind.ChangeMode, null, mode, 0.9f) else Interpretation.Unknown
         }
         // Local nicknames ("la UDENAR", "el terminal") resolve here, with no remote call.
-        PlaceAliases.resolve(placeToks.map { it.norm })?.let { return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE) }
+        PlaceAliases.resolve(placeToks.map { it.norm })?.let {
+            return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeFromAlias = true)
+        }
         // "X de la Y" / "X cerca de Y": name X, landmark hint Y (docs/PLACE_SEARCH.md). A vague description
         // ("donde venden helados frente a la plaza") stays whole: the remote interpreter reads it.
         val vagueWhole = placeToks.any { it.norm in VAGUE_WORDS && it.norm !in RELATION_WORDS }
         val split = if (vagueWhole) PlaceHint.Split(join(placeToks), null) else PlaceHint.split(join(placeToks))
         val nameToks = tokenize(split.name)
         PlaceAliases.resolve(nameToks.map { it.norm })?.let {
-            return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeHint = split.hint)
+            return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeHint = split.hint, placeFromAlias = true)
         }
         val vague = nameToks.any { it.norm in VAGUE_WORDS }
         val confidence = when {

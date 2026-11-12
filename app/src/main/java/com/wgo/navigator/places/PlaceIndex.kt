@@ -20,6 +20,8 @@ class IndexedPlace(
     val core: List<String>,
     /** Normalised alternate names, each as core tokens. */
     val alts: List<List<String>>,
+    /** Category words taken out of the name ("drogueria"): an exact match needs the user to have said them too. */
+    val categoryWords: List<String>,
     val category: String,
     val address: String,
     val coord: GeoCoord,
@@ -73,12 +75,16 @@ class PlaceIndex(private val open: () -> InputStream) {
      */
     fun search(query: String, anchor: GeoCoord, minTier: Int = 1, maxKm: Double = 25.0, limit: Int = 20): List<IndexHit> {
         val all = entries ?: return emptyList()
-        val (q, fragments) = PlaceCategories.split(PlaceText.tokens(query))
+        val tokens = PlaceText.tokens(query)
+        val (q, fragments) = PlaceCategories.split(tokens)
         if (q.isEmpty()) return emptyList()
+        val said = tokens.filter(PlaceCategories::isCategoryWord).toSet()
         val hits = ArrayList<IndexHit>()
         for (p in all) {
             var tier = tierOf(q, p.core)
             for (alt in p.alts) if (tier < 3) tier = maxOf(tier, tierOf(q, alt))
+            // "Droguería Plaza de Nariño" is not exactly "Plaza de Nariño" unless the user said "droguería" (P7, watch).
+            if (tier == 3 && !said.containsAll(p.categoryWords)) tier = 2
             if (tier < minTier) continue
             val d = RadarProjection.distanceMeters(anchor, p.coord)
             if (d > maxKm * 1000) continue
@@ -155,9 +161,12 @@ class PlaceIndex(private val open: () -> InputStream) {
                 val lat = number(f[6]!!) ?: continue
                 val lon = number(f[7]!!) ?: continue
                 val alt = f[3]!!
+                val nameWords = words(f[2]!!, ' ')
+                val core = PlaceCategories.core(nameWords)
                 out += IndexedPlace(
-                    name = f[1]!!, core = PlaceCategories.core(words(f[2]!!, ' ')),
+                    name = f[1]!!, core = core,
                     alts = if (alt.isEmpty()) emptyList() else words(alt, '|').map { PlaceCategories.core(words(it, ' ')) },
+                    categoryWords = if (core.size == nameWords.size) emptyList() else nameWords.filter(PlaceCategories::isCategoryWord),
                     category = f[4]!!, address = f[5]!!, coord = GeoCoord(lat, lon),
                     confidence = number(f[8]!!)?.toFloat() ?: 0f, source = f[9]!!
                 )

@@ -13,7 +13,13 @@ import com.wgo.navigator.ui.map.PastoCentre
 import com.wgo.navigator.ui.map.RadarProjection
 
 /** The place words of one utterance: the name, an optional landmark hint and an optional category word. */
-data class PlaceRequest(val name: String, val hint: String? = null, val category: String? = null)
+data class PlaceRequest(
+    val name: String,
+    val hint: String? = null,
+    val category: String? = null,
+    /** The name came from a Pasto nickname: a search string verified on Nominatim, asked there first. */
+    val fromAlias: Boolean = false
+)
 
 /** Where a candidate came from. */
 enum class PlaceSource { MyPlaces, Index, Nominatim }
@@ -92,19 +98,6 @@ class PlaceResolver(
         val candidates = ArrayList<PlaceCandidate>()
         var partial = emptyList<PlaceCandidate>()
         val query = listOfNotNull(request.category, name).joinToString(" ")
-        if (index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()) {
-            val hits = index.search(query, anchor, minTier = 1, maxKm = FAR_KM)
-            hits.filter { it.tier >= 2 }.forEach {
-                candidates += PlaceCandidate(
-                    Place(it.place.name, it.place.address, it.place.coord, PlaceOrigin.Overture), it.tier, it.categoryBoost, it.distanceM,
-                    it.place.confidence, PlaceSource.Index
-                )
-            }
-            partial = hits.filter { it.tier == 1 && it.distanceM <= SUGGEST_KM * 1000 }.map {
-                PlaceCandidate(Place(it.place.name, it.place.address, it.place.coord, PlaceOrigin.Overture), 1, false, it.distanceM,
-                    it.place.confidence, PlaceSource.Index)
-            }
-        }
 
         var onlineFailure: WgoFailure? = null
         suspend fun ask(q: String, bounded: Boolean): List<Place> {
@@ -117,6 +110,27 @@ class PlaceResolver(
                     if (r.failure != WgoFailure.NotFound) onlineFailure = r.failure
                     emptyList()
                 }
+            }
+        }
+
+        // A nickname ("la plaza", "el terminal") is a landmark name verified on Nominatim: ask there first (P7, the
+        // local index matched "Drogueria Plaza De Nariño" for "Plaza de Nariño"); offline, the index still answers.
+        if (request.fromAlias) {
+            ask(name, bounded = false).filter { distance(it, anchor) <= FAR_KM * 1000 }.forEach { p ->
+                candidates += candidate(p, 3, false, anchor, NOMINATIM_CONFIDENCE, PlaceSource.Nominatim)
+            }
+        }
+        if (candidates.isEmpty() && index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()) {
+            val hits = index.search(query, anchor, minTier = 1, maxKm = FAR_KM)
+            hits.filter { it.tier >= 2 }.forEach {
+                candidates += PlaceCandidate(
+                    Place(it.place.name, it.place.address, it.place.coord, PlaceOrigin.Overture), it.tier, it.categoryBoost, it.distanceM,
+                    it.place.confidence, PlaceSource.Index
+                )
+            }
+            partial = hits.filter { it.tier == 1 && it.distanceM <= SUGGEST_KM * 1000 }.map {
+                PlaceCandidate(Place(it.place.name, it.place.address, it.place.coord, PlaceOrigin.Overture), 1, false, it.distanceM,
+                    it.place.confidence, PlaceSource.Index)
             }
         }
 
