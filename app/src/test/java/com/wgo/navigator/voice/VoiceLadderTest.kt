@@ -10,6 +10,7 @@ import com.wgo.navigator.audio.SyntheticPcm.zeros
 import com.wgo.navigator.core.VoiceEvent
 import com.wgo.navigator.core.VoiceInput
 import com.wgo.navigator.core.WgoFailure
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -55,7 +56,9 @@ class VoiceLadderTest {
         transcriber: Transcriber,
         blocker: String? = null
     ): VoiceLadder {
-        val cloud = CloudVoiceInput(AudioCapture({ mic }, dispatcher = Dispatchers.Unconfined), transcriber)
+        val cloud = CloudVoiceInput(
+            AudioCapture({ mic }, dispatcher = Dispatchers.Unconfined), transcriber, CoroutineScope(Dispatchers.Unconfined)
+        )
         return VoiceLadder(system, cloud, { blocker }, { VoiceStrategy.InApp }, io = Dispatchers.Unconfined)
     }
 
@@ -129,6 +132,29 @@ class VoiceLadderTest {
         val l = VoiceLadder(systemOk, null, { null }, { VoiceStrategy.InApp })
         assertFalse(l.usesCloud())
         assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Final("texto del sistema")), run(l))
+    }
+
+    /** Counts prewarms; transcribes with [answer]. */
+    private class Counting(private val answer: Transcription) : Transcriber {
+        var prewarms = 0
+        var uploads = 0
+        override suspend fun transcribe(wav: ByteArray, language: Language): Transcription {
+            uploads++
+            return answer
+        }
+        override suspend fun prewarm() {
+            prewarms++
+        }
+    }
+
+    @Test fun theConnectionIsWarmedOnlyOnceSpeechIsHeard() {
+        val silent = Counting(Transcription.Text("x"))
+        run(ladder(Mic(silentPcm), systemOk, silent))
+        assertEquals("a silent press makes no request at all", 0, silent.prewarms + silent.uploads)
+        val spoken = Counting(Transcription.Text("x"))
+        run(ladder(Mic(spokenPcm), systemOk, spoken))
+        assertEquals(1, spoken.prewarms)
+        assertEquals(1, spoken.uploads)
     }
 
     @Test fun onlySilenceAndCancelDoNotFallBack() {

@@ -7,6 +7,9 @@ import com.wgo.navigator.core.VoiceInput
 import com.wgo.navigator.core.WgoFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /** Turns one in-memory WAV into text (the cloud transcription client; faked in tests). */
@@ -33,7 +36,9 @@ sealed interface Transcription {
  */
 class CloudVoiceInput(
     private val capture: AudioCapture,
-    private val transcriber: Transcriber
+    private val transcriber: Transcriber,
+    /** Where the connection prewarm runs: on its own, so it never delays the session's end. */
+    private val prewarmScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : VoiceInput {
     /** Manual stop: a new press on the orb ends the capture (what was heard is still transcribed). */
     fun requestStop() = capture.requestStop()
@@ -46,14 +51,13 @@ class CloudVoiceInput(
 
     override fun listen(language: Language): Flow<VoiceEvent> = channelFlow {
         send(VoiceEvent.Ready)
-        // P9 PART 5: the first HTTPS request of a process took 2.3 s on the watch (later ones 0.2-0.4 s): warm it up
-        // during the capture; once the capture ends the upload goes ahead regardless.
-        val warm = launch { transcriber.prewarm() }
-        val result = try {
-            capture.record(onLevel = { trySend(VoiceEvent.Level(it)) })
-        } finally {
-            warm.cancel()
-        }
+        // P9 PART 5: the first HTTPS request of a process took 2.3 s on the watch (later ones 0.2-0.4 s): warm the
+        // connection up once speech is confirmed (a silent press makes no request at all). It runs on its own scope:
+        // the upload never waits for it.
+        val result = capture.record(
+            onLevel = { trySend(VoiceEvent.Level(it)) },
+            onSpeechStart = { prewarmScope.launch { transcriber.prewarm() } }
+        )
         when (result) {
             AudioCapture.Result.NoSpeech -> {
                 VoiceLog.event("outcome failed=NoSpeech network=false")
