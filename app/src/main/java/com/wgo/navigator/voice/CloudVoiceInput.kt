@@ -7,10 +7,14 @@ import com.wgo.navigator.core.VoiceInput
 import com.wgo.navigator.core.WgoFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.launch
 
 /** Turns one in-memory WAV into text (the cloud transcription client; faked in tests). */
 fun interface Transcriber {
     suspend fun transcribe(wav: ByteArray, language: Language): Transcription
+
+    /** Opens DNS + TLS to the service while the user speaks (no key, no data); the answer is discarded. */
+    suspend fun prewarm() = Unit
 }
 
 sealed interface Transcription {
@@ -42,7 +46,14 @@ class CloudVoiceInput(
 
     override fun listen(language: Language): Flow<VoiceEvent> = channelFlow {
         send(VoiceEvent.Ready)
-        val result = capture.record(onLevel = { trySend(VoiceEvent.Level(it)) })
+        // P9 PART 5: the first HTTPS request of a process took 2.3 s on the watch (later ones 0.2-0.4 s): warm it up
+        // during the capture; once the capture ends the upload goes ahead regardless.
+        val warm = launch { transcriber.prewarm() }
+        val result = try {
+            capture.record(onLevel = { trySend(VoiceEvent.Level(it)) })
+        } finally {
+            warm.cancel()
+        }
         when (result) {
             AudioCapture.Result.NoSpeech -> {
                 VoiceLog.event("outcome failed=NoSpeech network=false")

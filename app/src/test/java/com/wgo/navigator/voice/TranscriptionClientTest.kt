@@ -191,6 +191,18 @@ class TranscriptionClientTest {
         }
     }
 
+    @Test fun prewarmSendsNoKeyAndNoData() = runBlocking {
+        FakeHttpServer { Triple(401, "{}", 0L) }.use { server ->
+            client(server.baseUrl).prewarm()
+            val req = server.requests.single()
+            assertEquals("GET", req.method)
+            assertEquals("/models", req.path)
+            assertEquals(null, req.headers["authorization"])
+            assertEquals("", req.body)
+        }
+        assertTrue(logs.none { key in it })
+    }
+
     @Test fun theRequestBodyIsZeroedAfterSending() = runBlocking {
         // The body is internal; what the caller hands over is checked by CloudVoiceInput (wav zeroed after upload).
         FakeHttpServer { Triple(200, answer(spoken), 0L) }.use { server ->

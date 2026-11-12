@@ -35,6 +35,15 @@ class TranscriptionClient(
     private val now: () -> Long = ::elapsed
 ) : Transcriber {
     private val endpoint = baseUrl.trimEnd('/') + "/audio/transcriptions"
+    private val warmUrl = baseUrl.trimEnd('/') + "/models"
+
+    /** A keyless GET to the same host (it answers 401): DNS, TLS setup and session resumption are ready for the upload. */
+    override suspend fun prewarm() {
+        if (apiKey.isBlank()) return
+        val t0 = now()
+        val r = http.request(WgoMetrics.Net.STT, warmUrl, connectTimeoutMs, PREWARM_READ_MS)
+        VoiceLog.event("stt_prewarm code=${(r as? Outcome.Ok)?.value?.code ?: (r as Outcome.Err).failure} ms=${now() - t0}")
+    }
 
     override suspend fun transcribe(wav: ByteArray, language: Language): Transcription {
         if (apiKey.isBlank()) return Transcription.Failed(WgoFailure.Unavailable, "no_key")
@@ -142,6 +151,7 @@ class TranscriptionClient(
         const val TOTAL_TIMEOUT_MS = 6_000L
         const val RETRY_WINDOW_MS = 3_000L
         const val DAILY_CAP = 300
+        private const val PREWARM_READ_MS = 3_000
         private const val MAX_TEXT_CHARS = 200
 
         private fun elapsed(): Long = try {
