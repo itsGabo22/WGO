@@ -15,6 +15,10 @@ object VoiceLog {
     @Volatile
     private var pressAt = 0L
 
+    /** JVM unit tests only: every line is also handed here, so tests can assert what is (and is not) logged. */
+    @Volatile
+    var testSink: ((String) -> Unit)? = null
+
     /** The mic press (or a retry): later lines count their `+ms` from here. */
     fun press(extra: String = "") {
         pressAt = now()
@@ -33,8 +37,10 @@ object VoiceLog {
     fun event(text: String) = write(text)
 
     private fun write(text: String) {
+        val line = "$text +${sincePress()}ms"
+        testSink?.invoke(line)
         try {
-            Log.i(TAG, "$text +${sincePress()}ms")
+            Log.i(TAG, line)
         } catch (e: RuntimeException) {
             // JVM unit tests: android.util.Log is a stub there.
         }
