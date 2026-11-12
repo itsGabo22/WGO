@@ -3,6 +3,7 @@ package com.wgo.navigator
 import android.content.Intent
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -197,6 +198,14 @@ class MainActivity : ComponentActivity() {
 
         // Voice: the interpreter uses the UI language; the system speech dialog (fallback) is launched from here.
         appViewModel.language = { settingsViewModel.language.value }
+        // The screen stays on only while a voice session runs (spec 7.1, P8): the display timeout stopped the Activity,
+        // and with it the microphone, while the user was speaking (measured on the watch).
+        lifecycleScope.launch {
+            appViewModel.micState.collect { state ->
+                if (state != MicState.Idle) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 appViewModel.voiceDialog.requests.collect { intent ->
