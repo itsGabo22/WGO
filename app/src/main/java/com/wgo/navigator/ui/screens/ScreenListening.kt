@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import com.wgo.navigator.metrics.WgoMetrics
+import com.wgo.navigator.voice.VoiceLog
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -101,6 +102,10 @@ fun ScreenListening(
     if (micState == MicState.Preparing) {
         // Debug metric: when the preparing state is first on screen (compare with the ViewModel's voice_press).
         LaunchedEffect(Unit) { withFrameNanos { WgoMetrics.event("voice_preparing_drawn at=${SystemClock.elapsedRealtime()}") } }
+    }
+    if (micState == MicState.Listening && transcript.isEmpty()) {
+        // WgoVoice (every build): the frame that shows "speak now", for the press -> visible budget (P9: <= 300 ms).
+        LaunchedEffect(Unit) { withFrameNanos { VoiceLog.event("ui_speak_now_drawn") } }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(palette.canvas)) {
