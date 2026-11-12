@@ -22,7 +22,9 @@ data class WgoSettings(
     val mapStyle: MapStyleId = MapStyleId.COBALTO,
     val voiceMode: VoiceMode = VoiceMode.Auto,
     /** The text-to-speech voice the user picked (engine voice name); null = the automatic choice. */
-    val voiceName: String? = null
+    val voiceName: String? = null,
+    /** The engine of that voice (package, P8); null = the system's default engine. */
+    val ttsEngine: String? = null
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "wgo_settings")
@@ -37,7 +39,8 @@ class SettingsRepository(context: Context) {
             language = prefs[LANGUAGE].toEnumOrDefault(Language.ES),
             mapStyle = prefs[MAP_STYLE].toEnumOrDefault(MapStyleId.COBALTO),
             voiceMode = prefs[VOICE_MODE].toEnumOrDefault(VoiceMode.Auto),
-            voiceName = prefs[VOICE_NAME]
+            voiceName = prefs[VOICE_NAME],
+            ttsEngine = prefs[TTS_ENGINE]
         )
     }
 
@@ -60,8 +63,12 @@ class SettingsRepository(context: Context) {
         store.edit { it[VOICE_MODE] = value.name }
     }
 
-    suspend fun setVoiceName(value: String?) {
-        store.edit { if (value == null) it.remove(VOICE_NAME) else it[VOICE_NAME] = value }
+    /** The voice and its engine together (null voice = automatic for [engine]; null engine = the default one). */
+    suspend fun setVoice(name: String?, engine: String?) {
+        store.edit {
+            if (name == null) it.remove(VOICE_NAME) else it[VOICE_NAME] = name
+            if (engine == null) it.remove(TTS_ENGINE) else it[TTS_ENGINE] = engine
+        }
     }
 
     /**
@@ -92,6 +99,7 @@ class SettingsRepository(context: Context) {
         val MAP_STYLE = stringPreferencesKey("map_style")
         val VOICE_MODE = stringPreferencesKey("voice_mode")
         val VOICE_NAME = stringPreferencesKey("voice_name")
+        val TTS_ENGINE = stringPreferencesKey("tts_engine")
         val TRIP_NAME = stringPreferencesKey("trip_name")
         val TRIP_LAT = doublePreferencesKey("trip_lat")
         val TRIP_LON = doublePreferencesKey("trip_lon")

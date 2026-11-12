@@ -19,8 +19,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
-/** An installed text-to-speech voice, as the chooser and the picker see it. */
-data class VoiceInfo(val name: String, val languageTag: String, val network: Boolean, val installed: Boolean = true)
+/**
+ * An installed text-to-speech voice, as the chooser and the picker see it. [engine] is the engine's package; [quality],
+ * [latency] and [features] are what the engine reports (P8: used to tell real voices from duplicates).
+ */
+data class VoiceInfo(
+    val name: String,
+    val languageTag: String,
+    val network: Boolean,
+    val installed: Boolean = true,
+    val engine: String = "",
+    val quality: Int = 0,
+    val latency: Int = 0,
+    val features: Set<String> = emptySet()
+)
 
 /** Picks the voice (spec section 8): the user's choice if installed, else the locale order, offline before network. */
 object VoiceChooser {
@@ -71,7 +83,16 @@ object VoiceChooser {
  * for each phrase and given back when the queue is empty. No engine or no voice data: [available] stays false and
  * every call is a no-op (haptics carry the guidance).
  */
-class SpeechEngine(context: Context, private val language: Language, private val preferredVoice: String?) {
+class SpeechEngine(
+    context: Context,
+    private val language: Language,
+    private val preferredVoice: String?,
+    /** The engine's package; null = the system's default engine. */
+    private val enginePackage: String? = null,
+    /** Pitch and speech rate applied to every phrase (Settings "Tono" / "Velocidad", P8; 1.0 = the engine's own). */
+    private val pitch: Float = 1f,
+    private val rate: Float = 1f
+) {
     private val app = context.applicationContext
     private val audio = app.getSystemService(AudioManager::class.java)
     private val attributes = AudioAttributes.Builder()
@@ -106,16 +127,23 @@ class SpeechEngine(context: Context, private val language: Language, private val
     private val early = ArrayList<Phrase>()
     private var onDrained: (() -> Unit)? = null
 
-    private val tts: TextToSpeech = TextToSpeech(app) { status -> onInit(status) }
+    private val tts: TextToSpeech = TextToSpeech(app, { status -> onInit(status) }, enginePackage)
+
+    /** The system's default engine (package). */
+    val systemDefaultEngine: String get() = runCatching { tts.defaultEngine }.getOrNull().orEmpty()
+
+    /** The engine actually bound (the default one when [enginePackage] is null). */
+    val engine: String get() = enginePackage ?: systemDefaultEngine
 
     private fun onInit(status: Int) {
         val ok = status == TextToSpeech.SUCCESS
         if (ok) {
             tts.setAudioAttributes(attributes)
             tts.setOnUtteranceProgressListener(listener)
-            voices = runCatching { tts.voices.orEmpty().map(::info) }.getOrDefault(emptyList())
-            // Debug builds: which voices the device really has (names and locales only).
-            voices.forEach { WgoMetrics.event("tts voice name=${it.name} tag=${it.languageTag} net=${it.network} installed=${it.installed}") }
+            tts.setPitch(pitch)
+            tts.setSpeechRate(rate)
+            val bound = engine
+            voices = runCatching { tts.voices.orEmpty().map { info(it, bound) } }.getOrDefault(emptyList())
             val pick = VoiceChooser.choose(voices, language, preferredVoice)
             val voice = pick?.let { p -> tts.voices?.firstOrNull { it.name == p.name } }
             if (voice != null) tts.voice = voice
@@ -123,9 +151,10 @@ class SpeechEngine(context: Context, private val language: Language, private val
             voiceName = voice?.name
             available = voice != null || tts.isLanguageAvailable(tts.language ?: Locale.ROOT) >= TextToSpeech.LANG_AVAILABLE
         }
-        WgoMetrics.event(
-            "tts init ok=$ok available=$available voices=${voices.size} voice=${voiceName ?: "-"} " +
-                "ms=${SystemClock.elapsedRealtime() - startedAt}"
+        // Every build (P8): which engine, voice, pitch and rate the guidance really uses; names only, no text.
+        VoiceLog.event(
+            "tts init ok=$ok engine=${engine.ifEmpty { "-" }} available=$available voices=${voices.size} " +
+                "voice=${voiceName ?: "-"} pitch=$pitch rate=$rate ms=${SystemClock.elapsedRealtime() - startedAt}"
         )
         _ready.value = true
         val queued = synchronized(early) { early.toList().also { early.clear() } }
@@ -158,7 +187,7 @@ class SpeechEngine(context: Context, private val language: Language, private val
         if (phrase.urgent) pending.set(1)
         val id = "wgo-${ids++}"
         val result = tts.speak(phrase.text, queue, Bundle(), id)
-        WgoMetrics.event("tts speak urgent=${phrase.urgent} chars=${phrase.text.length} result=$result")
+        VoiceLog.event("tts speak id=$id voice=${voiceName ?: "-"} pitch=$pitch rate=$rate chars=${phrase.text.length} result=$result")
         if (result != TextToSpeech.SUCCESS) done()
     }
 
@@ -188,10 +217,21 @@ class SpeechEngine(context: Context, private val language: Language, private val
 
     private val listener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) = Unit
-        override fun onDone(utteranceId: String?) = done()
+        override fun onDone(utteranceId: String?) {
+            VoiceLog.event("tts done id=$utteranceId")
+            done()
+        }
+
         @Deprecated("Deprecated in Java")
-        override fun onError(utteranceId: String?) = done()
-        override fun onError(utteranceId: String?, errorCode: Int) = done()
+        override fun onError(utteranceId: String?) {
+            VoiceLog.event("tts error id=$utteranceId")
+            done()
+        }
+
+        override fun onError(utteranceId: String?, errorCode: Int) {
+            VoiceLog.event("tts error id=$utteranceId code=$errorCode")
+            done()
+        }
         override fun onStop(utteranceId: String?, interrupted: Boolean) = Unit
     }
 
@@ -207,11 +247,33 @@ class SpeechEngine(context: Context, private val language: Language, private val
         }
         private const val TYPE_BLE_HEADSET = 26
 
-        fun info(v: Voice): VoiceInfo = VoiceInfo(
+        fun info(v: Voice, engine: String = ""): VoiceInfo = VoiceInfo(
             name = v.name,
             languageTag = VoiceChooser.tagOf(v.name, v.locale),
             network = v.isNetworkConnectionRequired,
-            installed = TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in v.features.orEmpty()
+            installed = TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in v.features.orEmpty(),
+            engine = engine,
+            quality = v.quality,
+            latency = v.latency,
+            features = v.features.orEmpty()
         )
+
+        /** The installed engines' packages and labels, from the package manager (no engine is bound). */
+        fun engines(context: Context): List<Pair<String, String>> {
+            val pm = context.packageManager
+            return pm.queryIntentServices(android.content.Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0)
+                .map { it.serviceInfo.packageName to it.loadLabel(pm).toString() }
+                .distinctBy { it.first }
+        }
+
+        /** Every build (P8): the full voice list of one engine under WgoVoice (names and properties, no text). */
+        fun dump(voices: List<VoiceInfo>) {
+            voices.forEach {
+                VoiceLog.event(
+                    "tts voice engine=${it.engine} name=${it.name} tag=${it.languageTag} q=${it.quality} lat=${it.latency} " +
+                        "net=${it.network} installed=${it.installed} features=${it.features.sorted().joinToString("|")}"
+                )
+            }
+        }
     }
 }

@@ -462,7 +462,7 @@ class MainActivity : ComponentActivity() {
                                 ScreenVoicePicker(
                                     language = language,
                                     selected = voiceName,
-                                    onChoose = settingsViewModel::setVoiceName
+                                    onChoose = settingsViewModel::setVoice
                                 )
                             }
                         }

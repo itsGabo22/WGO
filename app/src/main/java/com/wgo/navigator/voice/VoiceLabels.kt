@@ -25,6 +25,21 @@ object VoiceLabels {
     }
 
     /**
+     * A picker row (P8): the region, then " · <gender word>" when the engine states it ([female] / [male] come from
+     * Strings.kt), otherwise the region and the entry's number ("Estados Unidos 2").
+     */
+    fun entryLabel(entry: VoiceEntry, language: Language, female: String, male: String): String {
+        val locale = Locale.forLanguageTag(entry.voice.languageTag)
+        val region = locale.getDisplayCountry(ui(language)).ifEmpty { localeName(entry.voice.languageTag, language) }
+            .replaceFirstChar { it.titlecase(ui(language)) }
+        return when (entry.gender) {
+            VoiceGender.Female -> "$region · $female"
+            VoiceGender.Male -> "$region · $male"
+            null -> "$region ${entry.number}"
+        }
+    }
+
+    /**
      * A short name from an engine voice name alone (Settings row): engines start names with the locale ("es-us-x-sfb",
      * "es-CO-..."); otherwise the raw name.
      */

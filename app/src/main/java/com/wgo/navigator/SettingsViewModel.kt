@@ -90,10 +90,16 @@ class SettingsViewModel(
         viewModelScope.launch { repository.setVoiceMode(next) }
     }
 
-    /** A voice chosen in the picker (null = automatic). */
-    fun setVoiceName(name: String?) {
+    private val _ttsEngine = MutableStateFlow(initial.ttsEngine)
+
+    /** The chosen voice's engine (package); null = the system's default engine. */
+    val ttsEngine: StateFlow<String?> = _ttsEngine.asStateFlow()
+
+    /** A voice chosen in the picker, with its engine (null name = automatic for that engine). */
+    fun setVoice(name: String?, engine: String?) {
         _voiceName.value = name
-        viewModelScope.launch { repository.setVoiceName(name) }
+        _ttsEngine.value = engine
+        viewModelScope.launch { repository.setVoice(name, engine) }
     }
 
     class Factory(

@@ -56,7 +56,7 @@ enum class StringKey {
     SAY_LOST_ROUTE, SAY_SAMPLE,
     // Voice settings (P7)
     SET_VOICE_GUIDANCE, VOICE_MODE_OFF, VOICE_MODE_AUTO, VOICE_MODE_ALWAYS, SET_VOICE, VOICE_AUTOMATIC, VOICE_NONE,
-    VOICE_OFFLINE, BTN_TRY,
+    VOICE_OFFLINE, BTN_TRY, VOICE_FEMALE, VOICE_MALE,
     // Celebratory arrival (P7)
     BTN_DONE, ARRIVAL_UNDER_MIN,
     // Credits (P7)
@@ -171,6 +171,8 @@ private val es = mapOf(
     StringKey.VOICE_AUTOMATIC to "Automática",
     StringKey.VOICE_NONE to "Sin voz instalada",
     StringKey.VOICE_OFFLINE to "sin conexión",
+    StringKey.VOICE_FEMALE to "mujer",
+    StringKey.VOICE_MALE to "hombre",
     StringKey.BTN_TRY to "PROBAR",
     StringKey.BTN_DONE to "LISTO",
     StringKey.ARRIVAL_UNDER_MIN to "< 1 MIN",
@@ -346,6 +348,8 @@ private val en = mapOf(
     StringKey.VOICE_AUTOMATIC to "Automatic",
     StringKey.VOICE_NONE to "No voice installed",
     StringKey.VOICE_OFFLINE to "offline",
+    StringKey.VOICE_FEMALE to "female",
+    StringKey.VOICE_MALE to "male",
     StringKey.BTN_TRY to "TRY",
     StringKey.BTN_DONE to "DONE",
     StringKey.ARRIVAL_UNDER_MIN to "< 1 MIN",
