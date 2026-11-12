@@ -153,7 +153,8 @@ class LlmPlaceChooser(
             val out = LinkedHashSet<String>()
             for (i in 0 until array.length()) {
                 val raw = array.opt(i) as? String ?: continue
-                val name = LocalIntentParser.cleanPlaceQuery(LlmInterpreter.sanitize(raw, MAX_FIELD)) ?: continue
+                // Sanitized only: the place-query cleaner would drop "de Colombia" / "Pasto" from an official name.
+                val name = LlmInterpreter.sanitize(raw, MAX_FIELD)
                 if (NUMERIC.matches(name) || name.count(Char::isLetter) < 3) continue
                 out += name
                 if (out.size == MAX_EXPANSIONS) break

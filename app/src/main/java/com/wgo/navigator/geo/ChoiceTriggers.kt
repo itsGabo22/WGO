@@ -19,7 +19,8 @@ object ChoiceTriggers {
         if (ranked.size < 2) return false
         val top = ranked[0]
         if (top.source == PlaceSource.MyPlaces) return false
-        if (request.fromAlias && top.source == PlaceSource.Nominatim) return false
+        // A nickname answered by Nominatim or by an exact row of its own names is already the landmark.
+        if (request.fromAlias && (top.source == PlaceSource.Nominatim || top.tier >= 3)) return false
         val second = ranked[1]
         val said = PlaceText.tokens(request.utterance ?: request.name)
         // (a) two equally good, non-exact candidates of the same kind.
