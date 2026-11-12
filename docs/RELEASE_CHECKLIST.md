@@ -29,7 +29,12 @@ in this repo yet):
   the free commercial tier covers roughly 185 such users (more with the 20 MB on-watch cache and the proxy's CDN).
 - Commercial use (ads, paid app, company use) needs a commercial CARTO plan: confirm the current terms at carto.com
   before launch.
-- Attribution "© OpenStreetMap contributors, © CARTO" is shown on the map (spec 9.1) and in Credits.
+- Attribution (P8, spec 9.1): "© OpenStreetMap · © CARTO" along the bottom arc of the dial for 2.5 s when a trip's map
+  appears, always while exploring and on the map picker, and in full in Credits. The owner accepted this reduced
+  placement **for the prototype only**. **Before any public release a persistent, or clearly reachable, attribution is
+  mandatory** (CARTO's basemap terms and the OpenStreetMap attribution guidelines expect it wherever the map is shown):
+  for example the bottom-arc line visible for the whole trip, or an always-present "©" control that opens the
+  credits. Re-read both current terms before launch.
 
 ## 3. OpenStreetMap services (public instances are not for production)
 
