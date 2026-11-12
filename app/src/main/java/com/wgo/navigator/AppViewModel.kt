@@ -177,6 +177,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         cloud = cloudVoice,
         cloudBlocker = {
             when {
+                speechMode() == SpeechMode.System -> "setting_system"
+                !cloudNoticeAnswered() -> "notice"
                 !isOnline(application) -> "offline"
                 sttBudget.coolingDown() -> "cooldown"
                 sttBudget.capReachedAsKnown() -> "daily_cap"
@@ -216,6 +218,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     /** The UI language, provided by the Activity (owned by the settings). */
     var language: () -> Language = { Language.ES }
 
+    /** P9 speech recognition mode and the first-use notice answer, provided by the Activity (owned by the settings). */
+    var speechMode: () -> SpeechMode = { SpeechMode.Cloud }
+    var cloudNoticeAnswered: () -> Boolean = { false }
+
     /**
      * Mic pressed (pointer-down on the orb, its click, a retry): the preparing state and the "starts listening" Tick
      * come at once, in the same frame as the press; the live listening state follows when the recognizer is ready
@@ -223,6 +229,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      */
     fun onMicTapped() {
         if (_micState.value != MicState.Idle || listenJob?.isActive == true) return
+        // P9: the first press in cloud mode shows the one-time notice; its answer carries the press on.
+        if (cloudVoice != null && speechMode() == SpeechMode.Cloud && !cloudNoticeAnswered()) {
+            if (_screen.value != ScreenState.VoiceNotice) VoiceLog.event("notice_shown")
+            _screen.value = ScreenState.VoiceNotice
+            return
+        }
         _transcript.value = ""
         _sayAgain.value = false
         speakNow.onPress()
@@ -262,6 +274,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 if (_micState.value == MicState.Preparing) _micState.value = MicState.Idle
             }
         }
+    }
+
+    /** The notice was answered (the settings already hold the answer): back to screen 01 and the press goes on. */
+    fun onCloudNoticeAnswered() {
+        VoiceLog.event("notice_answered mode=${speechMode()}")
+        _screen.value = ScreenState.Listening
+        onMicTapped()
+    }
+
+    /** Back on the notice: nothing answered, nothing started (asked again on the next press). */
+    fun dismissCloudNotice() {
+        _screen.value = ScreenState.Listening
     }
 
     /**

@@ -73,6 +73,7 @@ import com.wgo.navigator.ui.screens.ScreenError
 import com.wgo.navigator.ui.screens.ScreenPlaceNotFound
 import com.wgo.navigator.ui.screens.ScreenVoicePicker
 import com.wgo.navigator.ui.screens.ScreenCredits
+import com.wgo.navigator.ui.screens.ScreenVoiceNotice
 import com.wgo.navigator.ui.screens.ScreenWorking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
@@ -80,7 +81,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 
 enum class ScreenState {
-    Intro, Listening, Working, ConfirmPlace, ModeSelection, Navigation, Arrived, Error, Settings, MapPicker, VoicePicker, Credits
+    Intro, Listening, Working, ConfirmPlace, ModeSelection, Navigation, Arrived, Error, Settings, MapPicker, VoicePicker, Credits,
+    /** P9: the one-time cloud transcription notice. */
+    VoiceNotice
 }
 
 /** Per-mode minutes for the mode pads from the straight-line distance (no route request; see [ModeEstimate]). */
@@ -198,6 +201,8 @@ class MainActivity : ComponentActivity() {
 
         // Voice: the interpreter uses the UI language; the system speech dialog (fallback) is launched from here.
         appViewModel.language = { settingsViewModel.language.value }
+        appViewModel.speechMode = { settingsViewModel.speechMode.value }
+        appViewModel.cloudNoticeAnswered = { settingsViewModel.cloudNoticeAnswered.value }
         // The screen stays on only while a voice session runs (spec 7.1, P8): the display timeout stopped the Activity,
         // and with it the microphone, while the user was speaking (measured on the watch).
         lifecycleScope.launch {
@@ -297,6 +302,7 @@ class MainActivity : ComponentActivity() {
                                 if (endConfirm) appViewModel.keepNavigating() else appViewModel.requestEndNavigation()
                             ScreenState.Arrived -> appViewModel.finishArrival()
                             ScreenState.Settings -> appViewModel.backToListening()
+                            ScreenState.VoiceNotice -> appViewModel.dismissCloudNotice()
                         }
                     }
 
@@ -462,6 +468,16 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             ScreenState.Credits -> ScreenCredits()
+                            ScreenState.VoiceNotice -> ScreenVoiceNotice(
+                                onAccept = {
+                                    settingsViewModel.answerCloudNotice(accepted = true)
+                                    appViewModel.onCloudNoticeAnswered()
+                                },
+                                onUseSystem = {
+                                    settingsViewModel.answerCloudNotice(accepted = false)
+                                    appViewModel.onCloudNoticeAnswered()
+                                }
+                            )
                             ScreenState.VoicePicker -> {
                                 val voiceName by settingsViewModel.voiceName.collectAsState()
                                 val voicePitch by settingsViewModel.voicePitch.collectAsState()

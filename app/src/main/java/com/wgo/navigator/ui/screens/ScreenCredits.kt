@@ -42,7 +42,7 @@ fun ScreenCredits(modifier: Modifier = Modifier) {
             Spacer(Modifier.height(18.dp))
             Text(string(StringKey.SET_CREDITS).uppercase(), color = palette.ink, style = WgoType.labelMd)
             Spacer(Modifier.height(6.dp))
-            listOf(StringKey.CR_OSM_D, StringKey.CR_CARTO_D, StringKey.CR_OVERTURE_D, StringKey.CR_OSMDROID_D, StringKey.CR_SERVICES_D)
+            listOf(StringKey.CR_OSM_D, StringKey.CR_CARTO_D, StringKey.CR_OVERTURE_D, StringKey.CR_OSMDROID_D, StringKey.CR_SERVICES_D, StringKey.CR_STT_D)
                 .forEach { Block(string(it)) }
             Block(String.format(string(StringKey.CR_VERSION), BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE), muted = true)
             Spacer(Modifier.height(4.dp))

@@ -125,6 +125,26 @@ class SettingsViewModel(
         viewModelScope.launch { repository.setVoiceRate(next) }
     }
 
+    private val _speechMode = MutableStateFlow(initial.speechMode)
+    val speechMode: StateFlow<SpeechMode> = _speechMode.asStateFlow()
+
+    private val _cloudNoticeAnswered = MutableStateFlow(initial.cloudNoticeAnswered)
+    val cloudNoticeAnswered: StateFlow<Boolean> = _cloudNoticeAnswered.asStateFlow()
+
+    /** The speech recognition row (P9): FAST (CLOUD) <-> SYSTEM, persisted at once (silent). */
+    fun toggleSpeechMode() {
+        val next = if (_speechMode.value == SpeechMode.Cloud) SpeechMode.System else SpeechMode.Cloud
+        _speechMode.value = next
+        viewModelScope.launch { repository.setSpeechMode(next) }
+    }
+
+    /** The first-use notice (P9): ACCEPT keeps the cloud mode; USE SYSTEM switches to the system recognizer. */
+    fun answerCloudNotice(accepted: Boolean) {
+        _cloudNoticeAnswered.value = true
+        if (!accepted) _speechMode.value = SpeechMode.System
+        viewModelScope.launch { repository.answerCloudNotice(accepted) }
+    }
+
     /** A voice chosen in the picker, with its engine (null name = automatic for that engine). */
     fun setVoice(name: String?, engine: String?) {
         _voiceName.value = name

@@ -26,6 +26,7 @@ import com.wgo.navigator.Language
 import com.wgo.navigator.SettingsViewModel
 import com.wgo.navigator.MapOrientation
 import com.wgo.navigator.VoiceMode
+import com.wgo.navigator.SpeechMode
 import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.components.MapRow
 import com.wgo.navigator.ui.components.SegmentedToggle
@@ -81,6 +82,7 @@ fun ScreenSettings(
     val voicePitch by viewModel.voicePitch.collectAsState()
     val mapOrientation by viewModel.mapOrientation.collectAsState()
     val voiceRate by viewModel.voiceRate.collectAsState()
+    val speechMode by viewModel.speechMode.collectAsState()
     val context = LocalContext.current
     // Is any text-to-speech engine installed? (A package query, not an engine start.)
     val hasEngine = remember {
@@ -99,8 +101,8 @@ fun ScreenSettings(
                 .takeIf { it.resolveActivity(context.packageManager) != null }
         }
     }
-    // Rows below the voice row: pitch and speed, the engine row, more voices, credits.
-    val rowsAfterVoice = (if (hasEngine) 2 else 0) + (if (engines.size > 1) 1 else 0) + (if (moreVoices != null) 1 else 0) + 1
+    // Rows below the voice row: pitch and speed, the engine row, more voices, speech recognition (P9), credits.
+    val rowsAfterVoice = (if (hasEngine) 2 else 0) + (if (engines.size > 1) 1 else 0) + (if (moreVoices != null) 1 else 0) + 2
     val scroll = rememberScrollState()
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(palette.canvas)) {
@@ -241,6 +243,16 @@ fun ScreenSettings(
                 )
                 nextCenter += ROW_PITCH
             }
+            // P9: speech recognition, FAST (CLOUD) <-> SYSTEM (docs/design, "ScreenSettings and the first-use notice").
+            SettingRow(
+                label = string(StringKey.SET_SPEECH),
+                value = string(if (speechMode == SpeechMode.Cloud) StringKey.SPEECH_CLOUD else StringKey.SPEECH_SYSTEM),
+                onClick = viewModel::toggleSpeechMode,
+                state = true,
+                maxTouchHeight = pitch,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(nextCenter - 22f) - rowExtra)
+            )
+            nextCenter += ROW_PITCH
             val creditsCenter = nextCenter
             SettingRow(
                 label = string(StringKey.SET_CREDITS),
