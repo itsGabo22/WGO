@@ -24,7 +24,8 @@ in this repo yet):
 ## 2. Map tiles (CARTO)
 
 - Free tier with a key: 5 M tiles/month non-commercial, 1 M/month commercial (owner's decision, P7). Measured traffic:
-  80.8 KB/km on a cold cache (base + labels at 1x). Estimate (tiles were not counted directly): about 9 tiles/km
+  80.8 KB/km on a cold cache with base + labels at 1x (P7, watch); P8 fetches the labels at `@2x` for sharpness:
+  126 KB/km on the emulator (87.0 with 1x labels on the same drive), budget 160 KB/km. The tile count is unchanged; the P7 estimate below is in tiles. Estimate (tiles were not counted directly): about 9 tiles/km
   (base ~15 KB + labels ~3 KB per position), so a 20 km/day user fetches about 5,400 tiles/month on a cold cache and
   the free commercial tier covers roughly 185 such users (more with the 20 MB on-watch cache and the proxy's CDN).
 - Commercial use (ads, paid app, company use) needs a commercial CARTO plan: confirm the current terms at carto.com
@@ -68,16 +69,19 @@ in this repo yet):
 Sources: https://developer.android.com/google/play/requirements/target-sdk and
 https://developer.android.com/docs/quality-guidelines/wear-app-quality
 
-- **Target API: Wear OS apps must target Android 15 (API 35) or higher since 31 Aug 2026** (the extension deadline,
-  1 Nov 2026, has passed). WGO targets 34 with compileSdk 34: it **cannot be published** until the stack moves to
-  compileSdk/targetSdk 35+ (AGP, Compose BOM and Wear Compose updates; a planned stack change, not done in P7).
+- **Target API: Wear OS apps must target Android 15 (API 35) or higher since 31 Aug 2026** (re-read 2026-11-12 on the
+  page above; the extension deadline, 1 Nov 2026, has passed). **Done in P8**: `targetSdk 35` (compileSdk stays 34: no
+  API 35 symbol is needed; build, lint and the regression pass). Re-check the Android 15 behaviour changes if a later
+  feature uses foreground-service types other than `location`.
 - WO-V1 user font size, WO-V2 48 dp touch targets (met), WO-V3 swipe to dismiss (met; the navigation screen keeps its
   explicit CANCELAR), WO-V4 ongoing activity during navigation (met, P6-A), WO-V6 launcher icon and name (met, P7),
   WO-V8 scroll bar on scrolling screens (met: Settings, voice picker, Credits), WO-V13 black background (the
   Daylight theme uses white: a reviewer may flag it; Night is compliant), WO-V14 12 sp essential / 10 sp minimum
   text, WO-V15 splash icon matching the launcher icon (the system splash uses the new icon: verify), WO-V16 round
   screens down to 192 dp (met, fit tests).
-- 64-bit: required since 15 Sep 2026; WGO has no native code (pure Kotlin), so it is architecture-independent.
+- 64-bit and 16 KB pages: the only native library in the APK is DataStore's `libdatastore_shared_counter.so` (arm64-v8a,
+  armeabi-v7a, x86, x86_64); P8 checked every copy: ELF LOAD alignment 0x4000 (16 KB), stored uncompressed at a 16 KB
+  aligned offset. Re-check after dependency updates.
 - Listing: description without "Android Wear", 1:1 screenshots without frames, localized ES/EN.
 
 ## 7. Signing and build
