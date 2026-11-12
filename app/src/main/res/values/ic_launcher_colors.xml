@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon colours, from docs/design/tokens.json: primary (cobalt), aura (cyan), on-primary (white). -->
+<resources>
+    <color name="wgo_icon_background">#FF0052FF</color>
+    <color name="wgo_icon_ring">#FF00D4FF</color>
+    <color name="wgo_icon_mark">#FFFFFFFF</color>
+</resources>

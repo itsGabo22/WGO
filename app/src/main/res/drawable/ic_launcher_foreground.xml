@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon foreground: the radar's user chevron (heading-up, white) inside a thin aura ring, all within the
+     66 dp safe zone of the 108 dp adaptive canvas (Wear masks the icon to a circle). Original WGO art. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,27a27,27 0 1,1 0,54a27,27 0 1,1 0,-54z"
+        android:strokeWidth="3"
+        android:strokeColor="@color/wgo_icon_ring" />
+    <path
+        android:fillColor="@color/wgo_icon_mark"
+        android:pathData="M54,36L68,70L54,62L40,70Z"
+        android:strokeWidth="2"
+        android:strokeColor="@color/wgo_icon_mark"
+        android:strokeLineJoin="round" />
+</vector>
