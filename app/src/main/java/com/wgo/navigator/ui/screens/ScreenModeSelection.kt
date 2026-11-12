@@ -56,6 +56,7 @@ import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.components.StatusBadge
 import com.wgo.navigator.ui.components.StatusBadgeVariant
 import com.wgo.navigator.ui.components.WgoIcons
+import com.wgo.navigator.ui.components.WgoMarqueeText
 import com.wgo.navigator.ui.string
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
 import com.wgo.navigator.ui.theme.Wgo
@@ -105,26 +106,25 @@ fun ScreenModeSelection(
             clock = clock,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(19f)).wgoRiseIn()
         )
-        Text(
+        WgoMarqueeText(
             text = destination,
             color = palette.ink,
             style = WgoType.headlineSm,
             textAlign = TextAlign.Center,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+            tapToRestart = true,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = dial(38f))
                 .width(dial(150f))
                 .wgoRiseIn()
         )
-        Text(
+        WgoMarqueeText(
             text = address,
             color = palette.inkMuted,
             style = WgoType.bodyMd,
             textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            tapToRestart = true,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = dial(80f))

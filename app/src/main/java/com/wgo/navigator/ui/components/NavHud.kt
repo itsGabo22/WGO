@@ -212,13 +212,13 @@ private fun HudCard(content: HudContent, onTap: () -> Unit, clock: WgoClock) {
                 modifier = Modifier.widthIn(max = 134.dp).semantics { liveRegion = LiveRegionMode.Polite }
             )
         } else {
-            Text(
+            // A long street name scrolls (P8 marquee); the card is a tap target itself, so no tap-to-restart here.
+            WgoMarqueeText(
                 text = content.instruction,
                 color = colors.content,
                 style = WgoType.bodyMd.copy(fontSize = 12.sp, lineHeight = 14.sp),
                 textAlign = TextAlign.Center,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.widthIn(max = 134.dp)
             )
         }

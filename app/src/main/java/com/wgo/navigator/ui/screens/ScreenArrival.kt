@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Text
 import com.wgo.navigator.Language
 import com.wgo.navigator.ui.StringKey
+import com.wgo.navigator.ui.components.WgoMarqueeText
 import com.wgo.navigator.ui.components.BezelGauge
 import com.wgo.navigator.ui.components.WgoIcons
 import com.wgo.navigator.ui.formatDistance
@@ -136,13 +137,13 @@ fun ScreenArrived(destination: String, onFinish: () -> Unit, modifier: Modifier 
                 }
                 .semantics { liveRegion = LiveRegionMode.Polite }
         )
-        if (destination.isNotEmpty()) Text(
+        // A long place name scrolls (P8 marquee); the ambient arrival keeps the static 2-line clamp.
+        if (destination.isNotEmpty()) WgoMarqueeText(
             text = destination,
             color = palette.ink,
             style = WgoType.bodyMd,
             textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            tapToRestart = true,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = 122.dp).width(160.dp).graphicsLayer { alpha = p(1400, 1800) }
         )
         if (summary != null) Text(

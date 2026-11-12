@@ -35,6 +35,7 @@ import com.wgo.navigator.core.permissions.WgoPermission
 import com.wgo.navigator.ui.LocalLanguage
 import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.components.BezelGauge
+import com.wgo.navigator.ui.components.WgoMarqueeText
 import com.wgo.navigator.ui.components.MassiveButton
 import com.wgo.navigator.ui.components.MassiveButtonVariant
 import com.wgo.navigator.ui.components.MicOrb
@@ -174,13 +175,14 @@ fun ScreenConfirmPlace(
     val option = String.format(string(StringKey.CONFIRM_OPTION), index + 1, count)
 
     Box(modifier.fillMaxSize().background(palette.canvas)) {
-        Text(
+        // Long names scroll (P8 marquee): "Universidad Cooperativa de Colombia" is read whole, then rests clamped.
+        WgoMarqueeText(
             text = place.name,
             color = palette.ink,
             style = WgoType.headlineSm,
             textAlign = TextAlign.Center,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+            tapToRestart = true,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = 28.dp)
@@ -191,13 +193,13 @@ fun ScreenConfirmPlace(
                 }
                 .wgoRiseIn()
         )
-        if (subtitle.isNotEmpty()) Text(
+        if (subtitle.isNotEmpty()) WgoMarqueeText(
             text = subtitle,
             color = palette.inkMuted,
             style = WgoType.bodyMd,
             textAlign = TextAlign.Center,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+            tapToRestart = true,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = 70.dp).width(150.dp).wgoRiseIn()
         )
         val goTouch = wgoTouchSide(52.dp)
@@ -259,17 +261,18 @@ fun ScreenPlaceNotFound(
 ) {
     val palette = Wgo.palette
     Box(modifier.fillMaxSize().background(palette.canvas)) {
-        Text(
-            // The ellipsis goes inside the quotes: shorten the name, keep the closing ».
+        WgoMarqueeText(
+            // The ellipsis goes inside the quotes: shorten the name, keep the closing ». The whole title scrolls (P8).
             text = String.format(
                 string(StringKey.NOT_FOUND_TITLE),
                 if (name.length > NOT_FOUND_NAME_CHARS) name.take(NOT_FOUND_NAME_CHARS - 1).trimEnd() + "…" else name
             ),
+            full = String.format(string(StringKey.NOT_FOUND_TITLE), name),
             style = WgoType.headlineSm,
             color = palette.ink,
             textAlign = TextAlign.Center,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+            tapToRestart = true,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = 26.dp)

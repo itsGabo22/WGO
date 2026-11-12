@@ -51,6 +51,7 @@ import com.wgo.navigator.ui.components.StatusBadge
 import com.wgo.navigator.ui.components.StatusBadgeVariant
 import com.wgo.navigator.ui.components.WgoChip
 import com.wgo.navigator.ui.components.WgoIcons
+import com.wgo.navigator.ui.components.WgoMarqueeText
 import com.wgo.navigator.ui.string
 import com.wgo.navigator.ui.theme.ClockRate
 import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
@@ -292,13 +293,12 @@ private fun QuestionSurface(
                 .semantics { liveRegion = LiveRegionMode.Polite }
                 .wgoRiseIn()
         )
-        if (subtitle.isNotEmpty()) Text(
+        if (subtitle.isNotEmpty()) WgoMarqueeText(
             text = subtitle,
             color = palette.inkMuted,
             style = WgoType.bodyMd,
             textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            tapToRestart = true,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = 86.dp).width(160.dp).wgoRiseIn()
         )
         val buttonTouch = wgoTouchSide(52.dp)
@@ -373,12 +373,11 @@ internal fun PillButton(
                     Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(6.dp))
                 }
-                Text(
+                // A label that does not fit scrolls (P8 marquee: voice picker rows, the not-found suggestion).
+                WgoMarqueeText(
                     text = if (uppercase) label.uppercase() else label,
                     style = textStyle,
-                    color = color,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = color
                 )
             }
         }

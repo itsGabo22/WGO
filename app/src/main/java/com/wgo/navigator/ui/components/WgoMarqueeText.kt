@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -49,7 +50,6 @@ object WgoMarquee {
  * [WgoMarquee.CYCLES] cycles, then the ellipsized text again. Restarts when [text] changes and, with [tapToRestart]
  * (only for text that is not itself a button), on a tap. Reduced motion (also forced under covering surfaces): static.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WgoMarqueeText(
     text: String,
@@ -58,12 +58,29 @@ fun WgoMarqueeText(
     modifier: Modifier = Modifier,
     maxLines: Int = 1,
     textAlign: TextAlign? = null,
-    tapToRestart: Boolean = false
+    tapToRestart: Boolean = false,
+    full: String? = null
+) = WgoMarqueeText(AnnotatedString(text), style, color, modifier, maxLines, textAlign, tapToRestart, full?.let(::AnnotatedString))
+
+/** The same for styled text (the confirm subtitle's lert distance for a far place keeps its colour). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun WgoMarqueeText(
+    text: AnnotatedString,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    maxLines: Int = 1,
+    textAlign: TextAlign? = null,
+    tapToRestart: Boolean = false,
+    /** The whole text when [text] was already shortened by the caller (the not-found title): scrolled instead. */
+    full: AnnotatedString? = null
 ) {
     val reduceMotion = LocalWgoReduceMotion.current
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
-    var overflow by remember(text) { mutableStateOf(false) }
+    val shortened = full != null && full != text
+    var overflow by remember(text) { mutableStateOf(shortened) }
     var box by remember(text) { mutableStateOf(IntSize.Zero) }
     var scrolling by remember(text) { mutableStateOf(false) }
     var restarts by remember { mutableIntStateOf(0) }
@@ -72,7 +89,7 @@ fun WgoMarqueeText(
     LaunchedEffect(text, canScroll, restarts) {
         scrolling = false
         if (!canScroll) return@LaunchedEffect
-        val lineWidthPx = measurer.measure(text, style, softWrap = false, maxLines = 1).size.width
+        val lineWidthPx = measurer.measure(full ?: text, style, softWrap = false, maxLines = 1).size.width
         scrolling = true
         delay(WgoMarquee.durationMs(with(density) { lineWidthPx.toDp().value }))
         scrolling = false
@@ -87,7 +104,7 @@ fun WgoMarqueeText(
         val size = with(density) { Modifier.size(box.width.toDp(), box.height.toDp()) }
         Box(modifier.then(size).then(tap), contentAlignment = Alignment.CenterStart) {
             Text(
-                text = text,
+                text = full ?: text,
                 style = style,
                 color = color,
                 maxLines = 1,
@@ -111,7 +128,7 @@ fun WgoMarqueeText(
             overflow = TextOverflow.Ellipsis,
             textAlign = textAlign,
             onTextLayout = { layout ->
-                overflow = layout.hasVisualOverflow
+                overflow = layout.hasVisualOverflow || shortened
                 box = layout.size
             },
             modifier = modifier.then(tap)

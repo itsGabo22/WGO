@@ -89,12 +89,11 @@ fun SettingRow(
                     style = WgoType.labelSm.copy(fontSize = 9.sp, letterSpacing = 0.12.em),
                     maxLines = 1
                 )
-                Text(
+                // A long value (a voice or engine name) scrolls (P8 marquee); the row itself is the button.
+                WgoMarqueeText(
                     text = value,
                     color = primaryText,
-                    style = WgoType.labelMd.copy(fontSize = 12.sp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    style = WgoType.labelMd.copy(fontSize = 12.sp)
                 )
             }
             if (opens) {
