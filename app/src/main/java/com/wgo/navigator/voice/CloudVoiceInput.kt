@@ -34,6 +34,9 @@ class CloudVoiceInput(
     /** Manual stop: a new press on the orb ends the capture (what was heard is still transcribed). */
     fun requestStop() = capture.requestStop()
 
+    /** Blocks until the last capture released the microphone (before the fallback recognizer opens it). */
+    fun awaitMicReleased() = capture.awaitReleased()
+
     /** Nothing to do: cancelling the collector releases the microphone (AudioCapture's finally). */
     override fun cancel() = Unit
 

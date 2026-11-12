@@ -168,8 +168,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         )
     }
 
+    /** The P8 recognizer chain: rung 2 of the ladder (and the only rung in SISTEMA mode or without a key). */
+    private val systemVoice = VoiceInputChain(application)
+
     private val voice = VoiceLadder(
-        system = VoiceInputChain(application),
+        system = systemVoice,
+        systemStrategy = systemVoice::strategy,
         cloud = cloudVoice,
         cloudBlocker = {
             when {
@@ -189,7 +193,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     private var sessionActive = false
 
     /** The system speech dialog requests, launched by the Activity (fallback strategy). */
-    val voiceDialog: SystemVoiceDialog get() = voice.system.dialog
+    val voiceDialog: SystemVoiceDialog get() = systemVoice.dialog
 
     /** Live voice level, written here and read only in the MicOrb draw phase. */
     val voiceLevel = VoiceLevel()
