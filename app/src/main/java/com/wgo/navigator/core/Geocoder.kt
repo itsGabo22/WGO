@@ -13,7 +13,12 @@ data class Place(
     /** Secondary line (street, neighbourhood); may be empty. */
     val address: String,
     val coord: GeoCoord,
-    val origin: PlaceOrigin = PlaceOrigin.OpenStreetMap
+    val origin: PlaceOrigin = PlaceOrigin.OpenStreetMap,
+    /**
+     * What kind of place it is, for the ranking only (never shown): the Overture category ("college_university") or
+     * the OpenStreetMap class and type ("amenity:university"); empty when unknown.
+     */
+    val category: String = ""
 )
 
 /**

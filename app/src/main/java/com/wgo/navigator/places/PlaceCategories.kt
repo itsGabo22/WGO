@@ -46,4 +46,23 @@ object PlaceCategories {
 
     fun matches(category: String, fragments: List<String>): Boolean =
         fragments.isNotEmpty() && fragments.any { category.contains(it) }
+
+    /**
+     * Fragments of the categories people use as destinations (docs/PLACE_SEARCH.md, "Landmark prior"): education,
+     * health, shopping centre, transport hub, government, park or plaza, stadium. Matched against Overture categories
+     * ("college_university", "shopping_mall", "bus_station") and OpenStreetMap class:type ("amenity:university",
+     * "shop:mall", "place:square", "leisure:stadium").
+     */
+    private val LANDMARK = listOf(
+        "university", "college", "hospital", "shopping_mall", "shopping_center", ":mall", "bus_station", "airport",
+        "aerodrome", "train_station", "townhall", "town_hall", "city_hall", "government", "park", "square", "plaza",
+        "stadium"
+    )
+
+    /** True for a landmark category. "parking" is a car park, not a park. */
+    fun isLandmark(category: String): Boolean {
+        val c = category.lowercase()
+        if (c.isEmpty() || c.contains("parking")) return false
+        return LANDMARK.any { c.contains(it) }
+    }
 }

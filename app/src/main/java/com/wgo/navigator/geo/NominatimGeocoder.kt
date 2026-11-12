@@ -159,7 +159,9 @@ class NominatimGeocoder(
                 if (name.isEmpty()) return@mapNotNull null
                 // Subtitle: the next two parts of the display name after the name itself (street, neighbourhood).
                 val subtitle = parts.filter { it != name }.take(2).joinToString(", ")
-                Place(name, subtitle, GeoCoord(lat, lon))
+                // jsonv2: "category" is the OSM class ("amenity"), "type" its value ("university"); ranking only.
+                val kind = listOf(o.optString("category"), o.optString("type")).filter { it.isNotBlank() }.joinToString(":")
+                Place(name, subtitle, GeoCoord(lat, lon), category = kind)
             }
         } catch (e: JSONException) {
             null

@@ -6,6 +6,8 @@ import com.wgo.navigator.core.Place
 import com.wgo.navigator.core.PlaceOrigin
 import com.wgo.navigator.core.WgoFailure
 import com.wgo.navigator.metrics.WgoMetrics
+import com.wgo.navigator.places.IndexedPlace
+import com.wgo.navigator.places.PlaceCategories
 import com.wgo.navigator.places.PlaceIndex
 import com.wgo.navigator.places.PlaceText
 import com.wgo.navigator.ui.map.GeoCoord
@@ -33,7 +35,17 @@ data class PlaceCandidate(
     val confidence: Float,
     val source: PlaceSource,
     val hintScore: Double = 0.0
-)
+) {
+    /** A destination category (docs/PLACE_SEARCH.md, "Landmark prior"). */
+    val landmark: Boolean get() = PlaceCategories.isLandmark(place.category)
+
+    /** Confidence high enough to beat weaker rows of the same rank (Nominatim counts as 0.6). */
+    val trusted: Boolean get() = confidence >= TRUSTED_CONFIDENCE
+
+    companion object {
+        const val TRUSTED_CONFIDENCE = 0.6f
+    }
+}
 
 sealed interface Resolution {
     /** One or two places, best first; a place over [PlaceResolver.FAR_KM] is never first when a nearer one exists. */
@@ -123,14 +135,10 @@ class PlaceResolver(
         if (candidates.isEmpty() && index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()) {
             val hits = index.search(query, anchor, minTier = 1, maxKm = FAR_KM)
             hits.filter { it.tier >= 2 }.forEach {
-                candidates += PlaceCandidate(
-                    Place(it.place.name, it.place.address, it.place.coord, PlaceOrigin.Overture), it.tier, it.categoryBoost, it.distanceM,
-                    it.place.confidence, PlaceSource.Index
-                )
+                candidates += PlaceCandidate(it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index)
             }
             partial = hits.filter { it.tier == 1 && it.distanceM <= SUGGEST_KM * 1000 }.map {
-                PlaceCandidate(Place(it.place.name, it.place.address, it.place.coord, PlaceOrigin.Overture), 1, false, it.distanceM,
-                    it.place.confidence, PlaceSource.Index)
+                PlaceCandidate(it.place.toPlace(), 1, false, it.distanceM, it.place.confidence, PlaceSource.Index)
             }
         }
 
@@ -193,15 +201,19 @@ class PlaceResolver(
 
         private fun distance(p: Place, anchor: GeoCoord) = RadarProjection.distanceMeters(p.coord, anchor)
 
-        /** The ranking order of docs/PLACE_SEARCH.md. */
+        /** The ranking order of docs/PLACE_SEARCH.md ("Ranking"; landmark and trusted since P8). */
         fun sortedCandidates(list: List<PlaceCandidate>): List<PlaceCandidate> = list.sortedWith(
             compareBy<PlaceCandidate> { it.distanceM > FAR_KM * 1000 }
                 .thenByDescending { it.tier }
+                .thenByDescending { it.landmark }
                 .thenByDescending { it.categoryBoost }
                 .thenByDescending { it.hintScore }
+                .thenByDescending { it.trusted }
                 .thenBy { it.distanceM }
                 .thenByDescending { it.confidence }
         )
+
+        private fun IndexedPlace.toPlace() = Place(name, address, coord, PlaceOrigin.Overture, category)
 
         /** Keeps the first of the candidates with the same normalised name within [DEDUPE_M]. */
         fun dedupe(sorted: List<PlaceCandidate>): List<PlaceCandidate> {

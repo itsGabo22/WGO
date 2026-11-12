@@ -70,8 +70,8 @@ class PlaceIndex(private val open: () -> InputStream) {
     }
 
     /**
-     * Index hits for [query] (raw text; normalised here) within [maxKm] of [anchor], best first: tier, category boost,
-     * distance, confidence. Only tier >= [minTier]; at most [limit]. Empty when the index is not loaded.
+     * Index hits for [query] (raw text; normalised here) within [maxKm] of [anchor], best first: tier, landmark,
+     * category boost, distance, confidence. Only tier >= [minTier]; at most [limit]. Empty when the index is not loaded.
      */
     fun search(query: String, anchor: GeoCoord, minTier: Int = 1, maxKm: Double = 25.0, limit: Int = 20): List<IndexHit> {
         val all = entries ?: return emptyList()
@@ -90,8 +90,10 @@ class PlaceIndex(private val open: () -> InputStream) {
             if (d > maxKm * 1000) continue
             hits += IndexHit(p, tier, PlaceCategories.matches(p.category, fragments), d)
         }
+        // A landmark sorts right after the tier (P8), so it is never cut by [limit] behind same-token businesses.
         return hits.sortedWith(
             compareByDescending<IndexHit> { it.tier }
+                .thenByDescending { PlaceCategories.isLandmark(it.place.category) }
                 .thenByDescending { it.categoryBoost }
                 .thenBy { it.distanceM }
                 .thenByDescending { it.place.confidence }
