@@ -3,6 +3,7 @@ package com.wgo.navigator.geo
 import com.wgo.navigator.Language
 import com.wgo.navigator.ai.ChoiceOption
 import com.wgo.navigator.ai.LlmPlaceChooser
+import com.wgo.navigator.ai.PlaceAliases
 import com.wgo.navigator.ai.PlaceChooser
 import com.wgo.navigator.core.Outcome
 import com.wgo.navigator.core.Place
@@ -147,8 +148,18 @@ class PlaceResolver(
             ask(name, bounded = false).filter { distance(it, anchor) <= FAR_KM * 1000 }.forEach { p ->
                 candidates += candidate(p, 3, false, anchor, NOMINATIM_CONFIDENCE, PlaceSource.Nominatim)
             }
+            // Offline (or no near hit): only EXACT index rows of the landmark's own names (P8: "UCC Pasto" for the
+            // Universidad Cooperativa). A partial row is never taken for a nickname: "la plaza" must not become a
+            // dental clinic called "Dentix Plaza de Nariño".
+            if (candidates.isEmpty() && index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()) {
+                for (n in (listOf(name) + PlaceAliases.indexNames(name)).distinct()) {
+                    index.search(n, anchor, minTier = 3, maxKm = FAR_KM).forEach {
+                        candidates += PlaceCandidate(it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index)
+                    }
+                }
+            }
         }
-        if (candidates.isEmpty() && index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()) {
+        if (!request.fromAlias && candidates.isEmpty() && index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()) {
             val hits = index.search(query, anchor, minTier = 1, maxKm = FAR_KM)
             hits.filter { it.tier >= 2 }.forEach {
                 candidates += PlaceCandidate(it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index)
@@ -158,7 +169,8 @@ class PlaceResolver(
             }
         }
 
-        if (candidates.isEmpty()) {
+        // (A nickname already asked Nominatim for its verified name above.)
+        if (candidates.isEmpty() && !request.fromAlias) {
             val hint = request.hint
             val found = if (hint != null) {
                 ask("$name, $hint", bounded = false).ifEmpty { ask(name, bounded = true) }

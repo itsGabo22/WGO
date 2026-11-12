@@ -30,9 +30,9 @@ class LocalIntentParserTest {
         Case("llevame al Éxito", nav, "Éxito"),
         Case("llévame al terminal en bus", nav, "Terminal de Transportes de Pasto", Drive), // Pasto nickname (PlaceAliases)
         Case("quiero ir a la Plaza de Nariño", nav, "Plaza de Nariño"),
-        Case("quiero ir al Unicentro en carro", nav, "Unicentro", Drive),
+        Case("quiero ir al Unicentro en carro", nav, "Centro Comercial Unicentro", Drive),
         Case("ir a la Catedral de Pasto", nav, "Catedral"),
-        Case("vamos a Unicentro", nav, "Unicentro"),
+        Case("vamos a Unicentro", nav, "Centro Comercial Unicentro"),
         Case("vamos al estadio Libertad en moto", nav, "Estadio Departamental Libertad", Drive), // nickname
         Case("cómo llego a la Plaza del Carnaval", nav, "Plaza del Carnaval"),
         Case("¿Cómo llego al parque Infantil?", nav, "parque Infantil"),
@@ -63,7 +63,7 @@ class LocalIntentParserTest {
         Case("I want to go to the Carnival Museum", nav, "Carnival Museum", lang = Language.EN),
         // Bare places (screen 01 means "where to?")
         Case("el Éxito", nav, "Éxito"),
-        Case("Unicentro", nav, "Unicentro"),
+        Case("Unicentro", nav, "Centro Comercial Unicentro"),
         Case("la Universidad de Nariño", nav, "Universidad de Nariño"),
         Case("Plaza de Nariño en Pasto", nav, "Plaza de Nariño"),
         Case("Terminal de transportes Pasto", nav, "Terminal de Transportes de Pasto"),
