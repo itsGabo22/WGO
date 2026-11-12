@@ -58,11 +58,12 @@ fun ScreenVoicePicker(
     // The system's default engine is bound first and the others only once it answered: bound together on the watch,
     // the cold Google engine (19-24 s) held the default one back for as long (P8, measured).
     val packages = remember { SpeechEngine.engines(context).map { it.first } }
-    val first = remember(language, pitch, rate) { SpeechEngine(context, language, null, null, pitch, rate) }
+    // Each engine starts on the saved voice when it has it (PROBAR on reopening tried Google's automatic voice instead).
+    val first = remember(language, pitch, rate) { SpeechEngine(context, language, selected, null, pitch, rate) }
     val firstReady = first.ready.collectAsState().value
     val others = remember(language, pitch, rate, firstReady) {
         if (!firstReady) emptyList()
-        else packages.filter { it != first.engine }.map { SpeechEngine(context, language, null, it, pitch, rate) }
+        else packages.filter { it != first.engine }.map { SpeechEngine(context, language, selected, it, pitch, rate) }
     }
     DisposableEffect(first) { onDispose { first.shutdown() } }
     DisposableEffect(others) { onDispose { others.forEach { it.shutdown() } } }
