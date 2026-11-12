@@ -55,10 +55,11 @@ object MapTiles {
     val cartoBase: ITileSource by lazy { CartoTileSource("wgo-carto-dm-nl-$keyTag", "dark_nolabels", retina = false, key) }
 
     /**
-     * Labels only, 1x (measured on the watch: 2x labels cost 109 KB/km, 1x 80.8 KB/km, under the 100 KB/km budget; the
-     * text drawn at TILE_SCALE 2 is a little softer and equally readable).
+     * Labels only, @2x (P8): 512 px tiles drawn at 2 screen px per tile px on the Galaxy Watch5 Pro (1x tiles were
+     * magnified 4x and looked soft). Measured on the emulator, cold cache: 126 KB/km with the 1x base (87.0 with 1x
+     * labels), under the 160 KB/km budget.
      */
-    val cartoLabels: ITileSource by lazy { CartoTileSource("wgo-carto-lab1x-$keyTag", "light_only_labels", retina = false, key) }
+    val cartoLabels: ITileSource by lazy { CartoTileSource("wgo-carto-lab2x-$keyTag", "light_only_labels", retina = true, key) }
 
     val osmBase: ITileSource get() = TileSourceFactory.MAPNIK
 
