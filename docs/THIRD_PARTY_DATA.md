@@ -44,6 +44,15 @@ Overture publishes a release about once a month; places change slowly, so a quar
   the Open Database License (ODbL); free tier with a key: 5 M tiles/month non-commercial, 1 M/month commercial.
 - Fallback without a key: OpenStreetMap standard tiles, © OpenStreetMap contributors.
 
+## Speech to text (P9)
+
+- **Model**: Whisper (`whisper-large-v3`) by OpenAI, "MIT License", "Copyright (c) 2022 OpenAI"
+  (https://github.com/openai/whisper/blob/main/LICENSE, read 2026-11-12). WGO ships no model weights: the model runs
+  on the provider's servers.
+- **Service**: hosted by Groq (`api.groq.com`, OpenAI-compatible `audio/transcriptions`), under Groq's terms and data
+  policy (`docs/PRIVACY_DATA_FLOW.md`). Credited on the Credits screen: "Voz a texto: Whisper de OpenAI (MIT), en los
+  servidores de Groq." / "Speech to text: OpenAI's Whisper (MIT), hosted by Groq."
+
 ## Geocoding and routing
 
 - Nominatim (OpenStreetMap) for addresses, streets and the fallback search; OSRM on the FOSSGIS OSM-DE servers for

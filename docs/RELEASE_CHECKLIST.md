@@ -4,7 +4,11 @@ WGO is not published. The `release` build type (R8 + resource shrinking, 3.10 MB
 Galaxy Watch5 Pro) is signed with the **debug key** and contains the keys from `local.properties`: it is for the
 owner's own watch only. Everything below must be done before an APK or bundle leaves this machine.
 
-## 1. Keys out of the APK: a small proxy
+## 1. Keys out of the APK: a small proxy (MANDATORY)
+
+**P9 makes this mandatory, not optional**: every mic press in the default mode uploads audio with `LLM_API_KEY`, so an
+extracted key would let anyone transcribe on the owner's account (2,000 requests/day per model on the current account).
+No APK with a key inside may leave this machine.
 
 `LLM_API_KEY` and `MAP_TILE_KEY` are compiled into `BuildConfig`; anyone can extract them from an APK. A public build
 calls a proxy instead, which holds the keys server-side. Minimal design (serverless, for example on Vercel; no code
@@ -13,6 +17,7 @@ in this repo yet):
 | route | forwards to | limits |
 |---|---|---|
 | `POST /v1/interpret` | the OpenAI-compatible `chat/completions` endpoint (today Groq, `openai/gpt-oss-120b`) | body <= 1 KB; per install 200 calls/day (the app's own `AiCallBudget` stays), per IP 30/min; 429 on excess |
+| `POST /v1/transcribe` (P9) | the OpenAI-compatible `audio/transcriptions` endpoint (today Groq, `whisper-large-v3`) | multipart body <= 400 KB (10.5 s WAV); only the fields the app sends (model, language, temperature, response_format, prompt, file); per install 300/day (the app's own counter stays), per IP 20/min; 429 on excess; the audio is streamed through, never stored or logged |
 | `GET /v1/tiles/{layer}/{z}/{x}/{y}.png` | `basemaps.cartocdn.com/{layer}/...?key=` (layers `dark_nolabels`, `light_only_labels` only) | z 12-18 and the Pasto box only; `Cache-Control` passed through (30 days) so the CDN absorbs repeats; per IP 600 tiles/min |
 
 - Authentication: an install token (random, created on first run, sent as a header), plus Play Integrity if abuse
@@ -61,8 +66,14 @@ in this repo yet):
   destination to the router, tile requests to CARTO, phrase text to a network TTS voice if one is chosen), what never
   does (position to the language model, private places, audio), retention (none on the watch beyond settings).
 - Re-check the LLM provider's data terms (no training on inputs, retention) at release time.
-- Play Data safety form: location (approximate and precise, app functionality, not shared), audio (processed on
-  device by the system recognizer), app activity (none collected).
+- **Audio transparency (P9)**: the store listing and the privacy policy must say that, in the default FAST (CLOUD)
+  mode, the audio of what the user says after tapping the mic is sent to the transcription provider (Groq) and not
+  stored by WGO; that SYSTEM mode keeps recognition on the watch's recogniser; and the provider's retention (up to 30
+  days only for abuse or reliability, unless Zero Data Retention is on). Enable ZDR on the provider account before
+  launch. The in-app first-use notice and the Credits lines stay in step with the policy.
+- Play Data safety form: location (approximate and precise, app functionality, not shared); audio: "Voice or sound
+  recordings" collected for app functionality, processed ephemerally, sent to a service provider (the transcription
+  provider) acting on WGO's behalf, optional (SYSTEM mode); app activity (none collected).
 
 ## 6. Google Play and Wear OS requirements (checked 2026-11-11)
 

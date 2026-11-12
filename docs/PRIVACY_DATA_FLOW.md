@@ -1,25 +1,37 @@
 # WGO: what leaves the watch
 
-WGO runs on the watch. Speech recognition, interpretation of easy requests, the radar and all settings stay on the
-device. Only three kinds of request ever leave it, and only when the user has just asked for a destination.
+WGO runs on the watch. Interpretation of easy requests, the radar and all settings stay on the device. Only the
+requests below ever leave it, and only when the user has just pressed the microphone or asked for a destination.
+Speech recognition (P9) runs in the cloud in the default RÁPIDO (NUBE) / FAST (CLOUD) mode (row 0) and on the watch's
+own recogniser in SISTEMA / SYSTEM mode.
 
 | # | Data sent | Sent to | When | Never sent |
 |---|---|---|---|---|
+| 0 | P9: the audio of ONE utterance, as an in-memory WAV (16 kHz mono PCM16, from 500 ms before the detected speech to 300 ms after it, at most about 10.5 s / 340 KB), plus the fields `model`, `language` (the app language), `temperature` 0, `response_format` and a vocabulary `prompt` made only of public landmark names from the verified `PlaceAliases` table | The transcription endpoint of the same OpenAI-compatible provider and key as row 1 (default Groq, `POST /openai/v1/audio/transcriptions`, model `whisper-large-v3`) | Only after an explicit mic press, in RÁPIDO (NUBE) mode, after the one-time notice was accepted, with the app visible, and only when the on-watch endpointer heard speech (silence sends nothing). Network up, no 429 cool-down (60 s), fewer than 300 transcriptions today (own counter). One retry only when the connection itself failed. | Coordinates, device or account identifiers, my places, history, other presses, audio from before the press or after the end of speech |
 | 1 | The transcript of the utterance (text, at most 200 characters, request under 1 KB) | The remote interpreter (default: Groq, OpenAI-compatible API) | Only for hard requests: the local rules were not confident (< 0.75), an API key exists in `local.properties`, the network is up, the 60 s rate-limit cool-down is not active and fewer than 200 remote calls were made today. No retries. | Coordinates, device or account identifiers, audio |
 | 1b | P8 place choice: the utterance text, and for a choice up to 5 candidate places as public text (name, category, address, a list id `c1`..`c5`) | The same remote model | Only when the place search is weak or ambiguous (`docs/PLACE_SEARCH.md`, "Landmarks, nicknames and the language model"): name expansion returns text names, choice returns one id from the list. **At most 2 model calls per utterance in total** (1 + 1b together), same daily cap and cool-down, 2.5 s timeout. | The user's position, distances, coordinates of any place, my places, identifiers, audio |
 | 2 | The destination text (the place name, then possibly the landmark hint alone), plus a bounding box of +/-0.2 degrees around the last known fix (or the Pasto centre) | Nominatim (OpenStreetMap geocoder) | Only when the watch's own lists (my places, the local places index) have no strong match; at most 3 requests per utterance, none when OTHER cycles. Results are cached in memory (20 queries). No search-as-you-type. | Audio, the transcript beyond the place words, identifiers, my places |
 | 3 | The origin and destination coordinates and the travel mode | The OSM-DE routing servers (OSRM, FOSSGIS) | Once per route request (one request in flight; cancelled when the screen is left) | Transcript, identifiers |
 
-Speech to text uses the watch's own recogniser (in-app `SpeechRecognizer`, or the system speech dialog as a
-fallback). WGO prefers the offline model; when the device has no offline model for the language, the platform
-recogniser may use its own online service, under the platform's privacy terms. WGO never stores or uploads audio.
+Speech to text (P9). In RÁPIDO (NUBE) mode (the default) the app records the utterance itself (`AudioRecord`, only
+between the press and the end of speech, released on every exit) and sends that clip to the transcription provider
+(row 0). The audio lives only in memory: it is never written to disk and its buffers are zeroed after the upload or on
+cancel. Whisper's text then enters the same interpreter as before. If the cloud transcription fails (offline,
+timeout, rate limit, daily cap, an answer rejected as a hallucination) the watch's own recogniser takes over (in-app
+`SpeechRecognizer`, or the system speech dialog) and the user is asked to say it again. In SISTEMA mode only the
+watch's recogniser is used: WGO prefers its offline model; when the device has none for the language, the platform
+recogniser may use its own online service, under the platform's privacy terms. The mode is a Settings row
+(RECONOCIMIENTO); the first press in cloud mode shows a one-time notice (ACEPTAR keeps it, USAR SISTEMA switches to
+SISTEMA).
 
 Spoken guidance (P7) uses the watch's text-to-speech engine. WGO prefers offline voices; if the chosen voice is a
 network voice, the engine may send the phrase text (for example "Gira a la derecha por Carrera 35") to its provider,
 under the engine's privacy terms. No position, place name lists or identifiers are added by WGO.
 
-Persisted on the watch (DataStore): theme, language, map style, the active destination and mode, and the daily
-remote-interpreter counter (date and count). No transcript is persisted. Debug builds log counters and request sizes
+Persisted on the watch (DataStore): theme, language, map style, the speech recognition mode and the notice answer,
+the active destination and mode, and the daily remote-interpreter and transcription counters (date and count). No
+audio and no transcript is persisted. The release build logs the voice path under `WgoVoice` (times, byte counts,
+HTTP codes, guard reasons and transcript LENGTHS; never audio, text, URLs or keys). Debug builds log counters and request sizes
 (never URLs, bodies, keys or transcripts) under the `WGO_METRICS` tag.
 
 ## The remote interpreter (default provider)
@@ -37,6 +49,13 @@ remote-interpreter counter (date and count). No transcript is persisted. Debug b
   longer"; any customer can enable Zero Data Retention in the console's Data Controls. That page does not discuss
   training; the provider's privacy page and services agreement are reported to exclude customer inputs from model
   training (secondary sources; confirm in the current agreement before any public release).
+* Transcription (P9) uses the same provider and key: `POST https://api.groq.com/openai/v1/audio/transcriptions`, model
+  `whisper-large-v3` (`STT_MODEL` in `local.properties` overrides it). The provider's "Your Data" page
+  (console.groq.com/docs/your-data, read 2026-11-12) lists `/openai/v1/audio/transcriptions` among the inference
+  endpoints: "By default, Groq does not retain customer data for inference requests"; inputs and outputs may be logged
+  for reliability or abuse investigations for "up to 30 days", and Zero Data Retention (Data Controls) disables that.
+  Data is held in Google Cloud buckets in the United States. The page says nothing about training on customer data.
+  Recommended before wider use: enable ZDR on the account.
 * The API key is compiled into the debug APK through `BuildConfig`. Such an APK must not be distributed; a public
   release needs a server-side proxy or a per-user key.
 
