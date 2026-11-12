@@ -54,3 +54,30 @@ the app and the build work as usual.
    For a place that already exists without an address (for example the restaurant "La Merced", node 879662751), only
    add `addr:street` and `addr:housenumber`. Follow the OpenStreetMap rules: add only what you have checked on the
    ground; do not copy from other maps.
+
+## Pasto nicknames (P8)
+
+Built in (`PlaceAliases.kt`), each checked on 2026-11-11 against Nominatim and the local index:
+
+| nickname(s) | landmark (Nominatim) | local index row (offline) |
+|---|---|---|
+| la cooperativa, la U cooperativa, universidad cooperativa, UCC | Universidad Cooperativa de Colombia (amenity/university, Carrera 45, Pandiaco) | UCC Pasto (college_university) |
+| udenar, torobajo, la U de Nariño | Universidad de Nariño (amenity/university) | Universidad de Nariño |
+| la mariana | Universidad Mariana (amenity/university) | Universidad Mariana |
+| cesmag | Universidad CESMAG (amenity/university) | University Institution CESMAG |
+| la unad | UNAD (amenity/university) | Universidad Nacional Abierta Y A Distancia |
+| la plaza, plaza de Nariño | Plaza de Nariño (place/square) | none: offline it is not found (never a shop named after it) |
+| la terminal / el terminal | Terminal de Transportes de Pasto (amenity/bus_station) | Terminal De Transportes De Pasto S.A. |
+| el hospital departamental, HUDN | Hospital Departamental de Nariño (amenity/hospital) | Hospital Departamental De Nariño |
+| el estadio | Estadio Departamental Libertad (leisure/stadium) | Estadio Departamental Libertad |
+| unicentro | Centro Comercial Unicentro (landuse/commercial) | Unicentro Pasto (shopping_mall) |
+| bomboná | Centro Comercial Bomboná (shop/mall); plain "Bomboná" is a locality in Consacá | Centro Comercial y Artesanal Bomboná |
+| el aeropuerto | Aeropuerto Antonio Nariño (P7) | none (the index row's coordinates are wrong) |
+
+Not added, because no real record could be verified: **"la nacho"** (no place by that name in either source) and
+**"la U"** (ambiguous: every university in Pasto). If you mean a specific place by them, add it to my places with
+coordinates you read yourself on a map (for example by long-pressing it in a map app); the app never invents them:
+
+```json
+{ "aliases": ["la nacho"], "name": "<official name>", "lat": <your latitude>, "lon": <your longitude>, "note": "<barrio>" }
+```
