@@ -159,8 +159,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         WgoMetrics.event("voice_press at=${SystemClock.elapsedRealtime()}")
         _micState.value = MicState.Preparing
         _haptics.tryEmit(HapticEvent.Tick) // spec section 8: starts listening (the press is the start)
-        // The offline places index loads while the user speaks (once per process; never at app start or idle).
-        viewModelScope.launch { placeResolver.prewarm() }
         listenJob = viewModelScope.launch {
             // Let the preparing frame draw first: the recognizer setup below runs on the main thread. The first frame
             // callback can run before Compose draws the new state, so wait for the next one too (~16-32 ms).
@@ -195,6 +193,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 val cue = speakNow.onReady()
                 _micState.value = MicState.Listening
                 if (cue) _haptics.tryEmit(HapticEvent.Tick) // spec section 8: mic ready after a slow start
+                // The offline places index loads while the user speaks (once per process). Started at ready, not at the
+                // press: on the watch the load competed with the recognizer's cold start (P7, measured).
+                viewModelScope.launch { placeResolver.prewarm() }
                 WgoMetrics.event("voice_listening ms_from_press=$preparedMs speak_now_tick=$cue")
             }
             VoiceEvent.Restarting -> {
