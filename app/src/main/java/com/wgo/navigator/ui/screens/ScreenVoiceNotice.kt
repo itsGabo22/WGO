@@ -34,8 +34,8 @@ import com.wgo.navigator.ui.theme.WgoType
 /**
  * The one-time cloud transcription notice (P9, docs/design "ScreenSettings and the first-use notice"): shown on the
  * first press in FAST (CLOUD) mode before it was answered. The Credits list layout (a scrolling column 160 dp wide):
- * title, what is sent and to whom, ACCEPT (the press goes on with the cloud capture) and USE SYSTEM (switches the
- * setting to SYSTEM and goes on with the system recognizer). Back answers nothing.
+ * title, what is sent and to whom, ACCEPT (keeps the cloud mode) and USE SYSTEM (switches the setting to SYSTEM); both
+ * go back to screen 01, idle, for the user's next press. Back answers nothing.
  */
 @Composable
 fun ScreenVoiceNotice(onAccept: () -> Unit, onUseSystem: () -> Unit, modifier: Modifier = Modifier) {

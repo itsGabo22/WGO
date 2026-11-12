@@ -229,7 +229,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      */
     fun onMicTapped() {
         if (_micState.value != MicState.Idle || listenJob?.isActive == true) return
-        // P9: the first press in cloud mode shows the one-time notice; its answer carries the press on.
+        // P9: the first press in cloud mode shows the one-time notice (the user presses again after answering it).
         if (cloudVoice != null && speechMode() == SpeechMode.Cloud && !cloudNoticeAnswered()) {
             if (_screen.value != ScreenState.VoiceNotice) VoiceLog.event("notice_shown")
             _screen.value = ScreenState.VoiceNotice
@@ -276,11 +276,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         }
     }
 
-    /** The notice was answered (the settings already hold the answer): back to screen 01 and the press goes on. */
+    /**
+     * The notice was answered (the settings already hold the answer): back to screen 01, idle. The user presses the mic
+     * again (P9 live session: a capture started by ACEPTAR was stopped by that natural second press).
+     */
     fun onCloudNoticeAnswered() {
         VoiceLog.event("notice_answered mode=${speechMode()}")
         _screen.value = ScreenState.Listening
-        onMicTapped()
     }
 
     /** Back on the notice: nothing answered, nothing started (asked again on the next press). */
