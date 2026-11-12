@@ -218,6 +218,45 @@ three sessions in a row while the owner speaks (round C, press 2); the next pres
 recognizer gives no more than code 7). The two early "closed by the app" presses of round B predate the cancel-reason
 log; round C shows the same symptom as `reason=stop`.
 
+### P8 additions
+
+- **Language model in place choice** (`ai/PlaceChooser`, `ai/LlmPlaceChooser`, `geo/ChoiceTriggers`): two roles on the
+  same endpoint as the interpreter, both validated: *expansion* (up to 3 official names as text when no nickname
+  matched and the candidates are weak) and *choice* (an id among up to 5 real candidates when the ranking is
+  ambiguous). Shared daily budget and 429 cool-down, 2.5 s timeout, cache by utterance, at most 2 model calls per
+  utterance including the interpreter's (`PlaceRequest.aiCallsUsed`). Nickname landmarks (`PlaceAliases`) carry the
+  official Nominatim name and the index's own name; the landmark prior ranks destinations above businesses.
+- **Map orientation** (`MapOrientation`, Settings): north up by default (map bearing 0, the chevron turns, CARTO's
+  raster names on); heading up (the map turns, raster names off, `LandmarkLabels` / `LandmarkLabelLayer` draw upright
+  landmark names from the places index, re-selected only when the camera changes).
+- **Marquee** (`WgoMarqueeText`): the clamped text switches to one scrolling line in the same box for 2 cycles, then
+  rests; static under reduced motion and covering surfaces.
+- **Voices** (`VoiceCatalog`, `VoiceSettingsRules`, `VoicePitch` / `VoiceRate`): duplicates removed across engines, the
+  default engine bound first in the picker; pitch, speed and engine persisted and applied by `SpeechEngine`.
+
+P8 measurements (2026-11-12):
+
+| check | where | result |
+|---|---|---|
+| Home idle: 0 location / 0 network / 0 recogniser / 0 TTS | emulator, debug | two snapshots 30 s apart identical, `locActive=0`, `recognizer_session=0`, no service, no TTS engine bound | 
+| Navigating: 1 location request + 1 service | emulator | `locActive=1`, 1 service |
+| HOME mid-trip | emulator | service kept, fixes 16 -> 25 |
+| Reroute | emulator | 2 reroutes after leaving the route by 90 m |
+| END | emulator | service and location gone within 2 s |
+| Arrival | emulator | `Arrived`, service gone; arrival animation 2.97 % janky (debug, deadline metric) |
+| Notifications denied | emulator | the trip runs, 1 service |
+| Ambient | emulator | static ambient navigation, 3 frames in 35 s, location kept |
+| Location revoked mid-trip | emulator | process ends, no crash, reopens at Home |
+| `logcat *:E` | emulator | 0 crash-buffer lines, 0 error lines from the app |
+| Navigation jank, north up | Galaxy Watch5 Pro, benchmark build, real GPS | 1,286 frames, 2.72 % over 34 ms (the radar runs at the 30 fps ambience tier; the deadline metric reads 95 %, its known 30 fps artefact); PSS 53 MB |
+| Marquee jank | emulator, debug | 2.79 % janky while scrolling, 0 frames after the 2 cycles |
+| Long names | watch | "Cooperativa Nariñense de Militares Retirados" and a long not-found title scroll in full |
+| Tiles | emulator, cold cache, 2.81 km at 60 km/h | 1x labels 87.0, `@2x` labels 126 (chosen), base + labels `@2x` 202 KB/km |
+| Lint / unit tests | | 0 errors, 0 NewApi, 13 warnings (as in P7); all unit tests pass |
+
+Not measured in P8: the screen-off drive and the 9-minute walk with PSS at minute 9 (P6-A numbers stand), heading-up
+jank on the watch, a heading-up "driving south" screenshot on the watch (heading-up labels verified on the emulator).
+
 Counters for a 6.5-minute moving drive (3.6 km at 36 km/h; the planned 10-minute run was cut short by the test harness): 192 fixes, 191 engine updates, 1 geocode (551 B), 1 route (7.7 KB), 0 reroutes, 178 map re-projections, about 500 KB received and 20 KB sent by the app in total (mostly map tiles).
 
 Known misses: the END NAVIGATION? surface spends 2-3 slow UI-thread frames composing over the radar (the forced reduce-motion switch recomposes the radar subtree); to be fixed with the P6 HUD rebuild. The pre-P6 navigation screen still has 36 dp zoom buttons (39 x 37.5 real dp) and a 41 real dp CANCELAR chip whose label measures fit 109.1 (P6-B replaces them: 40 dp zoom with 48 real dp touch, an 86x32 CANCELAR at fit 99.0 with 48 / 60 real dp touch).
