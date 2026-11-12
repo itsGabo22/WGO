@@ -79,6 +79,8 @@ class AndroidPcmSource(private val context: Context) : PcmSource {
  * Records one utterance (docs/design/WGO_DESIGN_SYSTEM.md, "Instant-capture voice input"): opens the microphone,
  * feeds 20 ms frames to a [SpeechEndpointer] and returns the clip to send as an in-memory WAV. The microphone is
  * released on EVERY exit (end of speech, silence, error, cancellation) and the PCM buffer is zeroed before returning.
+ * The release itself runs on its own short-lived thread (`AudioRecord.stop` blocked 1.1 s on the Galaxy Watch5 Pro and
+ * must not delay the upload); [awaitReleased] waits for it before anything else opens the microphone.
  * At most [SpeechEndpointer.Config.maxCaptureMs] of audio is kept: the whole capture fits in memory, so the 500 ms
  * pre-roll is simply the audio before the detected start.
  */
@@ -98,6 +100,14 @@ class AudioCapture(
 
     @Volatile
     private var stopRequested = false
+
+    @Volatile
+    private var releasing: Thread? = null
+
+    /** Waits until the last capture's microphone is released (at most [timeoutMs]); returns at once when it is. */
+    fun awaitReleased(timeoutMs: Long = RELEASE_WAIT_MS) {
+        releasing?.join(timeoutMs)
+    }
 
     /** A new press on the orb: the running capture ends at the next frame. */
     fun requestStop() {
@@ -175,10 +185,25 @@ class AudioCapture(
             VoiceLog.event("capture_done clip_ms=$clipMs bytes=${wav.size}")
             Result.Speech(wav, clipMs, captureMs, reason)
         } finally {
-            source.release()
             pcm.fill(0)
             buf.fill(0)
-            VoiceLog.event("capture_released")
+            releaseInBackground(source)
         }
+    }
+
+    private fun releaseInBackground(source: PcmSource) {
+        val t = Thread({
+            try {
+                source.release()
+            } finally {
+                VoiceLog.event("capture_released")
+            }
+        }, "wgo-mic-release")
+        releasing = t
+        t.start()
+    }
+
+    private companion object {
+        const val RELEASE_WAIT_MS = 2_000L
     }
 }

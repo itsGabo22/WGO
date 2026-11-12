@@ -41,11 +41,17 @@ class AudioCaptureTest {
 
     private fun capture(src: FakeSource) = AudioCapture({ src }, dispatcher = Dispatchers.Unconfined)
 
+    /** Records with [c] and waits for the background release. */
+    private suspend fun AudioCapture.recordAndRelease(
+        onLevel: (Float) -> Unit = {},
+        onSpeechStart: () -> Unit = {}
+    ): AudioCapture.Result = record(onLevel, onSpeechStart).also { awaitReleased() }
+
     @Test fun speechGivesAWavClipAndReleasesTheMicrophone() = runBlocking {
         val src = FakeSource(concat(zeros(200), noise(600, 20), tone(1000, 3000), noise(1500, 20)))
         var speechStarts = 0
         val levels = mutableListOf<Float>()
-        val r = capture(src).record(onLevel = { levels += it }, onSpeechStart = { speechStarts++ })
+        val r = capture(src).recordAndRelease(onLevel = { levels += it }, onSpeechStart = { speechStarts++ })
         assertTrue(r is AudioCapture.Result.Speech)
         r as AudioCapture.Result.Speech
         assertEquals("RIFF", String(r.wav, 0, 4))
@@ -57,20 +63,20 @@ class AudioCaptureTest {
 
     @Test fun silenceSendsNothingAndReleases() = runBlocking {
         val src = FakeSource(noise(500, 20))
-        val r = capture(src).record()
+        val r = capture(src).recordAndRelease()
         assertEquals(AudioCapture.Result.NoSpeech, r)
         assertEquals(1, src.released.get())
     }
 
     @Test fun aMicrophoneThatDoesNotStartIsAFailureAndIsReleased() = runBlocking {
         val src = FakeSource(ShortArray(0), startOk = false)
-        assertEquals(AudioCapture.Result.Failed("start"), capture(src).record())
+        assertEquals(AudioCapture.Result.Failed("start"), capture(src).recordAndRelease())
         assertEquals(1, src.released.get())
     }
 
     @Test fun aReadErrorIsAFailureAndIsReleased() = runBlocking {
         val src = FakeSource(noise(2000, 20), failAt = 10)
-        assertEquals(AudioCapture.Result.Failed("read"), capture(src).record())
+        assertEquals(AudioCapture.Result.Failed("read"), capture(src).recordAndRelease())
         assertEquals(1, src.released.get())
     }
 
@@ -80,6 +86,7 @@ class AudioCaptureTest {
         val job = launch(Dispatchers.Default) { c.record() }
         while (src.reads.get() < 20) yield()
         job.cancelAndJoin()
+        c.awaitReleased()
         assertEquals(1, src.released.get())
     }
 
@@ -89,6 +96,7 @@ class AudioCaptureTest {
         var r: AudioCapture.Result? = null
         val job = launch(Dispatchers.Default) { r = c.record(onSpeechStart = { c.requestStop() }) }
         job.join()
+        c.awaitReleased()
         assertTrue(r is AudioCapture.Result.Speech)
         assertEquals(SpeechEndpointer.EndReason.Manual, (r as AudioCapture.Result.Speech).reason)
         assertEquals(1, src.released.get())
