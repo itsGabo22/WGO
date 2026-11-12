@@ -174,6 +174,29 @@ class PlaceResolver(
             }
         }
 
+        // Role 1 (P8): no nickname and only weak candidates -> the model names the landmark the words may stand for
+        // (text only); each name is searched like any other: the index first, then Nominatim within the request limit.
+        if (!request.fromAlias && chooser != null && aiLeft > 0 && ChoiceTriggers.weak(request, sortedCandidates(candidates))) {
+            aiLeft--
+            lastAiCalls++
+            val names = chooser.expand(request.utterance ?: name, name, language)
+            WgoMetrics.event("places ai_expansion names=${names.size}")
+            val indexReady = index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()
+            for (alt in names) {
+                val local = if (indexReady) index!!.search(alt, anchor, minTier = 2, maxKm = FAR_KM, limit = 5) else emptyList()
+                local.forEach {
+                    candidates += PlaceCandidate(it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index)
+                }
+                if (local.isEmpty()) {
+                    val altTokens = PlaceText.tokens(alt)
+                    ask(alt, bounded = false).filter { distance(it, anchor) <= FAR_KM * 1000 }.forEach { p ->
+                        val tier = if (PlaceText.tokens(p.name) == altTokens) 3 else 2
+                        candidates += candidate(p, tier, false, anchor, NOMINATIM_CONFIDENCE, PlaceSource.Nominatim)
+                    }
+                }
+            }
+        }
+
         // The hint only re-ranks: text match first, then (when that cannot separate the top two) proximity to the
         // hint's own point, at the cost of one more request.
         var ranked: List<PlaceCandidate> = candidates
