@@ -28,6 +28,12 @@ import com.wgo.navigator.voice.VoiceLog
 import com.wgo.navigator.voice.SystemVoiceDialog
 import com.wgo.navigator.voice.VoiceInputChain
 import com.wgo.navigator.voice.VoiceLadder
+import com.wgo.navigator.voice.CloudVoiceInput
+import com.wgo.navigator.voice.TranscriptionClient
+import com.wgo.navigator.audio.AudioCapture
+import com.wgo.navigator.audio.AndroidPcmSource
+import com.wgo.navigator.ai.LlmInterpreter
+import com.wgo.navigator.net.isOnline
 import com.wgo.navigator.voice.VoiceLevel
 import com.wgo.navigator.voice.VoiceStrategy
 import com.wgo.navigator.ai.AiCallBudget
@@ -142,10 +148,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      * P9 voice ladder: the app's own capture + cloud transcription first, the P8 recognizer chain as the fallback
      * (docs/design/WGO_DESIGN_SYSTEM.md, "Instant-capture voice input").
      */
+    /** P9: the cloud transcriptions' own daily cap (300) and 429 cool-down, separate from the model calls. */
+    private val sttBudget = AiCallBudget(
+        DataStoreAiCounterStore(application, transcriptions = true),
+        dailyCap = TranscriptionClient.DAILY_CAP
+    )
+
+    /** The cloud rung exists only when local.properties provided the provider key (same key as the model). */
+    private val cloudVoice: CloudVoiceInput? = BuildConfig.LLM_API_KEY.takeIf { it.isNotBlank() }?.let { key ->
+        CloudVoiceInput(
+            capture = AudioCapture({ AndroidPcmSource(application) }),
+            transcriber = TranscriptionClient(
+                apiKey = key,
+                baseUrl = BuildConfig.LLM_BASE_URL.ifBlank { LlmInterpreter.DEFAULT_BASE_URL },
+                model = BuildConfig.STT_MODEL.ifBlank { TranscriptionClient.DEFAULT_MODEL },
+                http = HttpClient(WgoUserAgent.plain),
+                budget = sttBudget
+            )
+        )
+    }
+
     private val voice = VoiceLadder(
         system = VoiceInputChain(application),
-        cloud = null, // the transcription client is plugged in with the cloud rung
-        cloudBlocker = { null }
+        cloud = cloudVoice,
+        cloudBlocker = {
+            when {
+                !isOnline(application) -> "offline"
+                sttBudget.coolingDown() -> "cooldown"
+                sttBudget.capReachedAsKnown() -> "daily_cap"
+                else -> null
+            }
+        }
     )
 
     /** When the current session started (manual stop ignores the press that started it). */

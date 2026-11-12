@@ -35,6 +35,8 @@ android {
         buildConfigField("String", "LLM_API_KEY", localStringField("LLM_API_KEY"))
         buildConfigField("String", "LLM_BASE_URL", localStringField("LLM_BASE_URL"))
         buildConfigField("String", "LLM_MODEL", localStringField("LLM_MODEL"))
+        // P9 cloud transcription model on the same provider and key (empty = TranscriptionClient.DEFAULT_MODEL).
+        buildConfigField("String", "STT_MODEL", localStringField("STT_MODEL"))
         buildConfigField("String", "WGO_CONTACT", localStringField("WGO_CONTACT"))
         // CARTO basemaps key (P7 map layers); empty = the OpenStreetMap tile pipeline.
         buildConfigField("String", "MAP_TILE_KEY", localStringField("MAP_TILE_KEY"))

@@ -33,7 +33,9 @@ class HttpClient(private val userAgent: String) {
         readTimeoutMs: Int,
         method: String = "GET",
         headers: Map<String, String> = emptyMap(),
-        body: String? = null
+        body: String? = null,
+        /** A binary body (P9: the multipart audio upload); wins over [body]. Never logged. */
+        bodyBytes: ByteArray? = null
     ): Outcome<HttpResponse> = withContext(Dispatchers.IO) {
         val started = System.nanoTime()
         val conn = try {
@@ -56,7 +58,7 @@ class HttpClient(private val userAgent: String) {
             conn.setRequestProperty("User-Agent", userAgent)
             conn.setRequestProperty("Accept", "application/json")
             headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
-            val bytes = body?.toByteArray(Charsets.UTF_8)
+            val bytes = bodyBytes ?: body?.toByteArray(Charsets.UTF_8)
             if (bytes != null) {
                 sent = bytes.size.toLong()
                 conn.doOutput = true

@@ -36,6 +36,14 @@ object PlaceAliases {
     private val UNICENTRO = Landmark("Centro Comercial Unicentro", listOf("Unicentro Pasto"))
     private val BOMBONA = Landmark("Centro Comercial Bomboná", listOf("Centro Comercial y Artesanal Bomboná"))
 
+    /**
+     * The verified public landmark names (their search strings), P9: the ONLY words the cloud transcription's vocabulary
+     * hint may contain (never anything from my places, history or the user's position).
+     */
+    val landmarkNames: List<String> = listOf(
+        UCC, UDENAR, MARIANA, CESMAG, UNAD, TERMINAL, HOSPITAL, PLAZA, ESTADIO, AIRPORT, UNICENTRO, BOMBONA
+    ).map { it.search }
+
     /** The whole place must be exactly the nickname: "la plaza" yes, "la plaza de mercado" no. */
     private val EXACT = mapOf(
         "cooperativa" to UCC,

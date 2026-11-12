@@ -25,7 +25,7 @@ object WgoMetrics {
         AI_CALL, AI_COOLDOWN, REROUTE, MAP_INVALIDATE, AUDIO_CAPTURE
     }
 
-    enum class Net { GEOCODE, ROUTE, AI }
+    enum class Net { GEOCODE, ROUTE, AI, STT }
 
     const val TAG = "WGO_METRICS"
     private const val PERIOD_MS = 30_000L

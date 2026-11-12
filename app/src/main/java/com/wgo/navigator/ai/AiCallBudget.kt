@@ -38,6 +38,13 @@ class AiCallBudget(
     @Volatile
     private var cooldownUntil = 0L
 
+    /** The last count seen by [tryAcquire] and its day (for [capReachedAsKnown], which must not suspend). */
+    @Volatile
+    private var knownDay: String? = null
+
+    @Volatile
+    private var knownUsed = 0
+
     /** Takes one call from today's budget; false while cooling down or when the daily cap is reached. */
     suspend fun tryAcquire(): Boolean = mutex.withLock {
         if (nowMs() < cooldownUntil) {
@@ -48,13 +55,19 @@ class AiCallBudget(
         val day = today()
         val stored = store.load()
         val used = if (stored?.first == day) stored.second else 0
+        knownDay = day
+        knownUsed = used
         if (used >= dailyCap) {
             WgoMetrics.event("ai_skip reason=daily_cap used=$used")
             return@withLock false
         }
         store.save(day, used + 1)
+        knownUsed = used + 1
         true
     }
+
+    /** True when the last count read today had reached the cap (false before the first call of the process). */
+    fun capReachedAsKnown(): Boolean = knownDay == today() && knownUsed >= dailyCap
 
     /** The provider said "too many requests": stop remote calls for the cool-down. */
     fun onRateLimited() {
@@ -72,9 +85,15 @@ class AiCallBudget(
 
 private val Context.aiQuotaStore: DataStore<Preferences> by preferencesDataStore(name = "wgo_ai_quota")
 
-/** The persisted counter (one tiny DataStore file, separate from the settings). */
-class DataStoreAiCounterStore(context: Context) : AiCounterStore {
-    private val store = context.applicationContext.aiQuotaStore
+/** P9: the cloud transcriptions' own counter (separate from the language-model calls). */
+private val Context.sttQuotaStore: DataStore<Preferences> by preferencesDataStore(name = "wgo_stt_quota")
+
+/**
+ * The persisted counter (one tiny DataStore file, separate from the settings): the language-model calls by default,
+ * the cloud transcriptions with [transcriptions] (P9).
+ */
+class DataStoreAiCounterStore(context: Context, transcriptions: Boolean = false) : AiCounterStore {
+    private val store = context.applicationContext.let { if (transcriptions) it.sttQuotaStore else it.aiQuotaStore }
 
     override suspend fun load(): Pair<String, Int>? {
         val prefs = store.data.first()

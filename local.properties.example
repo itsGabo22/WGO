@@ -9,6 +9,8 @@
 # LLM_API_KEY=<your-api-key>
 # LLM_BASE_URL=https://api.example.com/openai/v1
 # LLM_MODEL=<model-id>
+# Cloud speech-to-text model on the same provider and key (P9; default whisper-large-v3)
+# STT_MODEL=<model-id>
 
 # Contact sent to public geocoding/routing services as their usage policies require (later run)
 # WGO_CONTACT=<contact-for-usage-policies>
