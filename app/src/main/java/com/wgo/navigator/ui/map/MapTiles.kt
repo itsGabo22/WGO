@@ -54,8 +54,11 @@ object MapTiles {
     /** Dark Matter without labels, 1x (recoloured by the style filter, so extra resolution buys nothing). */
     val cartoBase: ITileSource by lazy { CartoTileSource("wgo-carto-dm-nl-$keyTag", "dark_nolabels", retina = false, key) }
 
-    /** Labels only, 2x: the text is drawn at TILE_SCALE 2, so the 512 px tile keeps it sharp. */
-    val cartoLabels: ITileSource by lazy { CartoTileSource("wgo-carto-lab2x-$keyTag", "light_only_labels", retina = true, key) }
+    /**
+     * Labels only, 1x (measured on the watch: 2x labels cost 109 KB/km, 1x 80.8 KB/km, under the 100 KB/km budget; the
+     * text drawn at TILE_SCALE 2 is a little softer and equally readable).
+     */
+    val cartoLabels: ITileSource by lazy { CartoTileSource("wgo-carto-lab1x-$keyTag", "light_only_labels", retina = false, key) }
 
     val osmBase: ITileSource get() = TileSourceFactory.MAPNIK
 
