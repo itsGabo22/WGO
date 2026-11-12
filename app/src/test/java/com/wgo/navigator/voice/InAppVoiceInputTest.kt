@@ -168,6 +168,55 @@ class InAppVoiceInputTest {
         assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Partial("terminal"), VoiceEvent.Final("terminal")), input(fake).run())
     }
 
+    @Test fun noMatchBeforeAnySpeechRestartsQuietlyAndTheNextAttemptHearsTheUser() {
+        // Measured on the watch (P8, warm press): ready in 0.67 s, no match at 6 s with no speech -> it showed an error.
+        val fake = FakeRecognizers(
+            { it.onReady(); it.onError(RecognizerErrors.NO_MATCH) },
+            { it.onReady(); it.onBeginningOfSpeech(); it.onResults("llévame a la cooperativa") }
+        )
+        assertEquals(
+            listOf(VoiceEvent.Ready, VoiceEvent.Restarting, VoiceEvent.Ready, VoiceEvent.Final("llévame a la cooperativa")),
+            input(fake).run()
+        )
+        assertEquals(1, fake.maxAlive)
+    }
+
+    @Test fun theQuietBudgetEndsWithNotUnderstood() {
+        val silent: (RecognizerListener) -> Unit = { it.onReady(); it.onError(RecognizerErrors.SPEECH_TIMEOUT) }
+        val fake = FakeRecognizers(silent, silent, silent, silent)
+        assertEquals(
+            listOf(
+                VoiceEvent.Ready, VoiceEvent.Restarting, VoiceEvent.Ready, VoiceEvent.Restarting, VoiceEvent.Ready,
+                VoiceEvent.Failed(WgoFailure.NotFound)
+            ),
+            input(fake).run()
+        )
+        assertEquals(1 + RecognizerErrors.MAX_QUIET_RESTARTS, fake.requests.size)
+    }
+
+    @Test fun noMatchAfterSpeechIsNotUnderstoodWithoutARestart() {
+        val fake = FakeRecognizers({ it.onReady(); it.onBeginningOfSpeech(); it.onError(RecognizerErrors.NO_MATCH) })
+        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Failed(WgoFailure.NotFound)), input(fake).run())
+        assertEquals(1, fake.requests.size)
+    }
+
+    @Test fun aColdNetworkErrorThenABusyServiceAreBothRetried() {
+        val fake = FakeRecognizers(
+            { it.onError(RecognizerErrors.NETWORK) },
+            { it.onError(RecognizerErrors.BUSY) },
+            { it.onReady(); it.onResults("unicentro") }
+        )
+        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Final("unicentro")), input(fake).run())
+    }
+
+    @Test fun emptyResultsWithNothingHeardRestartQuietly() {
+        val fake = FakeRecognizers({ it.onReady(); it.onResults(null) }, { it.onReady(); it.onResults("terminal") })
+        assertEquals(
+            listOf(VoiceEvent.Ready, VoiceEvent.Restarting, VoiceEvent.Ready, VoiceEvent.Final("terminal")),
+            input(fake).run()
+        )
+    }
+
     @Test fun englishUsesItsOwnTags() {
         val fake = FakeRecognizers({ it.onError(RecognizerErrors.LANGUAGE_UNAVAILABLE) }, { it.onReady(); it.onResults("downtown") })
         input(fake).run(Language.EN)

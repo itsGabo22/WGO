@@ -65,7 +65,9 @@ class InAppVoiceInput(
         var tagIndex = memory.workingTag(language)?.coerceIn(0, tags.lastIndex) ?: 0
         var online = memory.noOfflineModel(language)
         var attemptStartedAt = started
-        var freshRetryUsed = false
+        var networkRetryUsed = false
+        var serviceRetryUsed = false
+        var quietRestarts = 0
         var recognizer: Recognizer? = null
         var generation = 0
         var instances = 0
@@ -95,7 +97,40 @@ class InAppVoiceInput(
             close()
         }
 
-        fun begin() {
+        fun attempt() = RecognizerErrors.Attempt(
+            online, tagIndex, tags.size, networkRetryUsed, lastPartial, serviceRetryUsed, speechStarted, quietRestarts
+        )
+
+        lateinit var begin: () -> Unit
+
+        /** Destroys the instance and starts a fresh one after [RecognizerErrors.RESTART_DELAY_MS] (see [Action.Restart]). */
+        fun restart(action: Action.Restart) {
+            if (!online && action.online) memory.markNoOfflineModel(language)
+            online = action.online
+            tagIndex = action.tagIndex
+            when (action.budget) {
+                RecognizerErrors.Budget.Network -> networkRetryUsed = true
+                RecognizerErrors.Budget.Service -> serviceRetryUsed = true
+                RecognizerErrors.Budget.Quiet -> quietRestarts++
+                RecognizerErrors.Budget.None -> Unit
+            }
+            ready = false // the next instance has to report ready again
+            speechStarted = false // the silence cap starts over with the new instance
+            stopAt = 0L
+            attemptStartedAt = now() // the ready cap counts from the restart, not from the old attempt
+            if (readySent) {
+                // The UI said "speak now" but nothing is listening any more: back to preparing.
+                readySent = false
+                trySend(VoiceEvent.Restarting)
+            }
+            release()
+            restartJob = launch {
+                pause(RecognizerErrors.RESTART_DELAY_MS)
+                if (!finished) begin()
+            }
+        }
+
+        begin = fun() {
             val gen = ++generation
             val r = newRecognizer()
             instances++
@@ -148,38 +183,27 @@ class InAppVoiceInput(
                 override fun onResults(text: String?) {
                     if (stale()) return
                     VoiceLog.event("results n=$instances len=${text?.length ?: -1} partial_len=${lastPartial?.length ?: -1}")
-                    val best = text ?: lastPartial
-                    finish(if (best.isNullOrBlank()) VoiceEvent.Failed(WgoFailure.NotFound) else VoiceEvent.Final(best))
+                    val best = text?.takeIf { it.isNotBlank() } ?: lastPartial
+                    if (!best.isNullOrBlank()) return finish(VoiceEvent.Final(best))
+                    // Empty results with nothing heard are a no match: same quiet-restart rule.
+                    when (val action = RecognizerErrors.decide(RecognizerErrors.NO_MATCH, attempt())) {
+                        is Action.Restart -> {
+                            VoiceLog.event("empty_results n=$instances action=$action")
+                            restart(action)
+                        }
+                        else -> finish(VoiceEvent.Failed(WgoFailure.NotFound))
+                    }
                 }
 
                 override fun onError(code: Int) {
                     if (stale()) return
-                    val action = RecognizerErrors.decide(
-                        code, RecognizerErrors.Attempt(online, tagIndex, tags.size, freshRetryUsed, lastPartial)
-                    )
+                    val action = RecognizerErrors.decide(code, attempt())
                     VoiceLog.event(
                         "error code=$code n=$instances ready=$ready speech=$speechStarted online=$online " +
                             "tag=${tags[tagIndex]} attempt_ms=${now() - attemptStartedAt} action=$action"
                     )
                     when (action) {
-                        is Action.Restart -> {
-                            if (!online && action.online) memory.markNoOfflineModel(language)
-                            online = action.online
-                            tagIndex = action.tagIndex
-                            if (action.consumesFreshRetry) freshRetryUsed = true
-                            ready = false // the next instance has to report ready again
-                            speechStarted = false // the silence cap starts over with the new instance
-                            if (readySent) {
-                                // The UI said "speak now" but nothing is listening any more: back to preparing.
-                                readySent = false
-                                trySend(VoiceEvent.Restarting)
-                            }
-                            release()
-                            restartJob = launch {
-                                pause(RecognizerErrors.RESTART_DELAY_MS)
-                                if (!finished) begin()
-                            }
-                        }
+                        is Action.Restart -> restart(action)
                         is Action.Final -> finish(VoiceEvent.Final(action.text))
                         is Action.Fail -> finish(VoiceEvent.Failed(action.failure))
                     }
@@ -205,7 +229,12 @@ class InAppVoiceInput(
                     stopAt == 0L -> {
                         val overTime = t - readyAt >= MAX_LISTEN_MS
                         val silent = speechStarted && t - lastVoice >= SILENCE_AFTER_SPEECH_MS
-                        if (overTime || silent) {
+                        val quiet = if (overTime) RecognizerErrors.onListeningCap(attempt()) as? Action.Restart else null
+                        if (quiet != null) {
+                            // The cap with nothing heard: start over silently while the quiet budget lasts.
+                            VoiceLog.event("stop reason=cap_quiet n=$instances session_ms=${t - started} action=$quiet")
+                            restart(quiet)
+                        } else if (overTime || silent) {
                             VoiceLog.event("stop reason=${if (overTime) "cap" else "silence"} session_ms=${t - started}")
                             stopAt = t
                             recognizer?.stop()
@@ -235,8 +264,9 @@ class InAppVoiceInput(
     /** The outcome for the log: the event kind and the transcript LENGTH only (never its text). */
     private fun outcomeOf(event: VoiceEvent): String = when (event) {
         is VoiceEvent.Final -> "final len=${event.text.length}"
-        is VoiceEvent.Failed -> "failed=${event.failure::class.simpleName ?: event.failure}"
-        else -> event::class.simpleName ?: "other"
+        // data object / data class toString() is a literal, so it survives R8 renaming (simpleName did not).
+        is VoiceEvent.Failed -> "failed=${event.failure}"
+        else -> event.toString()
     }
 
     companion object {

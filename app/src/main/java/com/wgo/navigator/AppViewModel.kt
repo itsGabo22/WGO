@@ -226,7 +226,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 voiceLevel.value = 0f
                 _micState.value = MicState.Idle
                 // What the user sees: the error surface (or nothing for a cancel).
-                VoiceLog.event("ui_error shown=${event.failure != WgoFailure.Cancelled} failure=${event.failure::class.simpleName}")
+                VoiceLog.event("ui_error shown=${event.failure != WgoFailure.Cancelled} failure=${event.failure}")
                 when (event.failure) {
                     WgoFailure.Cancelled -> Unit
                     WgoFailure.NoPermission -> _micDenied.value = true
