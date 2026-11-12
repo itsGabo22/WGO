@@ -44,6 +44,14 @@ Hint synonyms: "Panamericana" also matches "Pan-American", "Pan American", "Av. 
 - Category words in the query ("restaurante", "droguería", "universidad", "hotel", "iglesia"...) are matched against the
   candidate's category instead of its name and give a soft boost; they are not required in the name.
 
+## Nicknames and category words (P7, found on the watch)
+
+- A Pasto nickname ("la plaza", "el terminal", "Torobajo"; `PlaceAliases`) becomes a search string verified on
+  Nominatim, so it is asked there first (hits within 25 km win); offline, or with no near hit, the normal order applies.
+  Measured: "llévame a la plaza de Nariño" had picked "Drogueria Plaza De Nariño", a pharmacy, from the local index.
+- A candidate whose name has a category word the user did not say ("Droguería X" for "X") is never an exact match
+  (tier 2 at most).
+
 ## Ranking
 
 Candidates from all sources are scored and sorted by, in order:
