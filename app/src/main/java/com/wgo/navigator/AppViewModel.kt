@@ -100,6 +100,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     /** The intro timeline ended (or the reduce-motion hold elapsed): show screen 01. */
     fun finishIntro() {
         if (_screen.value == ScreenState.Intro) _screen.value = ScreenState.Listening
+        // Phase E experiment: the warm recognizer is released 8 s after the intro if the mic was not pressed.
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(8_000)
+            com.wgo.navigator.voice.RecognizerWarmUp.stop()
+        }
+    }
+
+    init {
+        if (_screen.value == ScreenState.Intro) {
+            com.wgo.navigator.voice.RecognizerWarmUp.start(application, "es-CO")
+        }
     }
 
     /** Test builds only: replays the intro in a warm process so it can be measured without cold-start noise. */
