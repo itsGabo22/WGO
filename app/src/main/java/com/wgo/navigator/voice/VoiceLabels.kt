@@ -31,7 +31,10 @@ object VoiceLabels {
     fun shortName(voiceName: String, language: Language): String {
         val parts = voiceName.split('-', '_')
         if (parts.size >= 2 && parts[0].length == 2 && parts[1].length in 2..3) {
-            return localeName("${parts[0]}-${parts[1].uppercase(Locale.ROOT)}", language)
+            // The region alone, like the picker: "Español (Estados Unidos)" did not fit the 156 dp row on the watch.
+            val tag = "${parts[0]}-${parts[1].uppercase(Locale.ROOT)}"
+            val region = Locale.forLanguageTag(tag).getDisplayCountry(ui(language))
+            return region.ifEmpty { localeName(tag, language) }.replaceFirstChar { it.titlecase(ui(language)) }
         }
         return voiceName
     }

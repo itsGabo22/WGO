@@ -124,6 +124,7 @@ class SpokenGuidanceTest {
         assertEquals("Colombia 1", VoiceLabels.label(VoiceInfo("x", "es-CO", false), 1, Language.ES))
         assertEquals("Estados Unidos 2", VoiceLabels.label(VoiceInfo("x", "es-US", false), 2, Language.ES))
         assertEquals("Español 1", VoiceLabels.label(VoiceInfo("x", "es", false), 1, Language.ES))
-        assertEquals("Spanish (United States)", VoiceLabels.shortName("es-us-x-sfb-local", Language.EN))
+        assertEquals("United States", VoiceLabels.shortName("es-us-x-sfb-local", Language.EN))
+        assertEquals("Estados Unidos", VoiceLabels.shortName("es-US-SMTf00", Language.ES))
     }
 }
