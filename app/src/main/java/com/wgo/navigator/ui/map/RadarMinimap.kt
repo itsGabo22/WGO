@@ -63,7 +63,11 @@ fun RadarMinimap(
      * North up (P8, the default): the map never turns, the chevron turns to [bearing] and the raster street names stay
      * upright. False: heading up, the map turns and the raster names are hidden (upright landmark labels instead).
      */
-    northUp: Boolean = false
+    northUp: Boolean = false,
+    /** Heading up only: the landmark rows the upright labels are picked from (empty: none). */
+    landmarks: List<com.wgo.navigator.places.IndexedPlace> = emptyList(),
+    /** The controls drawn over the map (reference dp): landmark labels keep clear of them. */
+    labelBlocked: List<LabelBlock> = emptyList()
 ) {
     val palette = Wgo.palette
     val dark = palette === NightPalette
@@ -142,6 +146,11 @@ fun RadarMinimap(
             clock = clock,
             chevronDegrees = if (northUp) bearing else 0f
         )
+
+        // Heading up (P8): upright landmark names replace the raster labels, which would turn upside down.
+        if (!northUp && tileLayer == null) {
+            LandmarkLabelLayer(landmarks, center, heading, zoom, tileSize, size, anchor, labelBlocked)
+        }
 
         if (dark && style.id.dimsInNight()) {
             Box(Modifier.fillMaxSize().background(palette.canvas.copy(alpha = style.id.nightDimAlpha())))

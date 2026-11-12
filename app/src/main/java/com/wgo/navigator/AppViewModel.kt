@@ -270,8 +270,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
      * My places, then the offline index (loaded on the first search), then Nominatim; the language model only expands
      * nicknames as text or picks among real candidates by id (docs/PLACE_SEARCH.md).
      */
+    private val offlineIndex = PlaceIndex.fromAssets(application)
+
+    /** The same offline index, for the heading-up map's landmark labels (P8; loaded off the main thread there). */
+    val landmarkIndex: PlaceIndex get() = offlineIndex
+
     private val placeResolver = PlaceResolver(
-        index = PlaceIndex.fromAssets(application),
+        index = offlineIndex,
         online = OnlinePlaceSearch { q, center, bounded -> geocoder.once(q, center, pipelineLanguage, ONLINE_RESULTS, bounded) },
         privatePlaces = MyPlaces.fromAssets(application),
         chooser = LlmPlaceChooser.create(application, WgoUserAgent.plain, aiBudget)

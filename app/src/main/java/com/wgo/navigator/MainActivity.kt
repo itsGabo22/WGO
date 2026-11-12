@@ -423,6 +423,7 @@ class MainActivity : ComponentActivity() {
                                     radarSource = radar,
                                     driving = radar?.mode == TravelMode.Drive,
                                     northUp = mapOrientation == MapOrientation.NorthUp,
+                                    landmarkIndex = appViewModel.landmarkIndex,
                                     destination = destination,
                                     endConfirm = endConfirm,
                                     onEnd = appViewModel::endNavigation,

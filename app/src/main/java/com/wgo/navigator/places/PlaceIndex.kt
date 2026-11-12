@@ -46,6 +46,9 @@ class PlaceIndex(private val open: () -> InputStream) {
     private val mutex = Mutex()
 
     val isLoaded: Boolean get() = entries != null
+
+    /** Every row (empty until loaded): the heading-up map picks its landmark labels from it (P8). */
+    val rows: List<IndexedPlace> get() = entries.orEmpty()
     val size: Int get() = entries?.size ?: 0
 
     /** Loads the asset once (IO dispatcher). False when it is missing or unreadable (the search then goes online). */

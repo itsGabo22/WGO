@@ -131,7 +131,9 @@ fun ScreenActiveNavigation(
     /** Driving trip: CANCELAR gets the 60 real dp `hit-drive` touch height. */
     driving: Boolean = false,
     /** P8: north up (default; the map never turns) or heading up. */
-    northUp: Boolean = true
+    northUp: Boolean = true,
+    /** The offline places index: heading up draws upright landmark labels from it (P8). */
+    landmarkIndex: com.wgo.navigator.places.PlaceIndex? = null
 ) {
     if (navState != null &&
         (locationPermission == PermissionStatus.Denied || locationPermission == PermissionStatus.PermanentlyDenied)
@@ -167,6 +169,14 @@ fun ScreenActiveNavigation(
         // Explore mode (spec section 7): UI state only, dropped with this screen (trip end, ambient).
         val explore = remember { ExploreController { SystemClock.elapsedRealtime() } }
         var tileSize by remember { mutableDoubleStateOf(RadarProjection.DEFAULT_TILE_SIZE_PX) }
+        // The HUD state last shown (for the landmark labels' keep-clear boxes; set after the HUD is composed).
+        var hudShown by remember { mutableStateOf(HudMode.Compact) }
+        // Heading up only: the index is loaded off the main thread (once per process) and its landmark rows kept.
+        val landmarks by androidx.compose.runtime.produceState(emptyList<com.wgo.navigator.places.IndexedPlace>(), northUp, landmarkIndex) {
+            val index = landmarkIndex
+            value = if (northUp || index == null || !index.ensureLoaded()) emptyList()
+            else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.wgo.navigator.ui.map.LandmarkLabels.candidates(index.rows) }
+        }
 
         // Z-Layer 0: RADAR MINIMAP. Under an opaque surface its loops stop (no frames for an invisible sweep).
         CompositionLocalProvider(LocalWgoReduceMotion provides (reduceMotion || covered)) {
@@ -182,6 +192,8 @@ fun ScreenActiveNavigation(
                 viewCenter = explore.viewCenter(radar.location),
                 viewBearing = explore.viewBearing(radar.bearing),
                 northUp = northUp,
+                landmarks = landmarks,
+                labelBlocked = landmarkLabelBlocks(hudShown, explore.exploring),
                 onTileSize = { tileSize = it }
             )
         }
@@ -272,6 +284,8 @@ fun ScreenActiveNavigation(
                 nowMs = SystemClock.elapsedRealtime()
             )
             val hud = tracker.update(input)
+            val shownNow = forcedHud ?: hud.shown
+            androidx.compose.runtime.SideEffect { hudShown = shownNow }
             val windowEnd = hud.newRouteAtMs
             LaunchedEffect(windowEnd) {
                 val left = HudRules.rerouteWindowLeftMs(hud, SystemClock.elapsedRealtime()) ?: return@LaunchedEffect
@@ -398,6 +412,18 @@ internal fun MapControlButton(
             Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(iconSize))
         }
     }
+}
+
+/**
+ * The controls over the map, in reference dp (spec section 7 geometry): heading-up landmark labels keep clear of them
+ * (P8). The HUD box follows the state shown; the recenter button only while exploring.
+ */
+internal fun landmarkLabelBlocks(hud: HudMode, exploring: Boolean): List<com.wgo.navigator.ui.map.LabelBlock> = buildList {
+    add(if (hud == HudMode.Expanded) com.wgo.navigator.ui.map.LabelBlock(38.5f, 30f, 188.5f, 120f) else com.wgo.navigator.ui.map.LabelBlock(57.5f, 22f, 169.5f, 58f))
+    add(com.wgo.navigator.ui.map.LabelBlock(21.5f, 130f, 61.5f, 170f)) // zoom -
+    add(com.wgo.navigator.ui.map.LabelBlock(165.5f, 130f, 205.5f, 170f)) // zoom +
+    add(com.wgo.navigator.ui.map.LabelBlock(70.5f, 176f, 156.5f, 208f)) // CANCELAR
+    if (exploring) add(com.wgo.navigator.ui.map.LabelBlock(93.5f, 88f, 133.5f, 128f)) // recenter
 }
 
 /** The attribution shows this long when the trip's map first appears (spec 9.1, P8). */
