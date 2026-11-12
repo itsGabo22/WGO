@@ -85,6 +85,28 @@ WGO is a **100% native Wear OS app** (Kotlin + Jetpack Compose for Wear OS; no w
 * **Windows tooling**: PowerShell 5.1 splits `git commit -m` at double quotes (use `git commit -F <file>`); most
   sources are CRLF, so scripted string replacements must match `\r\n` (or use an editor that does).
 
+## Rules learned in P8
+
+* **Voice**: the release build logs the voice path under `WgoVoice` (timings, codes, lengths; never a transcript): read
+  it with `adb logcat -s WgoVoice` before guessing. No recognizer error reaches the user before a word is transcribed
+  (quiet restarts); the screen stays on while a voice session runs; a recognizer process held in the system's restart
+  backoff is revived through its package's TTS engine.
+* **Coroutines on ART**: a large `suspend fun` whose local `suspend fun` captures mutable locals passed the JVM tests and
+  crashed at launch on the device (`VerifyError`). Keep per-call state in a small class, and launch the debug build on
+  the emulator after refactoring suspend code; unit tests are not enough.
+* **Places and the model**: the model may only expand a nickname into official names (text) or pick among real
+  candidates by id; ids are validated, coordinates and distances are never sent, at most 2 model calls per utterance.
+  Every Pasto nickname must resolve to a real Nominatim record and/or index row before it is added.
+* **Map**: north up is the default (raster street names stay upright); heading up hides the raster names and draws
+  upright landmark labels clear of every control. CARTO labels are `@2x` (2 screen px per tile px on the Watch5 Pro);
+  the base stays 1x; budget 160 KB/km.
+* **Long texts**: use `WgoMarqueeText` (2 cycles, static under reduced motion), never a bare ellipsis the owner cannot
+  read.
+* **Watch testing**: the benchmark build (`com.wgo.navigator.bench`) takes utterances with
+  `am start --activity-single-top ... --es wgo_utterance_b64 <b64>`; wake the screen (`KEYCODE_WAKEUP`) before each
+  step, the watch is not always on its charger. Uninstall the bench app afterwards.
+* **Lint**: the `ProduceStateDoesNotAssignValue` check misreads conditional assignments; use `LaunchedEffect` + state.
+
 ## Git
 
 * Atomic Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...), one concern per commit.
