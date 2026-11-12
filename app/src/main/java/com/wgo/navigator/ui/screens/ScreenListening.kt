@@ -92,7 +92,8 @@ fun ScreenListening(
     transcript: String = "",
     level: (() -> Float)? = null,
     clock: WgoClock = rememberWgoClock(),
-    onMicPress: (() -> Unit)? = null
+    onMicPress: (() -> Unit)? = null,
+    sayAgain: Boolean = false
 ) {
     val palette = Wgo.palette
     val language = LocalLanguage.current
@@ -166,16 +167,24 @@ fun ScreenListening(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
                     )
-                    // Speak-now cue: "HABLA AHORA" until the first words arrive, then "ESCUCHANDO…".
+                    // Speak-now cue: "HABLA AHORA" ("DILO DE NUEVO" on the P9 fallback rung) until the first words
+                    // arrive, then "ESCUCHANDO…".
                     MicState.Listening -> Text(
-                        text = string(if (transcript.isEmpty()) StringKey.SPEAK_NOW else StringKey.LISTENING_LABEL),
+                        text = string(
+                            when {
+                                transcript.isNotEmpty() -> StringKey.LISTENING_LABEL
+                                sayAgain -> StringKey.SAY_IT_AGAIN
+                                else -> StringKey.SPEAK_NOW
+                            }
+                        ),
                         color = palette.primaryInk,
                         style = WgoType.labelMd,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
                     )
+                    // P9: the captured speech is being transcribed.
                     MicState.Processing -> Text(
-                        text = string(StringKey.TITLE_ROUTING),
+                        text = string(StringKey.STAGE_INTERPRETING),
                         color = palette.primaryInk,
                         style = WgoType.labelMd,
                         textAlign = TextAlign.Center,

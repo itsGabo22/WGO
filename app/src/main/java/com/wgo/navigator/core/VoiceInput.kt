@@ -28,6 +28,15 @@ sealed interface VoiceEvent {
 
     /** The system speech dialog is showing (fallback strategy); its result arrives as [Final] or [Failed]. */
     data object AwaitingSystem : VoiceEvent
+
+    /** P9: the captured speech is being transcribed (the UI shows "understanding"); [Final] or [Failed] follows. */
+    data object Transcribing : VoiceEvent
+
+    /**
+     * P9: the cloud transcription failed and the system recognizer takes over: the UI goes back to "preparing" and,
+     * at the next [Ready], asks the user to say it again.
+     */
+    data object SayAgain : VoiceEvent
 }
 
 /** Speech to text. One session at a time; collecting [listen] starts it, cancelling the collection stops it. */

@@ -25,6 +25,9 @@ sealed interface WgoFailure {
     /** A local engine (the speech recognizer) could not be started, even after a silent retry. */
     data object NotStarted : WgoFailure
 
+    /** The microphone heard no speech (P9 capture): nothing was sent anywhere. */
+    data object NoSpeech : WgoFailure
+
     /** The caller (or the user) cancelled. */
     data object Cancelled : WgoFailure
 }

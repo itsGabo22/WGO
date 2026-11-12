@@ -27,6 +27,7 @@ import com.wgo.navigator.voice.SpeakNowCue
 import com.wgo.navigator.voice.VoiceLog
 import com.wgo.navigator.voice.SystemVoiceDialog
 import com.wgo.navigator.voice.VoiceInputChain
+import com.wgo.navigator.voice.VoiceLadder
 import com.wgo.navigator.voice.VoiceLevel
 import com.wgo.navigator.voice.VoiceStrategy
 import com.wgo.navigator.ai.AiCallBudget
@@ -137,20 +138,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     // ---- Voice (one session per tap; created on demand and destroyed on every end) ----
 
     private val permissions = PermissionBroker.get(application)
-    private val voice = VoiceInputChain(application)
+    /**
+     * P9 voice ladder: the app's own capture + cloud transcription first, the P8 recognizer chain as the fallback
+     * (docs/design/WGO_DESIGN_SYSTEM.md, "Instant-capture voice input").
+     */
+    private val voice = VoiceLadder(
+        system = VoiceInputChain(application),
+        cloud = null, // the transcription client is plugged in with the cloud rung
+        cloudBlocker = { null }
+    )
+
+    /** When the current session started (manual stop ignores the press that started it). */
+    private var sessionPressAt = 0L
 
     /** True while a recognizer session is running (from start until its flow completes). */
     @Volatile
     private var sessionActive = false
 
     /** The system speech dialog requests, launched by the Activity (fallback strategy). */
-    val voiceDialog: SystemVoiceDialog get() = voice.dialog
+    val voiceDialog: SystemVoiceDialog get() = voice.system.dialog
 
     /** Live voice level, written here and read only in the MicOrb draw phase. */
     val voiceLevel = VoiceLevel()
 
     private val _transcript = MutableStateFlow("")
     val transcript: StateFlow<String> = _transcript.asStateFlow()
+
+    /** P9: the cloud transcription failed and the system recognizer listens again ("DILO DE NUEVO"). */
+    private val _sayAgain = MutableStateFlow(false)
+    val sayAgain: StateFlow<Boolean> = _sayAgain.asStateFlow()
 
     val micPermission: StateFlow<PermissionStatus> = permissions.status
         .map { it.getValue(WgoPermission.MICROPHONE) }
@@ -171,17 +187,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     fun onMicTapped() {
         if (_micState.value != MicState.Idle || listenJob?.isActive == true) return
         _transcript.value = ""
+        _sayAgain.value = false
         speakNow.onPress()
-        VoiceLog.press(" warm=${RecognizerWarmUp.isWarm}")
-        _micState.value = MicState.Preparing
+        sessionPressAt = SystemClock.elapsedRealtime()
+        val cloud = voice.usesCloud()
+        VoiceLog.press(" warm=${RecognizerWarmUp.isWarm} rung=${if (cloud) "cloud" else "system"}")
+        // P9: with the cloud rung and the permission already granted, "speak now" shows at the press and the recorder
+        // opens at once on a background thread (it takes 0.4-0.9 s to deliver audio on the Galaxy Watch5 Pro).
+        val instant = cloud && permissions.status.value.getValue(WgoPermission.MICROPHONE) == PermissionStatus.Granted
+        _micState.value = if (instant) MicState.Listening else MicState.Preparing
         _haptics.tryEmit(HapticEvent.Tick) // spec section 8: starts listening (the press is the start)
+        if (instant) VoiceLog.event("ui_speak_now at_press=true")
         listenJob = viewModelScope.launch {
-            // Let the preparing frame draw first: the recognizer setup below runs on the main thread. The first frame
-            // callback can run before Compose draws the new state, so wait for the next one too (~16-32 ms).
-            awaitFrame()
-            awaitFrame()
-            // RECORD_AUDIO is asked lazily, and only for the in-app recognizer (the system dialog records by itself).
-            if (voice.strategy() == VoiceStrategy.InApp) {
+            if (!instant) {
+                // Let the preparing frame draw first: the recognizer setup below runs on the main thread. The first
+                // frame callback can run before Compose draws the new state, so wait for the next one too (~16-32 ms).
+                awaitFrame()
+                awaitFrame()
+            }
+            // RECORD_AUDIO is asked lazily, for the app's own capture and the in-app recognizer (the system dialog
+            // records by itself).
+            if (cloud || voice.systemStrategy() == VoiceStrategy.InApp) {
                 val status = permissions.ensure(WgoPermission.MICROPHONE)
                 if (status != PermissionStatus.Granted) {
                     _micState.value = MicState.Idle
@@ -201,12 +227,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         }
     }
 
+    /**
+     * Pointer-down on the orb. While the app's own capture is recording, a NEW press ends it now (manual stop; what was
+     * heard is still transcribed); otherwise it starts a session like [onMicTapped]. The release of the press that
+     * started the session goes to [onMicTapped], which ignores it.
+     */
+    fun onMicPressed() {
+        val sinceStart = SystemClock.elapsedRealtime() - sessionPressAt
+        if (sessionActive && _micState.value == MicState.Listening && !_sayAgain.value && sinceStart >= MANUAL_STOP_GUARD_MS) {
+            VoiceLog.event("manual_stop since_press_ms=$sinceStart")
+            voice.requestStop()
+            return
+        }
+        onMicTapped()
+    }
+
     private fun onVoiceEvent(event: VoiceEvent) {
         when (event) {
             // (The Tick already came with the press.)
             VoiceEvent.Ready -> {
                 val preparedMs = speakNow.preparingMs()
-                val cue = speakNow.onReady()
+                // The fallback rung always asks with a Tick (the user has to say it again).
+                val cue = speakNow.onReady() || _sayAgain.value
                 _micState.value = MicState.Listening
                 if (cue) _haptics.tryEmit(HapticEvent.Tick) // spec section 8: mic ready after a slow start
                 // The offline places index loads while the user speaks (once per process). Started at ready, not at the
@@ -222,6 +264,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 VoiceLog.event("ui_back_to_preparing")
             }
             VoiceEvent.AwaitingSystem -> _micState.value = MicState.Waiting
+            VoiceEvent.Transcribing -> {
+                voiceLevel.value = 0f
+                _micState.value = MicState.Processing
+                VoiceLog.event("ui_transcribing")
+            }
+            VoiceEvent.SayAgain -> {
+                voiceLevel.value = 0f
+                _sayAgain.value = true
+                _micState.value = MicState.Preparing
+                speakNow.onPress()
+                VoiceLog.event("ui_say_again")
+            }
             is VoiceEvent.Level -> voiceLevel.value = event.value
             is VoiceEvent.Partial -> _transcript.value = event.text
             is VoiceEvent.Final -> onTranscript(event.text, null)
@@ -236,6 +290,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                     WgoFailure.Unavailable -> fail(PipelineError.VoiceUnavailable, Step.Listen)
                     WgoFailure.Offline -> fail(PipelineError.Offline, Step.Listen)
                     WgoFailure.NotStarted -> fail(PipelineError.MicStart, Step.Listen)
+                    WgoFailure.NoSpeech -> fail(PipelineError.NotHeard, Step.Listen)
                     else -> fail(PipelineError.NotUnderstood, Step.Listen)
                 }
             }
@@ -491,7 +546,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     fun retry() {
         when (_error.value) {
             PipelineError.MicPermission, PipelineError.VoiceUnavailable, PipelineError.NotUnderstood,
-            PipelineError.PlaceNotFound, PipelineError.AiUnavailable, PipelineError.MicStart, null -> runStep(Step.Listen)
+            PipelineError.PlaceNotFound, PipelineError.AiUnavailable, PipelineError.MicStart, PipelineError.NotHeard, null -> runStep(Step.Listen)
             PipelineError.LocationPermission, PipelineError.RouteUnavailable -> runStep(Step.Route)
             PipelineError.Offline, PipelineError.Timeout -> runStep(failedStep)
         }
@@ -536,6 +591,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         voice.cancel()
         voiceLevel.value = 0f
         _transcript.value = ""
+        _sayAgain.value = false
         _micState.value = MicState.Idle
     }
 
@@ -758,6 +814,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
     private companion object {
         const val ORIGIN_TIMEOUT_MS = 8_000L
+
+        /** A press this soon after the one that started the capture is not a manual stop (P9). */
+        const val MANUAL_STOP_GUARD_MS = 300L
         /** Hits asked from Nominatim per request; the resolver keeps at most two candidates. */
         const val ONLINE_RESULTS = 3
 

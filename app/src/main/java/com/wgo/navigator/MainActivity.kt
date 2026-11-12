@@ -328,6 +328,7 @@ class MainActivity : ComponentActivity() {
                             ScreenState.Listening -> {
                                 val transcript by appViewModel.transcript.collectAsState()
                                 val micPermission by appViewModel.micPermission.collectAsState()
+                                val sayAgain by appViewModel.sayAgain.collectAsState()
                                 if (micDenied) {
                                     PermissionDenied(
                                         permission = WgoPermission.MICROPHONE,
@@ -340,12 +341,13 @@ class MainActivity : ComponentActivity() {
                                     ScreenListening(
                                         micState = micState,
                                         onMicClick = appViewModel::onMicTapped,
-                                        onMicPress = appViewModel::onMicTapped,
+                                        onMicPress = appViewModel::onMicPressed,
                                         onCancel = { appViewModel.cancelListening("chip") },
                                         onOpenSettings = appViewModel::openSettings,
                                         onToggleLanguage = settingsViewModel::toggleLanguage,
                                         transcript = transcript,
-                                        level = { level.value }
+                                        level = { level.value },
+                                        sayAgain = sayAgain
                                     )
                                 }
                             }

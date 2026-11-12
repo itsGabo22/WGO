@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLongArray
 object WgoMetrics {
     enum class Counter {
         LOCATION_FIX, LOCATION_REQ_START, LOCATION_REQ_STOP, RECOGNIZER_SESSION,
-        AI_CALL, AI_COOLDOWN, REROUTE, MAP_INVALIDATE
+        AI_CALL, AI_COOLDOWN, REROUTE, MAP_INVALIDATE, AUDIO_CAPTURE
     }
 
     enum class Net { GEOCODE, ROUTE, AI }

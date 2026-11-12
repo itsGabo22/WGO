@@ -13,7 +13,9 @@ enum class PipelineError {
     /** Connected, but the server did not answer in time (read timeout). Retry repeats the failed step. */
     Timeout,
     /** The speech recognizer could not be started (busy or disconnected even after a silent retry). */
-    MicStart;
+    MicStart,
+    /** P9: the microphone heard no speech within 6 s ("No te oí"); nothing was sent. */
+    NotHeard;
 
     companion object {
         /**
