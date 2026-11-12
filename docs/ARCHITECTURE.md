@@ -111,7 +111,7 @@ Nothing is logged outside debug builds, and debug logs never contain transcripts
 |---|---|---|
 | `debug` | development | debug receivers (`src/debug`), `WgoMetrics`, test hooks |
 | `benchmark` | performance runs | `initWith(release)`, not debuggable, R8 + resource shrinking, debug-signed, id suffix `.bench` (installs next to debug); no receivers, no metrics; test hooks only through activity extras |
-| `release` | not shipped yet | minification still off |
+| `release` | the owner's own watch (not published) | P7: R8 + resource shrinking, 3.10 MB, cold start 1.07-1.62 s on the Galaxy Watch5 Pro; signed with the debug key; contains the `local.properties` keys, so never distribute it (`docs/RELEASE_CHECKLIST.md`) |
 
 ## Running and testing on the emulator
 
@@ -164,6 +164,21 @@ counters below stand in for it. The real Galaxy Watch5 Pro is the final judge.
 | PSS growth minute 1 -> minute 10 | <= 15 MB | +3.0 MB (moving drive, 111.4 -> 114.4 MB); +0.3 MB over 14 min of stationary navigation | PASS |
 | logcat `*:E` | clean | 0 crash-buffer entries, 0 error lines from the app process in the buffers checked | PASS (partial: buffers were cleared between runs) |
 | Benchmark APK / cold start | (report) | 2.52 MB; cold start median 366 ms (debug 4024 ms). P6-A: 2.536 MB with the service, ongoing activity and androidx.wear (+16 KB); cold start not re-measured | reported |
+
+P7 measurements (Galaxy Watch5 Pro unless noted, 2026-11-11):
+
+| budget | target | measured | result |
+|---|---|---|---|
+| Home idle | 0 location / 0 network / 0 recogniser / 0 TTS | identical snapshots 30 s apart; no service; the intro's recognizer warm-up released 8 s after the intro (`recognizer_session=0`) | PASS |
+| Navigating | 1 location request + 1 service | `locActive=1`, 1 service; after END 0 / 0 (`reason=Ended`) | PASS |
+| PSS while navigating | <= 140 MB | 97.4 -> 99.9 MB over the first minute (debug) | PASS (minute 9 not re-measured) |
+| Map tiles (CARTO base + labels at 1x) | <= 100 KB/km | 80.8 KB/km, 2.78 km at 60 km/h, cold cache (2x labels: 109) | PASS |
+| Jank, navigation with two tile layers | <= 3 % | emulator benchmark build, legacy: 0.00 / 2.68 / 2.43 %, then 0.22 / 0.22 / 1.32 % | PASS |
+| Arrival animation (2.4 s) | report | emulator: about 22 ms per frame while it plays (the intro baseline the same day: 22 ms, 100 % legacy jank), 0 frames once it ends; not measured on the watch | emulator-limited |
+| Places index load | report | benchmark build ~0.5 s, +4 MB heap; debug build 20-30 s | reported |
+| Place search | <= 3 Nominatim requests | owner places 0-1 requests (index), not-found 2 | PASS |
+| TTS | report | Samsung engine, 26 voices (es-US, es-ES offline; no es-CO), init 1.2-4.3 s, 8 phrases on a drive all `SUCCESS` | reported (speech not heard) |
+| Lint / tests | 0 errors / all pass | lint 0 errors, 0 NewApi, 13 warnings; 264+ unit tests pass | PASS |
 
 Counters for a 6.5-minute moving drive (3.6 km at 36 km/h; the planned 10-minute run was cut short by the test harness): 192 fixes, 191 engine updates, 1 geocode (551 B), 1 route (7.7 KB), 0 reroutes, 178 map re-projections, about 500 KB received and 20 KB sent by the app in total (mostly map tiles).
 
