@@ -107,6 +107,25 @@ WGO is a **100% native Wear OS app** (Kotlin + Jetpack Compose for Wear OS; no w
   step, the watch is not always on its charger. Uninstall the bench app afterwards.
 * **Lint**: the `ProduceStateDoesNotAssignValue` check misreads conditional assignments; use `LaunchedEffect` + state.
 
+## Rules learned in P9
+
+* **Voice ladder**: rung 1 is the app's own capture (`audio/AudioCapture` + `SpeechEndpointer`) with cloud
+  transcription (`voice/TranscriptionClient`, Whisper on the LLM provider); rung 2 is the P8 `VoiceInputChain`, which
+  `VoiceLadder` wraps and must not change. Silence ends with "No te oí" and no request; any other cloud failure goes to
+  rung 2. The microphone is held only between a press and the end of speech, with the Activity visible, released on
+  every exit (on its own thread: `AudioRecord.stop` blocked 1.1 s on the watch); never a microphone service type.
+* **Audio privacy**: audio only in memory (never on disk), buffers zeroed after the upload; only that press's clip is
+  sent; the Whisper `prompt` holds only `PlaceAliases.landmarkNames` (never my places); `WgoVoice` logs sizes, codes,
+  times and lengths only (a test asserts no key, text, URL or audio in the log).
+* **Whisper on silence**: it invents text ("Gracias.", or the prompt read back); keep `TranscriptGuard` and the
+  endpointer in front of the network; `whisper-large-v3-turbo` reports `no_speech_prob` 0, so the default is the full
+  model.
+* **Watch audio facts (Galaxy Watch5 Pro)**: audio flows 0.7-1.0 s after `AudioRecord` creation (`startRecording`
+  0.35-0.7 s, then ~200 ms of zero samples); no NoiseSuppressor/AGC/AEC; the first HTTPS request of a process takes
+  ~2.3 s (prewarm at speech start); uploads over the watch's Wi-Fi vary 0.45-2.4 s for 30-150 KB.
+* **Emulator microphone**: the AVD's `hw.audioInput` is the PC microphone; run `adb -s emulator-5554 emu avd
+  hostmicoff` before any capture test so the owner's room is never recorded.
+
 ## Git
 
 * Atomic Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...), one concern per commit.
