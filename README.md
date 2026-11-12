@@ -17,9 +17,12 @@ and `docs/THIRD_PARTY_DATA.md`).
 
 ## What it does
 
-- **Voice first**: the watch's own speech recognizer, with quiet restarts so the first press does not end in an error
-  before you speak; easy requests are understood on the watch, hard ones by a language model (text only, never
-  coordinates).
+- **Voice first, instant mic (P9)**: "HABLA AHORA" shows within 50 ms of the press; the app records the utterance
+  itself, finds the end of speech on the watch and has it transcribed in the cloud (Whisper on Groq, same key as the
+  language model; text about 1.1 s after you stop talking, median on the watch). Silence sends nothing ("No te oí");
+  invented silence phrases are rejected; if the cloud fails, the watch's own recognizer takes over ("DILO DE NUEVO").
+  A one-time notice explains what is sent; Settings > RECONOCIMIENTO switches to SISTEMA (the recognizer only).
+  Easy requests are understood on the watch, hard ones by a language model (text only, never coordinates).
 - **Real places**: your private places, an offline index of 6,285 Pasto places (Overture), then OpenStreetMap search;
   "X de la Y" uses Y as a landmark hint; far results are never picked first; Pasto nicknames ("la cooperativa",
   "la terminal", "Unicentro") and a landmark prior; the language model may only expand a nickname into official
