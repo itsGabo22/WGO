@@ -270,6 +270,50 @@ Known misses: the END NAVIGATION? surface spends 2-3 slow UI-thread frames compo
 
 P6-A froze the radar data under the modal surfaces; P6-B measured it on the benchmark build (emulator, host GPU, 3 interleaved rounds): END NAVIGATION? 0.00 / 0.00 / 0.43 % legacy jank with the freeze and the same without, GPS LOST 0.88 / 0.22 / 0.00 % with and 0.00 % x3 without, so it was dropped (loops still stop under the surfaces). Fixed in P6-B (was an open issue on the real watch): the first microphone press after a cold start could wait about 6 s (the system recognizer process cold-starts) and then show "Sin internet": the offline recognizer has no es-CO pack (error 12) and the online retry raced the service unbinding (error 11, mapped to Offline); RETRY works.
 
+### Instant-capture mic (P9 live session, Galaxy Watch5 Pro, release build, 2026-11-12)
+
+Before (STEP 0, P8 release, 3 automated cold presses, nobody speaking): the recognizer got ready 2.17 / 2.36 / 2.17 s
+after the press, then failed with codes 7, 2 and 12 and quiet restarts; the sessions ended after 19-26 s with "not
+understood" twice and "no internet" once (Wi-Fi was up). P8's live table (above): text 4.6-26.7 s after the press.
+
+After (P9, the owner pressing and speaking; times from the press, `adb logcat -s WgoVoice`). "drawn" = the frame
+that shows HABLA AHORA; "audio" = first non-zero sample; "end->text" = end of speech (endpointer) to the transcript.
+
+| press | drawn | audio | speech start | clip | upload | end->text | rung / outcome | error shown |
+|---|---|---|---|---|---|---|---|---|
+| cold, first press (notice) | 278 ms | 0.83 s | - | - | - | - | the owner pressed the mic after ACEPTAR, which stopped the capture the notice had started | "No te oí" (fixed: c2fc305) |
+| cold | 40 ms | 1.00 s | 1.66 s | 2.70 s / 86 KB | 0.92 s (prewarm 2.2 s) | 1.31 s | cloud, full phrase (24 chars) | no |
+| cold | 45 ms | 1.02 s | 1.75 s | 2.76 s / 88 KB | 0.72 s (prewarm 2.3 s) | 1.08 s | cloud | no |
+| warm | 40 ms | 0.81 s | 1.49 s | 7.82 s / 250 KB | timeout 6.25 s | 25 s | cloud -> system (3 instances) | no (mic covered by the owner, he said) |
+| warm | 45 ms | 0.74 s | 1.74 s | 4.60 s / 147 KB | 2.28 s | 2.43 s | cloud | no |
+| warm | 28 ms | 0.69 s | 1.20 s | 2.50 s / 80 KB | 1.04 s | 1.12 s | cloud | no |
+| TV / music | 31 ms | 0.81 s | 1.56 s | 3.56 s / 114 KB | - | - | cancelled by the owner (CANCELAR) | - |
+| TV / music | 26 ms | 0.76 s | 2.52 s | 2.42 s / 77 KB | 0.65 s | 0.80 s | cloud | no |
+| TV / music | 32 ms | 0.80 s | 1.90 s | 3.08 s / 99 KB | 2.36 s | 2.49 s | cloud (37 chars) | no |
+| warm | 27 ms | 0.74 s | 1.58 s | 2.98 s / 95 KB | 0.93 s | 1.02 s | cloud | no |
+| silence (8 s) | 29 ms | 0.81 s | 3.75 s (noise burst) | 0.98 s / 31 KB | 0.60 s | - | "Gracias." rejected by the guard -> system rung | no (now "No te oí": 898072b) |
+| warm | - | - | 2.31 s | 0.98 s / 31 KB | 0.45 s | - | "Gracias." rejected -> system rung, text at 7.7 s | no |
+
+- Press -> HABLA AHORA drawn: 26-45 ms on every press, 278 ms on the first frame after the notice: all within the
+  300 ms budget (target 100 ms met except that one).
+- End of speech -> text: median **1.12 s** over the 7 completed cloud transcriptions (0.80-2.49 s); budget 1.5 s met.
+  The spread is the watch's Wi-Fi upload (0.45-2.36 s for 31-147 KB; the provider answered in about 0.4 s).
+- No error surface on any press where the owner spoke with the mic uncovered. No clipped first syllable: the cold
+  presses transcribed the whole phrase although audio flows only 0.7-1.0 s after the press (`startRecording` 0.35-0.66 s,
+  then about 200 ms of zero samples on this watch).
+- Silence: the 6 s no-speech path makes no request (emulator, and the watch press at 14:46 in STEP 0 testing); the
+  guard rejected both "Gracias." hallucinations live. The connection prewarm now starts only at speech start
+  (3b46bf7), so a silent press makes no request at all.
+- Offline: not run on the watch (airplane mode drops Wi-Fi adb); on the emulator with Wi-Fi and data off the press
+  went straight to the system chain (`rung=system reason=offline`) and ended with a clean "voice unavailable" at 6 s.
+  Network failures during an upload are covered by the unit tests (`TranscriptionClientTest`, `VoiceLadderTest`).
+- SISTEMA mode: the Settings row was toggled on the emulator; the owner's SISTEMA press stayed on the cloud rung (the
+  row was not switched), so SISTEMA on the watch is not verified live.
+- Prewarm (kept): the first HTTPS request of a process took 2.2-2.3 s on the watch, later ones 0.17-0.9 s.
+
+Remaining gap: uploads of large clips on the watch's Wi-Fi (a 250 KB clip timed out at 6 s; 147 KB took 2.3 s). A
+compressed upload (Opus in Ogg or FLAC through `MediaCodec`, in memory) would cut the bytes 2-10x; not done in P9.
+
 ## Top remaining power and resource risks (real watch)
 
 1. **GPS for the whole trip, wrist down included** (P6-A): the foreground service keeps one high-accuracy request; the
