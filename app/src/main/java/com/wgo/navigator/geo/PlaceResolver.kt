@@ -10,6 +10,7 @@ import com.wgo.navigator.core.Place
 import com.wgo.navigator.core.PlaceOrigin
 import com.wgo.navigator.core.WgoFailure
 import com.wgo.navigator.metrics.WgoMetrics
+import com.wgo.navigator.places.IndexHit
 import com.wgo.navigator.places.IndexedPlace
 import com.wgo.navigator.places.PlaceCategories
 import com.wgo.navigator.places.PlaceIndex
@@ -110,25 +111,20 @@ class PlaceResolver(
         index?.ensureLoaded()
     }
 
-    suspend fun resolve(request: PlaceRequest, fix: GeoCoord?, language: Language): Resolution {
-        val anchor = fix ?: PastoCentre
+    /**
+     * The state of one [resolve] call: the Nominatim and model budgets, the online failure and the candidates. (A class
+     * rather than locals captured by a local suspend function: ART's verifier rejected that state machine once the
+     * method grew, while the JVM unit tests accepted it.)
+     */
+    private inner class Search(val anchor: GeoCoord, aiCallsUsed: Int) {
         var requests = 0
-        lastRequests = 0
-        lastAiCalls = 0
-        var aiLeft = (MAX_AI_CALLS - request.aiCallsUsed).coerceAtLeast(0)
-        val name = request.name.trim()
-        if (name.isEmpty()) return Resolution.NotFound(emptyList())
-
-        privatePlaces?.match(name)?.let { place ->
-            WgoMetrics.event("places source=my_places")
-            return Resolution.Found(listOf(candidate(place, 4, false, anchor, 1f, PlaceSource.MyPlaces)))
-        }
-
-        val candidates = ArrayList<PlaceCandidate>()
-        var partial = emptyList<PlaceCandidate>()
-        val query = listOfNotNull(request.category, name).joinToString(" ")
-
+        var aiCalls = 0
+        private var aiLeft = (MAX_AI_CALLS - aiCallsUsed).coerceAtLeast(0)
         var onlineFailure: WgoFailure? = null
+        val candidates = ArrayList<PlaceCandidate>()
+        var partial: List<PlaceCandidate> = emptyList()
+
+        /** One Nominatim request within [MAX_REQUESTS]; no hit, offline or over the limit: empty. */
         suspend fun ask(q: String, bounded: Boolean): List<Place> {
             val search = online ?: return emptyList()
             if (requests >= MAX_REQUESTS) return emptyList()
@@ -142,113 +138,145 @@ class PlaceResolver(
             }
         }
 
-        // A nickname ("la plaza", "el terminal") is a landmark name verified on Nominatim: ask there first (P7, the
-        // local index matched "Drogueria Plaza De Nariño" for "Plaza de Nariño"); offline, the index still answers.
-        if (request.fromAlias) {
-            ask(name, bounded = false).filter { distance(it, anchor) <= FAR_KM * 1000 }.forEach { p ->
-                candidates += candidate(p, 3, false, anchor, NOMINATIM_CONFIDENCE, PlaceSource.Nominatim)
-            }
-            // Offline (or no near hit): only EXACT index rows of the landmark's own names (P8: "UCC Pasto" for the
-            // Universidad Cooperativa). A partial row is never taken for a nickname: "la plaza" must not become a
-            // dental clinic called "Dentix Plaza de Nariño".
-            if (candidates.isEmpty() && index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()) {
-                for (n in (listOf(name) + PlaceAliases.indexNames(name)).distinct()) {
-                    index.search(n, anchor, minTier = 3, maxKm = FAR_KM).forEach {
-                        candidates += PlaceCandidate(it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index)
-                    }
-                }
-            }
-        }
-        if (!request.fromAlias && candidates.isEmpty() && index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()) {
-            val hits = index.search(query, anchor, minTier = 1, maxKm = FAR_KM)
-            hits.filter { it.tier >= 2 }.forEach {
-                candidates += PlaceCandidate(it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index)
-            }
-            partial = hits.filter { it.tier == 1 && it.distanceM <= SUGGEST_KM * 1000 }.map {
-                PlaceCandidate(it.place.toPlace(), 1, false, it.distanceM, it.place.confidence, PlaceSource.Index)
-            }
+        /** Takes one model call from this utterance's budget. */
+        fun takeAiCall(): Boolean {
+            if (aiLeft <= 0) return false
+            aiLeft--
+            aiCalls++
+            return true
         }
 
-        // (A nickname already asked Nominatim for its verified name above.)
-        if (candidates.isEmpty() && !request.fromAlias) {
-            val hint = request.hint
-            val found = if (hint != null) {
-                ask("$name, $hint", bounded = false).ifEmpty { ask(name, bounded = true) }
-            } else {
-                val first = ask(name, bounded = false)
-                if (first.any { distance(it, anchor) <= FAR_KM * 1000 }) first
-                else ask(name, bounded = true).ifEmpty { first }
-            }
-            val nameTokens = PlaceText.tokens(name)
-            found.forEach { p ->
-                val tier = if (PlaceText.tokens(p.name) == nameTokens) 3 else 2 // Nominatim decided it matches
+        fun addIndex(hits: List<IndexHit>) {
+            hits.forEach { candidates += PlaceCandidate(it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index) }
+        }
+
+        /** Nominatim hits within [FAR_KM] (when [nearOnly]); tier 3 when the name equals [asked], else 2. */
+        fun addOnline(found: List<Place>, asked: String, nearOnly: Boolean, exactTier: Int? = null) {
+            val tokens = PlaceText.tokens(asked)
+            found.filter { !nearOnly || distance(it, anchor) <= FAR_KM * 1000 }.forEach { p ->
+                val tier = exactTier ?: if (PlaceText.tokens(p.name) == tokens) 3 else 2
                 candidates += candidate(p, tier, false, anchor, NOMINATIM_CONFIDENCE, PlaceSource.Nominatim)
             }
         }
+    }
 
-        // Role 1 (P8): no nickname and only weak candidates -> the model names the landmark the words may stand for
-        // (text only); each name is searched like any other: the index first, then Nominatim within the request limit.
-        if (!request.fromAlias && chooser != null && aiLeft > 0 && ChoiceTriggers.weak(request, sortedCandidates(candidates))) {
-            aiLeft--
-            lastAiCalls++
-            val names = chooser.expand(request.utterance ?: name, name, language)
-            WgoMetrics.event("places ai_expansion names=${names.size}")
-            val indexReady = index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()
-            for (alt in names) {
-                val local = if (indexReady) index!!.search(alt, anchor, minTier = 2, maxKm = FAR_KM, limit = 5) else emptyList()
-                local.forEach {
-                    candidates += PlaceCandidate(it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index)
-                }
-                if (local.isEmpty()) {
-                    val altTokens = PlaceText.tokens(alt)
-                    ask(alt, bounded = false).filter { distance(it, anchor) <= FAR_KM * 1000 }.forEach { p ->
-                        val tier = if (PlaceText.tokens(p.name) == altTokens) 3 else 2
-                        candidates += candidate(p, tier, false, anchor, NOMINATIM_CONFIDENCE, PlaceSource.Nominatim)
-                    }
-                }
-            }
+    private suspend fun indexReady(anchor: GeoCoord): Boolean = index != null && PlaceIndex.covers(anchor) && index.ensureLoaded()
+
+    suspend fun resolve(request: PlaceRequest, fix: GeoCoord?, language: Language): Resolution {
+        lastRequests = 0
+        lastAiCalls = 0
+        val anchor = fix ?: PastoCentre
+        val name = request.name.trim()
+        if (name.isEmpty()) return Resolution.NotFound(emptyList())
+
+        val mine = privatePlaces?.match(name)
+        if (mine != null) {
+            WgoMetrics.event("places source=my_places")
+            return Resolution.Found(listOf(candidate(mine, 4, false, anchor, 1f, PlaceSource.MyPlaces)))
         }
 
-        // The hint only re-ranks: text match first, then (when that cannot separate the top two) proximity to the
-        // hint's own point, at the cost of one more request.
-        var ranked: List<PlaceCandidate> = candidates
-        request.hint?.let { hint ->
-            ranked = ranked.map { it.copy(hintScore = HintMatch.textScore(hint, it.place.name + " " + it.place.address)) }
-            val top = sortedCandidates(ranked)
-            if (top.size >= 2 && top[0].tier == top[1].tier && top.take(2).all { it.hintScore == 0.0 }) {
-                ask(hint, bounded = true).firstOrNull()?.let { point ->
-                    ranked = ranked.map {
-                        if (RadarProjection.distanceMeters(it.place.coord, point.coord) <= HINT_NEAR_M) {
-                            it.copy(hintScore = it.hintScore + 0.5)
-                        } else it
-                    }
-                }
-            }
+        val s = Search(anchor, request.aiCallsUsed)
+        if (request.fromAlias) gatherNickname(name, s) else gatherName(request, name, s)
+        // Role 1 (P8): no nickname and only weak candidates -> the model names the landmark (text), searched normally.
+        if (!request.fromAlias && chooser != null && ChoiceTriggers.weak(request, sortedCandidates(s.candidates)) && s.takeAiCall()) {
+            expand(chooser, request, name, language, s)
         }
-
-        var ordered = dedupe(sortedCandidates(ranked))
+        var ordered = dedupe(sortedCandidates(rankByHint(request, s)))
         // Role 2 (P8): the language model picks among the real candidates by id when the ranking is ambiguous.
-        if (chooser != null && aiLeft > 0 && ChoiceTriggers.shouldChoose(request, ordered)) {
-            aiLeft--
-            lastAiCalls++
-            val options = ordered.take(LlmPlaceChooser.MAX_OPTIONS).mapIndexed { i, c ->
-                ChoiceOption("c${i + 1}", c.place.name, c.place.category, c.place.address)
-            }
-            val id = chooser.choose(request.utterance ?: name, options, language)
-            ordered = promote(ordered, options.indexOfFirst { it.id == id })
-            WgoMetrics.event("places ai_choice options=${options.size} picked=${options.indexOfFirst { it.id == id }}")
+        if (chooser != null && ChoiceTriggers.shouldChoose(request, ordered) && s.takeAiCall()) {
+            ordered = choose(chooser, request, name, ordered, language)
         }
 
-        lastRequests = requests
+        lastRequests = s.requests
+        lastAiCalls = s.aiCalls
         val best = ordered.take(MAX_CANDIDATES)
         WgoMetrics.event(
-            "places resolved n=${best.size} sources=${best.joinToString("+") { it.source.name }} requests=$requests " +
-                "hint=${request.hint != null}"
+            "places resolved n=${best.size} sources=${best.joinToString("+") { it.source.name }} requests=${s.requests} " +
+                "ai_calls=${s.aiCalls} hint=${request.hint != null}"
         )
         if (best.isNotEmpty()) return Resolution.Found(best)
-        val suggestions = dedupe(partial.sortedBy { it.distanceM }).take(MAX_CANDIDATES).map { it.place }
-        onlineFailure?.let { if (suggestions.isEmpty()) return Resolution.Failed(it) }
+        val suggestions = dedupe(s.partial.sortedBy { it.distanceM }).take(MAX_CANDIDATES).map { it.place }
+        val failure = s.onlineFailure
+        if (failure != null && suggestions.isEmpty()) return Resolution.Failed(failure)
         return Resolution.NotFound(suggestions)
+    }
+
+    /**
+     * A nickname ("la plaza", "el terminal") is a landmark name verified on Nominatim: asked there first (P7: the local
+     * index had matched "Drogueria Plaza De Nariño"). Offline, or with no near hit, only EXACT index rows of the
+     * landmark's own names (P8: "UCC Pasto" for the Universidad Cooperativa): "la plaza" never becomes a dental clinic.
+     */
+    private suspend fun gatherNickname(name: String, s: Search) {
+        s.addOnline(s.ask(name, bounded = false), name, nearOnly = true, exactTier = 3)
+        if (s.candidates.isNotEmpty() || !indexReady(s.anchor)) return
+        for (n in (listOf(name) + PlaceAliases.indexNames(name)).distinct()) {
+            s.addIndex(index!!.search(n, s.anchor, minTier = 3, maxKm = FAR_KM))
+        }
+    }
+
+    /** Any other name: the local index, then Nominatim only when the index has no strong match. */
+    private suspend fun gatherName(request: PlaceRequest, name: String, s: Search) {
+        if (indexReady(s.anchor)) {
+            val query = listOfNotNull(request.category, name).joinToString(" ")
+            val hits = index!!.search(query, s.anchor, minTier = 1, maxKm = FAR_KM)
+            s.addIndex(hits.filter { it.tier >= 2 })
+            s.partial = hits.filter { it.tier == 1 && it.distanceM <= SUGGEST_KM * 1000 }.map {
+                PlaceCandidate(it.place.toPlace(), 1, false, it.distanceM, it.place.confidence, PlaceSource.Index)
+            }
+        }
+        if (s.candidates.isNotEmpty()) return
+        val hint = request.hint
+        val found = if (hint != null) {
+            s.ask("$name, $hint", bounded = false).ifEmpty { s.ask(name, bounded = true) }
+        } else {
+            val first = s.ask(name, bounded = false)
+            if (first.any { distance(it, s.anchor) <= FAR_KM * 1000 }) first else s.ask(name, bounded = true).ifEmpty { first }
+        }
+        s.addOnline(found, name, nearOnly = false) // Nominatim decided it matches: tier 3 for the same name, else 2
+    }
+
+    /** Role 1: up to three official names (text) from the model, each searched in the index, then on Nominatim. */
+    private suspend fun expand(chooser: PlaceChooser, request: PlaceRequest, name: String, language: Language, s: Search) {
+        val names = chooser.expand(request.utterance ?: name, name, language)
+        WgoMetrics.event("places ai_expansion names=${names.size}")
+        val ready = indexReady(s.anchor)
+        for (alt in names) {
+            val local = if (ready) index!!.search(alt, s.anchor, minTier = 2, maxKm = FAR_KM, limit = 5) else emptyList()
+            s.addIndex(local)
+            if (local.isEmpty()) s.addOnline(s.ask(alt, bounded = false), alt, nearOnly = true)
+        }
+    }
+
+    /**
+     * The hint only re-ranks: text match first, then (when that cannot separate the top two) proximity to the hint's
+     * own point, at the cost of one more request.
+     */
+    private suspend fun rankByHint(request: PlaceRequest, s: Search): List<PlaceCandidate> {
+        val hint = request.hint ?: return s.candidates
+        var ranked = s.candidates.map { it.copy(hintScore = HintMatch.textScore(hint, it.place.name + " " + it.place.address)) }
+        val top = sortedCandidates(ranked)
+        if (top.size >= 2 && top[0].tier == top[1].tier && top.take(2).all { it.hintScore == 0.0 }) {
+            val point = s.ask(hint, bounded = true).firstOrNull()
+            if (point != null) {
+                ranked = ranked.map {
+                    if (RadarProjection.distanceMeters(it.place.coord, point.coord) <= HINT_NEAR_M) it.copy(hintScore = it.hintScore + 0.5) else it
+                }
+            }
+        }
+        return ranked
+    }
+
+    /** Role 2: the model's pick among the first candidates, by list id only. */
+    private suspend fun choose(
+        chooser: PlaceChooser, request: PlaceRequest, name: String, ordered: List<PlaceCandidate>, language: Language
+    ): List<PlaceCandidate> {
+        val options = ordered.take(LlmPlaceChooser.MAX_OPTIONS).mapIndexed { i, c ->
+            ChoiceOption("c${i + 1}", c.place.name, c.place.category, c.place.address)
+        }
+        val id = chooser.choose(request.utterance ?: name, options, language)
+        val picked = options.indexOfFirst { it.id == id }
+        WgoMetrics.event("places ai_choice options=${options.size} picked=$picked")
+        return promote(ordered, picked)
     }
 
     private fun candidate(p: Place, tier: Int, boost: Boolean, anchor: GeoCoord, conf: Float, source: PlaceSource) =
