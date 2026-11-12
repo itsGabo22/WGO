@@ -134,6 +134,20 @@ class VoiceLadderTest {
         assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Final("texto del sistema")), run(l))
     }
 
+    @Test fun aShortClipRejectedAsSilenceIsNotHeardWithoutFallback() {
+        val burst = concat(zeros(200), noise(600, 20), speech(400, 3000), noise(2000, 20)) // ~1.2 s clip
+        val events = run(ladder(Mic(burst), systemOk, { _, _ -> Transcription.Failed(WgoFailure.NotFound, "guard_silence_phrase") }))
+        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Transcribing, VoiceEvent.Failed(WgoFailure.NoSpeech)), events)
+        assertEquals(0, systemOk.sessions)
+    }
+
+    @Test fun onlyShortSilenceRejectionsSkipTheFallback() {
+        assertTrue(CloudVoiceInput.isShortSilence("guard_no_speech", 1_500L))
+        assertFalse(CloudVoiceInput.isShortSilence("guard_no_speech", 1_501L))
+        assertFalse(CloudVoiceInput.isShortSilence("guard_low_logprob", 900L))
+        assertFalse(CloudVoiceInput.isShortSilence("rate_limited", 900L))
+    }
+
     /** Counts prewarms; transcribes with [answer]. */
     private class Counting(private val answer: Transcription) : Transcriber {
         var prewarms = 0

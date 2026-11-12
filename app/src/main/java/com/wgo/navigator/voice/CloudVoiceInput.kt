@@ -46,6 +46,14 @@ class CloudVoiceInput(
     /** Blocks until the last capture released the microphone (before the fallback recognizer opens it). */
     fun awaitMicReleased() = capture.awaitReleased()
 
+    companion object {
+        /** Clips up to this long that the guard rejects as silence end with "No te oí" (P9 live session). */
+        const val SHORT_CLIP_MS = 1_500L
+        private val SILENCE_REASONS = setOf("guard_no_speech", "guard_silence_phrase", "guard_prompt_echo", "guard_empty")
+
+        fun isShortSilence(reason: String, clipMs: Long): Boolean = clipMs <= SHORT_CLIP_MS && reason in SILENCE_REASONS
+    }
+
     /** Nothing to do: cancelling the collector releases the microphone (AudioCapture's finally). */
     override fun cancel() = Unit
 
@@ -80,8 +88,14 @@ class CloudVoiceInput(
                         send(VoiceEvent.Final(text.text))
                     }
                     is Transcription.Failed -> {
-                        VoiceLog.event("outcome failed=${text.failure} reason=${text.reason} rung=cloud")
-                        send(VoiceEvent.Failed(text.failure))
+                        if (isShortSilence(text.reason, result.clipMs)) {
+                            // A noise burst Whisper turned into "Gracias.": nothing was said (no fallback rung).
+                            VoiceLog.event("outcome failed=NoSpeech reason=${text.reason} clip_ms=${result.clipMs} rung=cloud")
+                            send(VoiceEvent.Failed(WgoFailure.NoSpeech))
+                        } else {
+                            VoiceLog.event("outcome failed=${text.failure} reason=${text.reason} rung=cloud")
+                            send(VoiceEvent.Failed(text.failure))
+                        }
                     }
                 }
             }
