@@ -172,10 +172,13 @@ fun ScreenActiveNavigation(
         // The HUD state last shown (for the landmark labels' keep-clear boxes; set after the HUD is composed).
         var hudShown by remember { mutableStateOf(HudMode.Compact) }
         // Heading up only: the index is loaded off the main thread (once per process) and its landmark rows kept.
-        val landmarks by androidx.compose.runtime.produceState(emptyList<com.wgo.navigator.places.IndexedPlace>(), northUp, landmarkIndex) {
+        var landmarks by remember { mutableStateOf(emptyList<com.wgo.navigator.places.IndexedPlace>()) }
+        LaunchedEffect(northUp, landmarkIndex) {
             val index = landmarkIndex
-            value = if (northUp || index == null || !index.ensureLoaded()) emptyList()
-            else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.wgo.navigator.ui.map.LandmarkLabels.candidates(index.rows) }
+            landmarks = if (northUp || index == null || !index.ensureLoaded()) emptyList()
+            else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                com.wgo.navigator.ui.map.LandmarkLabels.candidates(index.rows)
+            }
         }
 
         // Z-Layer 0: RADAR MINIMAP. Under an opaque surface its loops stop (no frames for an invisible sweep).
