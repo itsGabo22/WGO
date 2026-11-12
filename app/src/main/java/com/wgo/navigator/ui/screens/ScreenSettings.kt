@@ -35,6 +35,9 @@ import com.wgo.navigator.ui.theme.WgoType
 import com.wgo.navigator.ui.theme.wgoTouchSide
 import com.wgo.navigator.voice.VoicePitch
 import com.wgo.navigator.voice.VoiceRate
+import com.wgo.navigator.voice.SpeechEngine
+import com.wgo.navigator.voice.VoiceCatalog
+import com.wgo.navigator.voice.VoiceSettingsRules
 import com.wgo.navigator.voice.VoiceLabels
 
 private const val REFERENCE_SIZE = 227f
@@ -50,7 +53,6 @@ internal const val RATE_ROW_CENTER = 402f
 internal const val CREDITS_ROW_CENTER = 459f
 
 /** Scrolled content height: the last row can reach the middle of the dial. */
-private const val CONTENT_HEIGHT = 459f + 22f + 100f
 
 /**
  * Settings (spec section 7, P7 update): a vertically scrolling list (touch scroll, position indicator while
@@ -81,6 +83,21 @@ fun ScreenSettings(
     val hasEngine = remember {
         context.packageManager.queryIntentServices(Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0).isNotEmpty()
     }
+    // P8: the installed engines (packages, from the package manager) and the chosen one (else the system default).
+    val ttsEngine by viewModel.ttsEngine.collectAsState()
+    val engines = remember { SpeechEngine.engines(context) }
+    val currentEngine = ttsEngine ?: VoiceSettingsRules.defaultEngine(
+        android.provider.Settings.Secure.getString(context.contentResolver, "tts_default_synth"), engines.map { it.first }
+    )
+    // "Más voces": the chosen engine's own voice-download screen, only when it resolves on this watch.
+    val moreVoices = remember(currentEngine) {
+        currentEngine?.let { pkg ->
+            Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA).setPackage(pkg)
+                .takeIf { it.resolveActivity(context.packageManager) != null }
+        }
+    }
+    // Rows below the voice row: pitch and speed, the engine row, more voices, credits.
+    val rowsAfterVoice = (if (hasEngine) 2 else 0) + (if (engines.size > 1) 1 else 0) + (if (moreVoices != null) 1 else 0) + 1
     val scroll = rememberScrollState()
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(palette.canvas)) {
@@ -92,7 +109,7 @@ fun ScreenSettings(
             Modifier
                 .fillMaxWidth()
                 .verticalScroll(scroll)
-                .height(dial(CONTENT_HEIGHT))
+                .height(dial(VOICE_ROW_CENTER + rowsAfterVoice * ROW_PITCH + 122f))
         ) {
             Text(
                 text = string(StringKey.SETTINGS_HEADER).uppercase(),
@@ -186,7 +203,32 @@ fun ScreenSettings(
                     modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(RATE_ROW_CENTER - 22f) - rowExtra)
                 )
             }
-            val creditsCenter = if (hasEngine) RATE_ROW_CENTER + ROW_PITCH else VOICE_ROW_CENTER + ROW_PITCH
+            var nextCenter = if (hasEngine) RATE_ROW_CENTER + ROW_PITCH else VOICE_ROW_CENTER + ROW_PITCH
+            // P8: the engine row only with more than one engine; a tap moves to the next one (voice back to automatic).
+            if (engines.size > 1) {
+                val names = engines.map { (pkg, label) -> pkg to VoiceCatalog.engineName(pkg, label) }
+                SettingRow(
+                    label = string(StringKey.SET_TTS_ENGINE),
+                    value = names.firstOrNull { it.first == currentEngine }?.second ?: names.first().second,
+                    onClick = { viewModel.setVoice(null, VoiceSettingsRules.nextEngine(currentEngine, engines.map { it.first })) },
+                    state = true,
+                    maxTouchHeight = pitch,
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(nextCenter - 22f) - rowExtra)
+                )
+                nextCenter += ROW_PITCH
+            }
+            if (moreVoices != null) {
+                SettingRow(
+                    label = string(StringKey.SET_MORE_VOICES),
+                    value = string(StringKey.MORE_VOICES_VALUE),
+                    onClick = { runCatching { context.startActivity(moreVoices) } },
+                    opens = true,
+                    maxTouchHeight = pitch,
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = dial(nextCenter - 22f) - rowExtra)
+                )
+                nextCenter += ROW_PITCH
+            }
+            val creditsCenter = nextCenter
             SettingRow(
                 label = string(StringKey.SET_CREDITS),
                 value = "OpenStreetMap · CARTO · Overture",
