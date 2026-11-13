@@ -74,6 +74,15 @@ object WgoIcons {
         "M6 21a5 5 0 0 0 0-3",
         "M3 3l18 18"
     )
+    /** P10 no connection: three Wi-Fi arcs and a dot, struck through. */
+    val WifiOff = icon(
+        "WifiOff",
+        "M2.5 8.5a14 14 0 0 1 19 0",
+        "M5.5 11.8a9.5 9.5 0 0 1 13 0",
+        "M8.6 15a5 5 0 0 1 6.8 0",
+        "M12 18.5h.01",
+        "M3 3l18 18"
+    )
     val Close = icon("Close", "M6 6l12 12", "M18 6L6 18")
     val Plus = icon("Plus", "M12 5v14", "M5 12h14")
     val Minus = icon("Minus", "M5 12h14")

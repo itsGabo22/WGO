@@ -188,6 +188,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         }
     )
 
+    /** When the SIN CONEXIÓN surface was last shown from a press (its own release is then ignored). */
+    private var offlineShownAt = 0L
+
     /** When the current session started (manual stop ignores the press that started it). */
     private var sessionPressAt = 0L
 
@@ -238,6 +241,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         }
         // P10: no network, no voice: say so at once in WGO's own surface (no capture, no recognizer, no system dialog).
         if (!isOnline(getApplication())) {
+            // The release of the press that just showed the surface lands here too: one surface, one haptic.
+            if (_screen.value == ScreenState.Error && SystemClock.elapsedRealtime() - offlineShownAt < OFFLINE_DEBOUNCE_MS) return
+            offlineShownAt = SystemClock.elapsedRealtime()
             VoiceLog.press(" rung=none")
             VoiceLog.event("offline_at_press")
             fail(PipelineError.Offline, Step.Listen)
@@ -889,6 +895,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
 
         /** A press this soon after the one that started the capture is not a manual stop (P9). */
         const val MANUAL_STOP_GUARD_MS = 300L
+
+        /** The press and its release arrive this close together; a real REINTENTAR comes later. */
+        const val OFFLINE_DEBOUNCE_MS = 700L
         /** Hits asked from Nominatim per request; the resolver keeps at most two candidates. */
         const val ONLINE_RESULTS = 3
 

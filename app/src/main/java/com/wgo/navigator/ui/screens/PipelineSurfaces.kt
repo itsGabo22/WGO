@@ -367,6 +367,8 @@ fun ScreenError(
     val icon = when (error) {
         PipelineError.VoiceUnavailable, PipelineError.NotUnderstood, PipelineError.MicStart, PipelineError.NotHeard -> WgoIcons.Mic
         PipelineError.PlaceNotFound, PipelineError.RouteUnavailable -> WgoIcons.LocationPin
+        // P10 SIN CONEXIÓN: the same static layout, no spinner (docs/design, "No network").
+        PipelineError.Offline -> WgoIcons.WifiOff
         else -> WgoIcons.Alert
     }
     Box(modifier.fillMaxSize().background(palette.canvas)) {
