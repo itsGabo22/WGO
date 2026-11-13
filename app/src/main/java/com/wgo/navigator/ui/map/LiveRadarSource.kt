@@ -40,13 +40,16 @@ class LiveRadarSource(
 
     private var lastGood: Fix? = null
 
+    /** P11: the fused heading from the navigation host (compass + GPS course), or null without a compass. */
+    private var fusedHeading: Float? = null
+
     fun onFix(fix: Fix) {
         when (FixFilter.classify(fix, mode, nowNanos())) {
             FixQuality.Stale -> Unit
             FixQuality.Inaccurate -> _state.update { it.copy(searching = true, accuracyM = fix.accuracyM) }
             FixQuality.Good -> {
                 val prev = _state.value
-                val bearing = nextBearing(prev.bearing, lastGood, fix)
+                val bearing = fusedHeading ?: nextBearing(prev.bearing, lastGood, fix)
                 lastGood = fix
                 val location = GeoCoord(fix.lat, fix.lon)
                 // Standing still (GPS jitter under 2 m, same heading): keep the state, so nothing is re-projected.
@@ -75,6 +78,25 @@ class LiveRadarSource(
         route = remaining
         maneuver = nextManeuver
         _state.update { it.copy(route = remaining, maneuver = nextManeuver) }
+    }
+
+    /**
+     * P11: the fused heading (compass when slow, GPS course when fast); null hands the heading back to the GPS rule
+     * ([nextBearing]). The map turns (heading up) or the arrow turns (north up) with it.
+     */
+    fun setHeading(deg: Float?) {
+        fusedHeading = deg
+        if (deg != null) _state.update { if (it.bearing == deg) it else it.copy(bearing = deg) }
+    }
+
+    /** P11: the figure-8 hint (see [RadarState.calibrate]). */
+    fun setCalibrate(value: Boolean) {
+        _state.update { if (it.calibrate == value) it else it.copy(calibrate = value) }
+    }
+
+    /** P11: the turn-to-face angle (see [RadarState.faceDeg]). */
+    fun setFace(deg: Float?) {
+        _state.update { if (it.faceDeg == deg) it else it.copy(faceDeg = deg) }
     }
 
     /** P11: the other known routes, which route is active among them, and its identity (see [RadarState]). */

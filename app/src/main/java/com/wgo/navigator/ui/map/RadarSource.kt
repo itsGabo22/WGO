@@ -38,7 +38,11 @@ data class RadarState(
     val routeIndex: Int = 0,
     val routeCount: Int = 1,
     /** P11: changes whenever the active route changes (reroute or switch): the HUD opens its 4 s window. */
-    val routeId: Int = 0
+    val routeId: Int = 0,
+    /** P11: the compass accuracy stayed low while it leads the heading: the HUD asks for a figure 8. */
+    val calibrate: Boolean = false,
+    /** P11: where to turn to face the route, relative to the heading (degrees, + clockwise); null: not shown. */
+    val faceDeg: Float? = null
 )
 
 /** The radar's data input: [LiveRadarSource] in the app, [DemoRadarSource] in previews and demos. */

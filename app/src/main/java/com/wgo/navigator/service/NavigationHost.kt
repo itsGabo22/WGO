@@ -33,6 +33,9 @@ import com.wgo.navigator.net.HttpClient
 import com.wgo.navigator.net.WgoUserAgent
 import com.wgo.navigator.net.isOnline
 import com.wgo.navigator.ui.map.RadarAlt
+import com.wgo.navigator.heading.CompassSensor
+import com.wgo.navigator.heading.HeadingFusion
+import com.wgo.navigator.heading.HeadingThrottle
 import com.wgo.navigator.route.OsrmRouter
 import com.wgo.navigator.ui.map.GeoCoord
 import com.wgo.navigator.ui.map.LiveRadarSource
@@ -233,12 +236,16 @@ class NavigationHost private constructor(context: Context) {
             }
         }
         lastSpeedMps = origin.speedMps
+        // P11: true north for the compass, from the trip origin (constant within the 25 km the trips cover).
+        declinationDeg = CompassSensor.declination(origin.lat, origin.lon)
+        lastCourseDeg = Double.NaN
         applyProfile()
         // The fresh ORIGIN fix starts the engine at once (an old cached fallback is ignored as stale).
         s.onFix(origin)
         radar.onFix(origin)
         startService()
         updateCollection()
+        updateCompass()
         WgoMetrics.event("nav start mode=${route.mode} points=${route.polyline.size} steps=${route.steps.size}")
     }
 
@@ -298,6 +305,7 @@ class NavigationHost private constructor(context: Context) {
         visible = value
         applyProfile()
         updateCollection()
+        updateCompass()
     }
 
     /** The Activity entered or left ambient mode: same trip, slower screen-off location policy. */
@@ -305,6 +313,45 @@ class NavigationHost private constructor(context: Context) {
         if (ambient == value) return
         ambient = value
         applyProfile()
+        updateCompass()
+    }
+
+    // ---- the watch compass (P11, docs/ARCHITECTURE.md "Heading fusion") ----
+
+    private val fusion = HeadingFusion()
+    private val headingThrottle = HeadingThrottle()
+    private var declinationDeg = 0.0
+    private var lastCourseDeg = Double.NaN
+
+    /** Created on the first trip that needs it (no sensor service lookup on Home). */
+    private var compass: CompassSensor? = null
+
+    /** True while the compass listener is registered (budget checks). */
+    val compassRunning: Boolean get() = compass?.running == true
+
+    /** The listener only during a trip with the navigation screen interactive: never on Home, in ambient or off. */
+    private fun updateCompass() {
+        if (session != null && visible && !ambient) {
+            (compass ?: CompassSensor(app) { magnetic, accuracy -> onCompass(magnetic, accuracy) }.also { compass = it }).start()
+        } else {
+            compass?.stop()
+            fusion.reset()
+            headingThrottle.reset()
+            _radar.value?.setHeading(null)
+        }
+    }
+
+    private fun onCompass(magneticDeg: Double?, accuracy: Int) {
+        fusion.onCompass(magneticDeg, accuracy, declinationDeg, SystemClock.elapsedRealtime())
+        pushHeading()
+    }
+
+    /** The fused heading to the radar (<= 10 Hz, changes >= 2 deg) and the calibration hint while the compass leads. */
+    private fun pushHeading() {
+        val radar = _radar.value ?: return
+        val speed = lastSpeedMps.toDouble().takeUnless { it.isNaN() } ?: 0.0
+        headingThrottle.next(fusion.fused(speed, lastCourseDeg), SystemClock.elapsedRealtime())?.let { radar.setHeading(it.toFloat()) }
+        radar.setCalibrate(fusion.needsCalibration && speed < HeadingFusion.GPS_ONLY_MPS)
     }
 
     // ---- service hooks ----
@@ -348,6 +395,9 @@ class NavigationHost private constructor(context: Context) {
                     s.onFix(fix)
                     WgoMetrics.engineFix(System.nanoTime() - t0)
                     _radar.value?.onFix(fix)
+                    // P11: the GPS course for the heading fusion (used only when moving fast enough).
+                    if (!fix.bearingDeg.isNaN()) lastCourseDeg = fix.bearingDeg.toDouble()
+                    if (compassRunning) pushHeading()
                 }
             }
         } else if (!want && fixJob != null) {
@@ -457,6 +507,7 @@ class NavigationHost private constructor(context: Context) {
         tripJob = null
         fixJob?.cancel()
         fixJob = null
+        updateCompass() // no session: the listener goes
         _radar.value = null
         _active.value = false
         expectedIntervalMs = 0L

@@ -304,7 +304,7 @@ fun ScreenActiveNavigation(
             }
             NavigationHud(
                 mode = forcedHud ?: hud.shown,
-                content = hudContent(navState),
+                content = hudContent(navState, radar.calibrate),
                 onTap = {
                     // While exploring a tap on the HUD recenters; otherwise it forces the other state.
                     if (explore.exploring) explore.startReturn()
@@ -491,14 +491,14 @@ private fun RecenterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 
 /** What the HUD shows, from the engine state (previews without a state get a sample instruction). */
 @Composable
-private fun hudContent(navState: NavState?): HudContent {
+private fun hudContent(navState: NavState?, calibrate: Boolean = false): HudContent {
     val language = LocalLanguage.current
     val nav = navState?.guidance()
     val next = nav?.next
     val status = when (navState) {
         is NavState.OffRoute -> string(if (navState.offline) StringKey.NAV_OFFLINE_NOT_UPDATED else StringKey.NAV_OFF_ROUTE)
         is NavState.Rerouting -> string(StringKey.NAV_REROUTING)
-        else -> null
+        else -> if (calibrate) string(StringKey.COMPASS_CALIBRATE) else null // P11 figure-8 hint, lowest priority
     }
     // "250 m" / "1,2 km": number and unit apart, for the odometer.
     val distance = formatDistance(nav?.distanceToNextM ?: 200.0, language)

@@ -69,6 +69,8 @@ enum class StringKey {
     NAV_GPS_SEARCHING, NAV_GPS_SEARCH_HINT, NAV_PAUSED, NAV_GPS_LOST, NAV_GPS_LOST_HINT, NAV_OFF_ROUTE, NAV_REROUTING,
     // P11 offline reroute, routes and alternatives
     NAV_OFFLINE_NOT_UPDATED, ROUTE_CHIP, ROUTE_CHIP_A11Y, ALT_DELTA_MORE, ALT_DELTA_LESS, ALT_DELTA_SAME, SAY_NEW_ROUTE,
+    // P11 compass
+    COMPASS_CALIBRATE,
     NAV_LOST_BADGE, NAV_LOST_TITLE, NAV_LOST_HINT, NAV_END_TITLE, BTN_END, BTN_KEEP, NAV_ARRIVED, BTN_FINISH,
     // Foreground service notification and ongoing activity (P6-A)
     NOTIF_CHANNEL_NAV, NOTIF_CHANNEL_NAV_DESC, NOTIF_NAVIGATING, ONGOING_SEARCHING, ONGOING_GPS_LOST, ONGOING_REROUTING,
@@ -255,6 +257,7 @@ private val es = mapOf(
     StringKey.ALT_DELTA_LESS to "−%d MIN",
     StringKey.ALT_DELTA_SAME to "=",
     StringKey.SAY_NEW_ROUTE to "Nueva ruta",
+    StringKey.COMPASS_CALIBRATE to "MUEVE EL RELOJ EN 8",
     StringKey.NAV_LOST_BADGE to "SIN RUTA",
     StringKey.NAV_LOST_TITLE to "No pude recalcular la ruta",
     StringKey.NAV_LOST_HINT to "Reintenta o termina.",
@@ -465,6 +468,7 @@ private val en = mapOf(
     StringKey.ALT_DELTA_LESS to "−%d MIN",
     StringKey.ALT_DELTA_SAME to "=",
     StringKey.SAY_NEW_ROUTE to "New route",
+    StringKey.COMPASS_CALIBRATE to "MOVE THE WATCH IN A FIGURE 8",
     StringKey.NAV_LOST_BADGE to "NO ROUTE",
     StringKey.NAV_LOST_TITLE to "Couldn't find a new route",
     StringKey.NAV_LOST_HINT to "Retry or end it.",
