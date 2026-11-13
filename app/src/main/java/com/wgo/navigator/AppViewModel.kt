@@ -489,7 +489,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 val request = if (retryName != null) PlaceRequest(retryName, hintRetryWords, aiCallsUsed = interpreter.lastRemoteCalls)
                 else PlaceRequest(
                     query, result.placeHint, result.placeCategory, fromAlias = result.placeFromAlias, utterance = text,
-                    aiCallsUsed = interpreter.lastRemoteCalls, vague = result.placeVague
+                    aiCallsUsed = interpreter.lastRemoteCalls, vague = result.placeVague, address = result.placeIsAddress
                 )
                 placeRequest = request
                 _heard.value = if (retryName != null) null else (result.placeHeard ?: query)

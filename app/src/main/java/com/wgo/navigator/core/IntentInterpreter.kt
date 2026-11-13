@@ -26,7 +26,9 @@ data class Interpretation(
     /** P10: the place is a description or a kind of place ("un lugar donde pueda comer algo"), not a name. */
     val placeVague: Boolean = false,
     /** P10: the destination words as heard ("la cooperativa"), shown on Confirm place to spot a mishearing. */
-    val placeHeard: String? = null
+    val placeHeard: String? = null,
+    /** P10: [placeQuery] is a street address ("Calle 6A #36-41"); [placeHint] then holds its neighbourhood. */
+    val placeIsAddress: Boolean = false
 ) {
     companion object {
         const val ACCEPT_CONFIDENCE = 0.75f

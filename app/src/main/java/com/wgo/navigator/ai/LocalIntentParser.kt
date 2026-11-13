@@ -90,6 +90,12 @@ object LocalIntentParser {
         }
         // P10: "por favor ayúdame" asks for help, it names no place.
         if (placeToks.all { it.norm in NON_PLACE }) return Interpretation.Unknown
+        // P10: a street address ("la calle 6A #36-41, barrio San Vicente") is searched as an address, never as a name.
+        address(placeToks)?.let { (street, barrio) ->
+            return Interpretation(
+                IntentKind.Navigate, street, mode, ALIAS_CONFIDENCE, placeHint = barrio, placeHeard = heard, placeIsAddress = true
+            )
+        }
         // Local nicknames ("la UDENAR", "el terminal") resolve here, with no remote call.
         PlaceAliases.resolve(placeToks.map { it.norm })?.let {
             return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeFromAlias = true, placeHeard = heard)
@@ -170,6 +176,31 @@ object LocalIntentParser {
             if (v != null) return v to i
         }
         return null
+    }
+
+    /**
+     * P10: a Colombian street address: a street word, then a number ("6A", "36"), then optionally "#" / "no" / "número"
+     * and the house number ("36-41"), then optionally "barrio X". Returns ("Calle 6A #36-41", "San Vicente") or null.
+     */
+    private fun address(toks: List<Tok>): Pair<String, String?>? {
+        if (toks.size < 2 || toks[0].norm !in STREET_WORDS || toks[1].norm.firstOrNull()?.isDigit() != true) return null
+        val street = toks[0].orig.replaceFirstChar { it.uppercase() } + " " + toks[1].orig.uppercase()
+        var rest = toks.drop(2)
+        var house: String? = null
+        val first = rest.firstOrNull()
+        if (first != null && first.norm.startsWith("#") && first.norm.length > 1) {
+            house = first.orig.removePrefix("#")
+            rest = rest.drop(1)
+        } else if (first != null && first.norm in HOUSE_MARKS && rest.size >= 2) {
+            house = rest[1].orig.removePrefix("#")
+            rest = rest.drop(2)
+        } else if (first != null && first.norm.firstOrNull()?.isDigit() == true) {
+            house = first.orig
+            rest = rest.drop(1)
+        }
+        val b = rest.indexOfFirst { it.norm == "barrio" || it.norm == "neighborhood" }
+        val barrio = if (b >= 0) join(rest.drop(b + 1)).ifEmpty { null } else null
+        return (if (house != null) "$street #$house" else street) to barrio
     }
 
     /** P10: "alguna droguería", "el mejor restaurante", "un buen hotel": the quantifier is not part of the place. */
@@ -305,6 +336,12 @@ object LocalIntentParser {
         Phrase("ya"), Phrase("rapido"), Phrase("es lo unico que te pido"), Phrase("eso es todo"), Phrase("buddy"),
         Phrase("man"), Phrase("dude"), Phrase("right now"), Phrase("thank you very much")
     ).sortedByDescending { it.words.size }
+
+    /** P10: the street words of a Colombian address and the marks before its house number. */
+    private val STREET_WORDS = setOf(
+        "calle", "cl", "cll", "carrera", "cra", "kr", "cr", "avenida", "av", "transversal", "tv", "diagonal", "dg", "street", "avenue"
+    )
+    private val HOUSE_MARKS = setOf("#", "no", "numero", "nro", "n")
 
     /** P10: quantifiers and judgements before a kind of place. */
     private val QUANTIFIERS = listOf(

@@ -31,7 +31,9 @@ data class PlaceRequest(
     /** Language-model calls this utterance already used (the interpreter's); the place search keeps the total <= 2. */
     val aiCallsUsed: Int = 0,
     /** P10: a description or a kind of place, not a name: never one silent guess (pick list). */
-    val vague: Boolean = false
+    val vague: Boolean = false,
+    /** P10: [name] is a street address ("Calle 6A #36-41"), [hint] its neighbourhood: Nominatim only, pick list. */
+    val address: Boolean = false
 )
 
 /** Where a candidate came from. */
@@ -189,6 +191,16 @@ class PlaceResolver(
         }
 
         val s = Search(anchor, request.aiCallsUsed)
+        // P10 address: never the business index; the street that Nominatim knows, as the pick list, or not found.
+        if (request.address) {
+            gatherAddress(request, name, s)
+            lastRequests = s.requests
+            val found = dedupe(sortedCandidates(s.candidates)).take(MAX_CANDIDATES)
+            WgoMetrics.event("places resolved address n=${found.size} requests=${s.requests}")
+            if (found.isNotEmpty()) return Resolution.Found(found, uncertain = true)
+            val failure = s.onlineFailure
+            return if (failure != null) Resolution.Failed(failure) else Resolution.NotFound(emptyList())
+        }
         // P10 category request ("alguna droguería que quede en el centro"): real places of that kind near the hint,
         // nearest first, always the pick list; no model call.
         if (request.vague && request.category != null && PlaceCategories.categoryWord(PlaceText.normalize(request.category)) != null) {
@@ -258,6 +270,35 @@ class PlaceResolver(
             if (first.any { distance(it, s.anchor) <= FAR_KM * 1000 }) first else s.ask(name, bounded = true).ifEmpty { first }
         }
         s.addOnline(found, name, nearOnly = false) // Nominatim decided it matches: tier 3 for the same name, else 2
+    }
+
+    /**
+     * P10 address: the street and house number in Pasto, then the street with the neighbourhood, then the street alone
+     * (at most [MAX_REQUESTS] requests); near results only.
+     */
+    private suspend fun gatherAddress(request: PlaceRequest, name: String, s: Search) {
+        val street = name.substringBefore(" #").trim()
+        val house = name.substringAfter(" #", "").trim()
+        val queries = listOfNotNull(
+            house.takeIf { it.isNotEmpty() }?.let { "$street $it, Pasto" },
+            request.hint?.let { "$street, $it, Pasto" },
+            "$street, Pasto"
+        )
+        val hint = request.hint
+        var fallback: Pair<List<Place>, String>? = null
+        for (q in queries) {
+            val near = s.ask(q, bounded = false).filter { distance(it, s.anchor) <= FAR_KM * 1000 }
+            if (near.isEmpty()) continue
+            // With a neighbourhood said, keep asking until a result is in it (else the first results stand).
+            val inBarrio = hint == null || near.any { HintMatch.textScore(hint, it.name + " " + it.address) > 0.0 }
+            if (inBarrio) {
+                s.addOnline(near, q, nearOnly = true, exactTier = 2)
+                if (hint != null) s.candidates.replaceAll { it.copy(hintScore = HintMatch.textScore(hint, it.place.name + " " + it.place.address)) }
+                return
+            }
+            if (fallback == null) fallback = near to q
+        }
+        fallback?.let { (near, q) -> s.addOnline(near, q, nearOnly = true, exactTier = 2) }
     }
 
     /** P10: up to [MAX_CANDIDATES] index places of the request's category, nearest to the hint's point (or the user). */

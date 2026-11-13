@@ -47,7 +47,7 @@ class LocalIntentParserTest {
         Case("tengo que ir a la clínica Fátima manejando", nav, "clínica Fátima", Drive),
         Case("me llevas a la Avenida de los Estudiantes", nav, "Avenida de los Estudiantes"),
         Case("vámonos al barrio Obrero en taxi", nav, "barrio Obrero", Drive),
-        Case("llévame a la Calle 18 # 24-15", nav, "Calle 18 # 24-15"),
+        Case("llévame a la Calle 18 # 24-15", nav, "Calle 18 #24-15"), // P10: an address, normalised
         Case("guíame a la Alcaldía de Pasto", nav, "Alcaldía"),
         Case("ruta al Santuario de Las Lajas en carro", nav, "Santuario de Las Lajas", Drive),
         // English
