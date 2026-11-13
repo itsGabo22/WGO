@@ -7,21 +7,6 @@ import com.wgo.navigator.ui.theme.WgoTheme
 
 @Preview(device = "id:wearos_small_round", showSystemUi = true)
 @Composable
-fun ScreenListeningPreview() {
-    WgoTheme {
-        Scaffold {
-            ScreenListening(
-                isListening = false,
-                onToggleListen = {},
-                onCancel = {},
-                onOpenSettings = {}
-            )
-        }
-    }
-}
-
-@Preview(device = "id:wearos_small_round", showSystemUi = true)
-@Composable
 fun ScreenModeSelectionPreview() {
     WgoTheme {
         Scaffold {

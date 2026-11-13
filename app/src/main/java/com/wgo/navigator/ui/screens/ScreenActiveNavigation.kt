@@ -1,242 +1,546 @@
 package com.wgo.navigator.ui.screens
 
-import androidx.compose.foundation.Canvas
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.ArrowUpward
-import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import com.wgo.navigator.ui.map.RadarState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.wear.compose.material.Button
-import androidx.wear.compose.material.ButtonDefaults
-import androidx.wear.compose.material.Chip
-import androidx.wear.compose.material.ChipDefaults
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import com.wgo.navigator.ui.components.MapAttributionArc
+import com.wgo.navigator.ui.components.WgoChip
+import com.wgo.navigator.ui.theme.LocalWgoScale
+import com.wgo.navigator.ui.components.HudContent
+import com.wgo.navigator.ui.components.NavigationHud
+import com.wgo.navigator.ui.map.RadarProjection
+import com.wgo.navigator.metrics.WgoMetrics
+import com.wgo.navigator.ui.theme.WgoMotion
+import com.wgo.navigator.ui.theme.atLeastRealDp
+import com.wgo.navigator.ui.theme.wgoMinTouch
+import com.wgo.navigator.ui.theme.wgoTouchSide
+import kotlinx.coroutines.delay
 import androidx.wear.compose.material.Icon
-import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.Text
+import com.wgo.navigator.core.Maneuver
+import com.wgo.navigator.core.permissions.PermissionStatus
+import com.wgo.navigator.core.permissions.WgoPermission
+import com.wgo.navigator.nav.NavState
+import com.wgo.navigator.route.ManeuverText
+import com.wgo.navigator.ui.LocalLanguage
 import com.wgo.navigator.ui.StringKey
+import com.wgo.navigator.ui.components.PermissionDenied
+import com.wgo.navigator.ui.components.WgoIcons
+import com.wgo.navigator.ui.formatDistance
+import com.wgo.navigator.ui.map.DemoRadarSource
+import com.wgo.navigator.ui.map.RadarMinimap
+import com.wgo.navigator.ui.map.USER_ANCHOR_Y_FRACTION
+import com.wgo.navigator.ui.map.MapTiles
+import com.wgo.navigator.ui.map.TileProvider
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
+import androidx.wear.compose.material.Text
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableStateOf
+import com.wgo.navigator.ui.map.RadarSource
+import com.wgo.navigator.ui.minutesOf
 import com.wgo.navigator.ui.string
-import com.wgo.navigator.ui.theme.WgoBlack
-import com.wgo.navigator.ui.theme.WgoPrimary
-import com.wgo.navigator.ui.theme.WgoWhite
+import com.wgo.navigator.ui.theme.LocalWgoReduceMotion
+import com.wgo.navigator.ui.theme.MapStyleId
+import com.wgo.navigator.ui.theme.Wgo
+import com.wgo.navigator.ui.theme.WgoType
+import com.wgo.navigator.ui.theme.rememberWgoClock
+import com.wgo.navigator.ui.theme.wgoMapStyle
 
+private const val MIN_ZOOM = 15.0
+private const val MAX_ZOOM = 18.0
+
+/** The guidance a state still carries (the last one before going off route, rerouting or losing GPS). */
+private fun NavState.guidance(): NavState.Navigating? = when (this) {
+    is NavState.Navigating -> this
+    is NavState.OffRoute -> last
+    is NavState.Rerouting -> last
+    is NavState.LostRoute -> last
+    is NavState.GpsLost -> last
+    else -> null
+}
+
+/**
+ * Screen 03, driven by the navigation engine's [navState] (the layout is the pre-P6 one; its rebuild is P6).
+ * - WaitingForGps: the GPS SEARCHING surface (CANCEL ends the trip).
+ * - Navigating / OffRoute / Rerouting: radar with the remaining route ([radarSource]) under the HUD: next maneuver
+ *   (icon, distance, instruction), remaining distance and ETA; off route and rerouting replace the instruction with a
+ *   live-region status.
+ * - GpsLost / LostRoute / [endConfirm]: their surface covers the radar, which stays composed (no osmdroid rebuild on
+ *   KEEP) with its animations stopped (reduce motion forced under an opaque surface). Its data keeps updating: freezing
+ *   it was measured in P6-B and gave no gain (END NAVIGATION? / GPS LOST jank identical with and without).
+ * The CANCEL chip and Back ask END NAVIGATION? first. A refused location permission shows [PermissionDenied].
+ * Without [navState] (previews) the radar runs on [DemoRadarSource].
+ */
 @Composable
 fun ScreenActiveNavigation(
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    mapStyleId: MapStyleId = MapStyleId.COBALTO,
+    navState: NavState? = null,
+    radarSource: RadarSource? = null,
+    destination: String = "",
+    endConfirm: Boolean = false,
+    onEnd: () -> Unit = {},
+    onKeep: () -> Unit = {},
+    onRetryReroute: () -> Unit = {},
+    onRetryGps: () -> Unit = {},
+    locationPermission: PermissionStatus = PermissionStatus.Granted,
+    onRetryLocation: () -> Unit = {},
+    onOpenLocationSettings: () -> Unit = {},
+    /** Previews only: show this HUD state instead of the rule's. */
+    forcedHud: HudMode? = null,
+    /** Driving trip: CANCELAR gets the 60 real dp `hit-drive` touch height. */
+    driving: Boolean = false,
+    /** P8: north up (default; the map never turns) or heading up. */
+    northUp: Boolean = true,
+    /** The offline places index: heading up draws upright landmark labels from it (P8). */
+    landmarkIndex: com.wgo.navigator.places.PlaceIndex? = null,
+    /** P11 RUTA chip: the next known route becomes active (no network). */
+    onNextRoute: () -> Unit = {}
 ) {
-    var zoomLevel by remember { mutableFloatStateOf(1f) }
-    val maxZoom = 2.5f
-    val minZoom = 0.75f
+    if (navState != null &&
+        (locationPermission == PermissionStatus.Denied || locationPermission == PermissionStatus.PermanentlyDenied)
+    ) {
+        PermissionDenied(
+            permission = WgoPermission.LOCATION,
+            status = locationPermission,
+            onRetry = onRetryLocation,
+            onOpenSettings = onOpenLocationSettings
+        )
+        return
+    }
+    if (navState == NavState.WaitingForGps) {
+        if (endConfirm) ScreenEndNavigation(destination, onEnd = onEnd, onKeep = onKeep) else ScreenGpsSearching(onCancel = onEnd)
+        return
+    }
+    val covered = endConfirm || navState is NavState.LostRoute || navState is NavState.GpsLost
+    var screenSize by remember { mutableStateOf(IntSize.Zero) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colors.background)
+            .background(Wgo.palette.canvas)
+            .onSizeChanged { screenSize = it }
     ) {
-        // Z-Layer 0: MAP (Abstract environment)
-        WgoMapPlaceholder(zoomLevel = zoomLevel)
+        // One clock for every looping element of the screen (radar pieces and the GPS-lost overlay).
+        val clock = rememberWgoClock()
+        val scope = rememberCoroutineScope()
+        val source = radarSource ?: remember { DemoRadarSource(scope) }
+        val radar: RadarState = source.state.collectAsState().value
+        var zoom by remember { mutableDoubleStateOf(17.0) }
+        val reduceMotion = LocalWgoReduceMotion.current
+        // Explore mode (spec section 7): UI state only, dropped with this screen (trip end, ambient).
+        val explore = remember { ExploreController { SystemClock.elapsedRealtime() } }
+        var tileSize by remember { mutableDoubleStateOf(RadarProjection.DEFAULT_TILE_SIZE_PX) }
+        // The HUD state last shown (for the landmark labels' keep-clear boxes; set after the HUD is composed).
+        var hudShown by remember { mutableStateOf(HudMode.Compact) }
+        var routeChipShown by remember { mutableStateOf(false) }
+        val language = LocalLanguage.current
+        // Heading up only: the index is loaded off the main thread (once per process) and its landmark rows kept.
+        var landmarks by remember { mutableStateOf(emptyList<com.wgo.navigator.places.IndexedPlace>()) }
+        LaunchedEffect(northUp, landmarkIndex) {
+            val index = landmarkIndex
+            landmarks = if (northUp || index == null || !index.ensureLoaded()) emptyList()
+            else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                com.wgo.navigator.ui.map.LandmarkLabels.candidates(index.rows)
+            }
+        }
 
-        // Z-Layer 2: TOP NAVIGATION HUD (Floating card)
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 28.dp)
-                .fillMaxWidth(0.9f)
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colors.surface.copy(alpha = 0.90f))
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ArrowUpward,
-                        contentDescription = string(StringKey.GO_STRAIGHT),
-                        tint = WgoPrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "200m",
-                        color = MaterialTheme.colors.onSurface,
-                        style = MaterialTheme.typography.title3.copy(fontWeight = FontWeight.Bold)
+        // Z-Layer 0: RADAR MINIMAP. Under an opaque surface its loops stop (no frames for an invisible sweep).
+        CompositionLocalProvider(LocalWgoReduceMotion provides (reduceMotion || covered)) {
+            RadarMinimap(
+                style = wgoMapStyle(mapStyleId, Wgo.palette),
+                userLocation = radar.location,
+                bearing = radar.bearing,
+                route = radar.route,
+                blips = radar.blips,
+                maneuver = radar.maneuver,
+                zoom = zoom,
+                clock = clock,
+                viewCenter = explore.viewCenter(radar.location),
+                viewBearing = explore.viewBearing(radar.bearing),
+                northUp = northUp,
+                landmarks = landmarks,
+                labelBlocked = landmarkLabelBlocks(hudShown, explore.exploring, routeChipShown),
+                onTileSize = { tileSize = it },
+                alternatives = radar.alternatives,
+                altLabel = { minutes -> altDeltaLabel(minutes, language) }
+            )
+        }
+
+        // Explore: back to following 10 s after the last touch (paused while a finger is down), with a 420 ms glide.
+        LaunchedEffect(explore.exploring, explore.touching, explore.lastTouchMs, explore.glideFrom) {
+            if (!explore.exploring || explore.glideFrom != null) return@LaunchedEffect
+            val wait = ExploreRules.autoReturnInMs(explore.lastTouchMs, explore.touching, SystemClock.elapsedRealtime())
+                ?: return@LaunchedEffect
+            delay(wait)
+            explore.startReturn()
+        }
+        LaunchedEffect(explore.glideFrom) {
+            if (explore.glideFrom == null) return@LaunchedEffect
+            if (!reduceMotion) {
+                animate(0f, 1f, animationSpec = tween(ExploreRules.RETURN_GLIDE_MS, easing = WgoMotion.EmphasizedDecel)) { v, _ ->
+                    explore.glide = v
+                }
+            }
+            explore.finish()
+        }
+
+        if (!covered) {
+            // Z-Layer 0.5: the one-finger pan surface (above the map, below every control). Taps pass through.
+            val latestRadar by rememberUpdatedState(radar)
+            val latestZoom by rememberUpdatedState(zoom)
+            val latestTile by rememberUpdatedState(tileSize)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(explore) {
+                        val slop = viewConfiguration.touchSlop
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            explore.onTouch(true)
+                            var travelled = Offset.Zero
+                            var panning = false
+                            var applied = Offset.Zero
+                            var events = 0
+                            var endReason = "up"
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    events++
+                                    // Only the first finger pans; a second one is ignored (no pinch).
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: run { endReason = "lost"; null } ?: break
+                                    if (change.isConsumed) { endReason = "claimed"; break } // edge swipe-back
+                                    // The release can carry the last stretch of the drag: apply it before stopping.
+                                    val delta = change.positionChange()
+                                    val released = !change.pressed
+                                    if (!panning) {
+                                        travelled += delta
+                                        if (travelled.getDistance() < slop) { if (released) break else continue }
+                                        panning = true
+                                    }
+                                    val step = if (panning && travelled != Offset.Zero) travelled.also { travelled = Offset.Zero } else delta
+                                    val r = latestRadar
+                                    explore.pan(step.x, step.y, r.location, if (northUp) 0f else r.bearing, r.route, latestZoom, latestTile)
+                                    applied += step
+                                    change.consume()
+                                    if (released) break
+                                }
+                            } finally {
+                                explore.onTouch(false)
+                                if (panning) WgoMetrics.event(
+                                    "explore_drag px=${applied.x.toInt()},${applied.y.toInt()} events=$events end=$endReason " +
+                                        "tile=${latestTile.toInt()} center_from_user_m=" +
+                                        (explore.center?.let { RadarProjection.distanceMeters(it, latestRadar.location).toInt() } ?: -1)
+                                )
+                            }
+                        }
+                    }
+            )
+        }
+
+        if (!covered) {
+            // Adaptive HUD (spec section 7): the state is HudRules' pure function; taps and the end of the reroute
+            // window bump hudTick so the rule runs again.
+            val tracker = remember { HudTracker() }
+            var hudTick by remember { mutableIntStateOf(0) }
+            hudTick.let { } // read: a tap or the window's end recomposes this scope
+            val nav = navState?.guidance()
+            val input = HudRules.Input(
+                distanceToNextM = nav?.distanceToNextM,
+                maneuver = nav?.next,
+                rerouting = navState is NavState.OffRoute || navState is NavState.Rerouting,
+                exploring = explore.exploring,
+                nowMs = SystemClock.elapsedRealtime(),
+                routeKey = radar.routeId
+            )
+            val hud = tracker.update(input)
+            val shownNow = forcedHud ?: hud.shown
+            androidx.compose.runtime.SideEffect { hudShown = shownNow }
+            val windowEnd = hud.newRouteAtMs
+            LaunchedEffect(windowEnd) {
+                val left = HudRules.rerouteWindowLeftMs(hud, SystemClock.elapsedRealtime()) ?: return@LaunchedEffect
+                delay(left + 20)
+                hudTick++
+            }
+            NavigationHud(
+                mode = forcedHud ?: hud.shown,
+                content = hudContent(navState, radar.calibrate, radar.faceDeg),
+                onTap = {
+                    // While exploring a tap on the HUD recenters; otherwise it forces the other state.
+                    if (explore.exploring) explore.startReturn()
+                    else if (tracker.toggle(SystemClock.elapsedRealtime())) hudTick++
+                },
+                clock = clock,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+
+            // MAP ATTRIBUTION (P8): along the bottom arc, 2.5 s when the map first appears and while exploring; never
+            // under the HUD (spec 9.1).
+            var tripStart by remember { mutableStateOf(true) }
+            LaunchedEffect(Unit) {
+                delay(ATTRIBUTION_START_MS)
+                tripStart = false
+            }
+            val provider by MapTiles.provider.collectAsState()
+            MapAttributionArc(visible = explore.exploring || tripStart, provider = provider)
+
+            // P11 RUTA k/n: the first 15 s of the trip (HUD compact) and explore mode, with 2+ known routes; in explore
+            // it takes the RECENTER slot (a HUD tap and the auto-return still recenter). Hidden over the user.
+            var routeWindow by remember { mutableStateOf(true) }
+            LaunchedEffect(Unit) {
+                delay(ROUTE_CHIP_START_MS)
+                routeWindow = false
+            }
+            val density = LocalDensity.current.density
+            val viewCenter = explore.viewCenter(radar.location)
+            val userDp = if (viewCenter == null || screenSize == IntSize.Zero) null else RadarProjection.toScreen(
+                radar.location, viewCenter, if (northUp) 0.0 else (explore.viewBearing(radar.bearing) ?: radar.bearing).toDouble(), zoom,
+                screenSize.width / 2f, screenSize.height * USER_ANCHOR_Y_FRACTION, tileSize
+            ).let { p -> Offset(p.x / density, p.y / density) }
+            val routeChip = radar.routeCount >= 2 && RecenterRule.visible(userDp?.x, userDp?.y) &&
+                (explore.exploring || (routeWindow && shownNow == HudMode.Compact))
+            androidx.compose.runtime.SideEffect { routeChipShown = routeChip }
+            if (routeChip) {
+                val index = radar.routeIndex + 1
+                val description = String.format(string(StringKey.ROUTE_CHIP_A11Y), index, radar.routeCount)
+                WgoChip(
+                    label = String.format(string(StringKey.ROUTE_CHIP), index, radar.routeCount),
+                    onClick = onNextRoute,
+                    width = ROUTE_CHIP_WIDTH,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = RecenterRule.CENTER_Y_DP.dp - wgoTouchSide(32.dp) / 2)
+                        .semantics(mergeDescendants = true) { contentDescription = description }
+                )
+            }
+
+            // RECENTER (explore only): 40 dp `primary` circle centred at (113.5, 108), 48 real dp touch; hidden while
+            // the user's chevron is under it (P7, RecenterRule), so it never covers the user.
+            if (explore.exploring && !routeChip) {
+                if (RecenterRule.visible(userDp?.x, userDp?.y)) {
+                    RecenterButton(
+                        onClick = { explore.startReturn() },
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = RecenterRule.CENTER_Y_DP.dp - wgoTouchSide(40.dp) / 2)
                     )
                 }
-                Text(
-                    text = string(StringKey.NAV_INSTRUCTION),
-                    color = MaterialTheme.colors.onSurface,
-                    style = MaterialTheme.typography.caption2.copy(fontWeight = FontWeight.Medium),
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        // Z-Layer 2.5: ZOOM CONTROLS
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = { zoomLevel = (zoomLevel + 0.25f).coerceAtMost(maxZoom) },
-                modifier = Modifier.size(36.dp),
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.8f),
-                    contentColor = MaterialTheme.colors.onSurface
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Add,
-                    contentDescription = string(StringKey.ZOOM_IN),
-                    modifier = Modifier.size(20.dp)
-                )
             }
 
-            Button(
-                onClick = { zoomLevel = (zoomLevel - 0.25f).coerceAtLeast(minZoom) },
-                modifier = Modifier.size(36.dp),
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.8f),
-                    contentColor = MaterialTheme.colors.onSurface
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Remove,
-                    contentDescription = string(StringKey.ZOOM_OUT),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
-        // Z-Layer 3: BOTTOM ACTION HUD
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 12.dp)
-        ) {
-            val isLight = MaterialTheme.colors.background == WgoWhite
-            Chip(
-                onClick = onCancel,
-                colors = ChipDefaults.chipColors(
-                    backgroundColor = if (isLight) Color(0xFFF2F4F7) else Color(0xFF1E1E1E),
-                    contentColor = MaterialTheme.colors.onBackground
-                ),
-                label = {
-                    Text(
-                        text = string(StringKey.BTN_CANCEL),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                },
-                modifier = Modifier
-                    .fillMaxWidth(0.7f)
-                    .height(40.dp)
+            // Z-Layer 2.5: ZOOM - at (41.5, 150) and + at (185.5, 150): fixed 40 dp circles, 48 real dp touch (fit 99.4).
+            val controlTouch = wgoTouchSide(40.dp)
+            MapControlButton(
+                icon = WgoIcons.Minus,
+                description = string(StringKey.ZOOM_OUT),
+                onClick = { zoom = (zoom - 1.0).coerceAtLeast(MIN_ZOOM) },
+                modifier = Modifier.align(Alignment.TopStart).offset(x = 41.5.dp - controlTouch / 2, y = 150.dp - controlTouch / 2)
             )
+            MapControlButton(
+                icon = WgoIcons.Plus,
+                description = string(StringKey.ZOOM_IN),
+                onClick = { zoom = (zoom + 1.0).coerceAtMost(MAX_ZOOM) },
+                modifier = Modifier.align(Alignment.TopStart).offset(x = 185.5.dp - controlTouch / 2, y = 150.dp - controlTouch / 2)
+            )
+
+            // Z-Layer 3: CANCELAR 86x32 @176 (fit 99.0), touch 48 real dp walking / 60 (hit-drive) driving; asks
+            // END NAVIGATION? first. 86 dp keeps its touch box clear of the zoom buttons' at every scale.
+            val cancelTouchReal = if (driving) 60.dp else 48.dp
+            val cancelTouch = maxOf(32.dp, cancelTouchReal / LocalWgoScale.current)
+            WgoChip(
+                label = string(StringKey.BTN_CANCEL),
+                onClick = onCancel,
+                width = 86.dp,
+                touchHeight = cancelTouchReal,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = 192.dp - cancelTouch / 2)
+            )
+        }
+
+        when {
+            endConfirm -> ScreenEndNavigation(destination, onEnd = onEnd, onKeep = onKeep)
+            navState is NavState.LostRoute -> ScreenLostRoute(onRetry = onRetryReroute, onEnd = onEnd)
+            navState is NavState.GpsLost -> GpsLostOverlay(onRetry = onRetryGps, clock = clock)
         }
     }
 }
 
+/**
+ * Map control: a fixed 40 dp circle with a 48 REAL dp touch box (spec section 7). [primary] fills it with `primary`
+ * (recenter); otherwise `surface` + `edge-control` (zoom). Pressing inverts instantly. Never resized.
+ */
 @Composable
-fun WgoMapPlaceholder(zoomLevel: Float) {
-    val isLight = MaterialTheme.colors.background == WgoWhite
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        scale(scale = zoomLevel, pivot = androidx.compose.ui.geometry.Offset(size.width * 0.5f, size.height * 0.6f)) {
-            // Draw secondary abstract street grid
-            val streetColor = if (isLight) Color.LightGray.copy(alpha = 0.5f) else Color.DarkGray.copy(alpha = 0.5f)
-            
-            // Horizontal streets
-            drawLine(
-                color = streetColor,
-                start = androidx.compose.ui.geometry.Offset(0f, size.height * 0.3f),
-                end = androidx.compose.ui.geometry.Offset(size.width, size.height * 0.3f),
-                strokeWidth = 12f
-            )
-            drawLine(
-                color = streetColor,
-                start = androidx.compose.ui.geometry.Offset(0f, size.height * 0.7f),
-                end = androidx.compose.ui.geometry.Offset(size.width, size.height * 0.7f),
-                strokeWidth = 16f
-            )
-            
-            // Vertical streets
-            drawLine(
-                color = streetColor,
-                start = androidx.compose.ui.geometry.Offset(size.width * 0.2f, 0f),
-                end = androidx.compose.ui.geometry.Offset(size.width * 0.2f, size.height),
-                strokeWidth = 12f
-            )
-            drawLine(
-                color = streetColor,
-                start = androidx.compose.ui.geometry.Offset(size.width * 0.8f, 0f),
-                end = androidx.compose.ui.geometry.Offset(size.width * 0.8f, size.height),
-                strokeWidth = 12f
-            )
-
-            // Draw active navigation route (Primary Blue)
-            val routePath = Path().apply {
-                moveTo(size.width * 0.5f, size.height * 0.8f) // Start near bottom
-                lineTo(size.width * 0.5f, size.height * 0.5f) // Up to middle
-                lineTo(size.width * 0.8f, size.height * 0.5f) // Right turn
-                lineTo(size.width * 0.8f, size.height * 0.3f) // Up
-            }
-
-            drawPath(
-                path = routePath,
-                color = WgoPrimary,
-                style = Stroke(
-                    width = 24f,
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round
-                )
-            )
-
-            // Current Location Marker (Pulse / Halo + Dot)
-            val currentLocX = size.width * 0.5f
-            val currentLocY = size.height * 0.8f
-            
-            drawCircle(
-                color = WgoPrimary.copy(alpha = 0.2f),
-                radius = 24f,
-                center = androidx.compose.ui.geometry.Offset(currentLocX, currentLocY)
-            )
-            drawCircle(
-                color = Color.White,
-                radius = 12f,
-                center = androidx.compose.ui.geometry.Offset(currentLocX, currentLocY)
-            )
-            drawCircle(
-                color = WgoPrimary,
-                radius = 8f,
-                center = androidx.compose.ui.geometry.Offset(currentLocX, currentLocY)
-            )
+internal fun MapControlButton(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    primary: Boolean = false,
+    iconSize: Dp = 20.dp
+) {
+    val palette = Wgo.palette
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val fill = when {
+        pressed -> palette.ink
+        primary -> palette.primary
+        else -> palette.surface
+    }
+    val tint = when {
+        pressed -> palette.inkInverse
+        primary -> palette.onPrimary
+        else -> palette.ink
+    }
+    Box(
+        modifier = modifier
+            .wgoMinTouch()
+            .semantics { contentDescription = description }
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(fill, CircleShape)
+                .border(1.5.dp.atLeastRealDp(), palette.ink, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(iconSize))
         }
+    }
+}
+
+/**
+ * The controls over the map, in reference dp (spec section 7 geometry): heading-up landmark labels keep clear of them
+ * (P8). The HUD box follows the state shown; the recenter button only while exploring.
+ */
+internal fun landmarkLabelBlocks(hud: HudMode, exploring: Boolean, routeChip: Boolean = false): List<com.wgo.navigator.ui.map.LabelBlock> = buildList {
+    add(if (hud == HudMode.Expanded) com.wgo.navigator.ui.map.LabelBlock(38.5f, 30f, 188.5f, 120f) else com.wgo.navigator.ui.map.LabelBlock(57.5f, 22f, 169.5f, 58f))
+    add(com.wgo.navigator.ui.map.LabelBlock(21.5f, 130f, 61.5f, 170f)) // zoom -
+    add(com.wgo.navigator.ui.map.LabelBlock(165.5f, 130f, 205.5f, 170f)) // zoom +
+    add(com.wgo.navigator.ui.map.LabelBlock(70.5f, 176f, 156.5f, 208f)) // CANCELAR
+    if (exploring) add(com.wgo.navigator.ui.map.LabelBlock(93.5f, 88f, 133.5f, 128f)) // recenter
+    if (routeChip) add(com.wgo.navigator.ui.map.LabelBlock(73.5f, 92f, 153.5f, 124f)) // RUTA k/n (P11)
+}
+
+/** P11: the RUTA chip shows this long at the start of a trip (then only in explore mode). */
+private const val ROUTE_CHIP_START_MS = 15_000L
+
+/** P11: the RUTA chip's width (its 48 REAL dp touch box stays clear of the zoom buttons' down to s = 0.846). */
+internal val ROUTE_CHIP_WIDTH = 80.dp
+
+/** P11: "+2 MIN", "−1 MIN" or "=" for an alternative's time difference. */
+internal fun altDeltaLabel(minutes: Int, language: com.wgo.navigator.Language): String = when {
+    minutes > 0 -> String.format(com.wgo.navigator.ui.stringFor(StringKey.ALT_DELTA_MORE, language), minutes)
+    minutes < 0 -> String.format(com.wgo.navigator.ui.stringFor(StringKey.ALT_DELTA_LESS, language), -minutes)
+    else -> com.wgo.navigator.ui.stringFor(StringKey.ALT_DELTA_SAME, language)
+}
+
+/** The attribution shows this long when the trip's map first appears (spec 9.1, P8). */
+private const val ATTRIBUTION_START_MS = 2_500L
+
+@Composable
+private fun RecenterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    MapControlButton(
+        icon = WgoIcons.Locate,
+        description = string(StringKey.RECENTER),
+        onClick = onClick,
+        modifier = modifier,
+        primary = true,
+        iconSize = 22.dp
+    )
+}
+
+/** What the HUD shows, from the engine state (previews without a state get a sample instruction). */
+@Composable
+private fun hudContent(navState: NavState?, calibrate: Boolean = false, faceDeg: Float? = null): HudContent {
+    val language = LocalLanguage.current
+    val nav = navState?.guidance()
+    val next = nav?.next
+    val status = when (navState) {
+        is NavState.OffRoute -> string(if (navState.offline) StringKey.NAV_OFFLINE_NOT_UPDATED else StringKey.NAV_OFF_ROUTE)
+        is NavState.Rerouting -> string(StringKey.NAV_REROUTING)
+        else -> when {
+            // P11: where to face first, then the figure-8 hint (lowest priority).
+            faceDeg != null && kotlin.math.abs(faceDeg) >= com.wgo.navigator.heading.FaceRule.TURN_HINT_DEG -> string(StringKey.FACE_ROUTE)
+            calibrate -> string(StringKey.COMPASS_CALIBRATE)
+            else -> null
+        }
+    }
+    // "250 m" / "1,2 km": number and unit apart, for the odometer.
+    val distance = formatDistance(nav?.distanceToNextM ?: 200.0, language)
+    val split = distance.lastIndexOf(' ')
+    return HudContent(
+        maneuver = next?.maneuver ?: if (nav == null) Maneuver.RIGHT else null,
+        distanceM = nav?.distanceToNextM,
+        distanceNumber = if (split > 0) distance.substring(0, split) else distance,
+        distanceUnit = if (split > 0) distance.substring(split + 1) else "",
+        instruction = next?.let { ManeuverText.instruction(it, language) } ?: string(StringKey.NAV_INSTRUCTION),
+        status = status,
+        totals = nav?.let {
+            String.format(string(StringKey.NAV_TOTALS), formatDistance(it.remainingM, language), minutesOf(it.etaS))
+        },
+        faceDeg = faceDeg
+    )
+}
+
+/**
+ * Keeps the [HudRules] state between frames. [update] runs during composition: [HudRules.step] is idempotent, so a
+ * repeated composition with the same input changes nothing.
+ */
+private class HudTracker {
+    var state: HudRules.State? = null
+        private set
+    private var lastInput: HudRules.Input? = null
+
+    fun update(input: HudRules.Input): HudRules.State {
+        lastInput = input
+        return (state?.let { HudRules.step(it, input) } ?: HudRules.initial(input)).also { state = it }
+    }
+
+    /** A tap with the latest input; false when there is nothing to toggle yet. */
+    fun toggle(nowMs: Long): Boolean {
+        val s = state ?: return false
+        val input = lastInput?.copy(nowMs = nowMs) ?: return false
+        state = HudRules.toggle(s, input)
+        return true
     }
 }

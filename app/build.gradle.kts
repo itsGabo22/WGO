@@ -1,7 +1,21 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// Optional service keys from the git-ignored local.properties (see local.properties.example). Missing keys become
+// empty strings, so the build never needs them. Values are never printed or logged.
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.isFile) file.inputStream().use { load(it) }
+}
+
+fun localStringField(key: String): String {
+    val value = localProperties.getProperty(key).orEmpty().trim()
+    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }
 
 android {
@@ -11,21 +25,52 @@ android {
     defaultConfig {
         applicationId = "com.wgo.navigator"
         minSdk = 30
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        buildConfigField("String", "LLM_API_KEY", localStringField("LLM_API_KEY"))
+        buildConfigField("String", "LLM_BASE_URL", localStringField("LLM_BASE_URL"))
+        buildConfigField("String", "LLM_MODEL", localStringField("LLM_MODEL"))
+        // P9 cloud transcription model on the same provider and key (empty = TranscriptionClient.DEFAULT_MODEL).
+        buildConfigField("String", "STT_MODEL", localStringField("STT_MODEL"))
+        buildConfigField("String", "WGO_CONTACT", localStringField("WGO_CONTACT"))
+        // CARTO basemaps key (P7 map layers); empty = the OpenStreetMap tile pipeline.
+        buildConfigField("String", "MAP_TILE_KEY", localStringField("MAP_TILE_KEY"))
+        // Measurement hooks (utterance and intro-replay activity extras). Off in release; R8 drops the guarded code.
+        buildConfigField("boolean", "TEST_HOOKS", "false")
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "TEST_HOOKS", "true")
+        }
         release {
-            isMinifyEnabled = false
+            // P7: R8 + resource shrinking. Signed with the DEBUG key for local testing only: a published build needs
+            // the owner's upload key and no API keys inside (docs/RELEASE_CHECKLIST.md).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // Release-like build for performance runs: not debuggable, R8 + resource shrinking, signed with the debug key
+        // so it installs next to the debug build (own application id). No debug source set: no debug receivers, no
+        // WgoMetrics (BuildConfig.DEBUG is false). Only the TEST_HOOKS activity extras stay, to drive the pipeline.
+        create("benchmark") {
+            initWith(getByName("release"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            applicationIdSuffix = ".bench"
+            buildConfigField("boolean", "TEST_HOOKS", "true")
         }
     }
     compileOptions {
@@ -37,6 +82,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {
@@ -48,6 +94,8 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("com.google.android.gms:play-services-wearable:18.1.0")
+    // Fused location (GPS/Wi-Fi/cell fusion runs in the Play services process; falls back to LocationManager).
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation(platform("androidx.compose:compose-bom:2024.02.01"))
@@ -58,7 +106,23 @@ dependencies {
     implementation("androidx.wear.compose:compose-material:1.3.0")
     implementation("androidx.wear.compose:compose-foundation:1.3.0")
     implementation("androidx.wear.compose:compose-navigation:1.3.0")
-    
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    // Navigation with the wrist down (P6-A): the ongoing activity on the watch face and the ambient lifecycle observer.
+    // Newest stable releases; both only need androidx.core 1.6.0, so no existing version is raised.
+    implementation("androidx.wear:wear-ongoing:1.1.0")
+    implementation("androidx.wear:wear:1.4.0")
+
+    constraints {
+        // Play services still pulls androidx.fragment 1.0.0 transitively; registerForActivityResult needs >= 1.3.0
+        // (lint InvalidFragmentVersionForActivityResult). This only raises the transitive version, it adds nothing.
+        implementation("androidx.fragment:fragment:1.6.2")
+    }
+
+    testImplementation("junit:junit:4.13.2")
+    // JVM unit tests only: the reference org.json (the android.jar copy is a stub that throws). Not in the APK.
+    testImplementation("org.json:json:20231013")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

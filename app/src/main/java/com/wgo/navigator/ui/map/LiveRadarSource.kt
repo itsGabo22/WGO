@@ -1,0 +1,138 @@
+package com.wgo.navigator.ui.map
+
+import android.os.SystemClock
+import com.wgo.navigator.TravelMode
+import com.wgo.navigator.core.Fix
+import com.wgo.navigator.location.FixFilter
+import com.wgo.navigator.location.FixQuality
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+/** The Pasto centre, shown (as "searching") until the first usable fix. */
+val PastoCentre = GeoCoord(1.2136, -77.2811)
+
+/**
+ * Radar data from real fixes: the user's position, heading and accuracy, plus the trip's [route] polyline and the
+ * next [maneuver] point. No simulated blips. Good fixes move the user; inaccurate ones only flag
+ * [RadarState.searching]; stale ones (older than 10 s) are ignored. The heading comes from GPS while moving at
+ * >= 1.5 m/s (bearing of the fix, or the direction from the previous good fix) and is otherwise kept, so the map does
+ * not spin while standing still.
+ *
+ * The owner feeds it with [onFix] from the one location request of the trip (the radar never opens its own).
+ */
+class LiveRadarSource(
+    /** The trip's travel mode (the navigation screen gives CANCELAR the driving touch height from it). */
+    val mode: TravelMode?,
+    initial: GeoCoord?,
+    private var route: List<GeoCoord> = emptyList(),
+    private var maneuver: GeoCoord? = null,
+    private val nowNanos: () -> Long = { SystemClock.elapsedRealtimeNanos() }
+) : RadarSource {
+    private val _state = MutableStateFlow(
+        RadarState(
+            initial ?: route.firstOrNull() ?: PastoCentre,
+            initialBearing(route), route, emptyList(), maneuver, searching = true
+        )
+    )
+    override val state: StateFlow<RadarState> = _state.asStateFlow()
+
+    private var lastGood: Fix? = null
+
+    /** P11: the fused heading from the navigation host (compass + GPS course), or null without a compass. */
+    private var fusedHeading: Float? = null
+
+    fun onFix(fix: Fix) {
+        when (FixFilter.classify(fix, mode, nowNanos())) {
+            FixQuality.Stale -> Unit
+            FixQuality.Inaccurate -> _state.update { it.copy(searching = true, accuracyM = fix.accuracyM) }
+            FixQuality.Good -> {
+                val prev = _state.value
+                val bearing = fusedHeading ?: nextBearing(prev.bearing, lastGood, fix)
+                lastGood = fix
+                val location = GeoCoord(fix.lat, fix.lon)
+                // Standing still (GPS jitter under 2 m, same heading): keep the state, so nothing is re-projected.
+                if (!prev.searching && bearing == prev.bearing &&
+                    RadarProjection.distanceMeters(prev.location, location) < MIN_REDRAW_MOVE_M
+                ) return
+                _state.value = prev.copy(
+                    location = location,
+                    bearing = bearing,
+                    route = route,
+                    blips = emptyList(),
+                    maneuver = maneuver,
+                    accuracyM = fix.accuracyM,
+                    searching = false
+                )
+            }
+        }
+    }
+
+    /**
+     * The route still ahead of the user (the navigation session cuts it as progress grows) and the next maneuver point.
+     * The radar then draws only what is left; nothing changes while the user stands still.
+     */
+    fun setRoute(remaining: List<GeoCoord>, nextManeuver: GeoCoord?) {
+        if (remaining === route && nextManeuver == maneuver) return
+        route = remaining
+        maneuver = nextManeuver
+        _state.update { it.copy(route = remaining, maneuver = nextManeuver) }
+    }
+
+    /**
+     * P11: the fused heading (compass when slow, GPS course when fast); null hands the heading back to the GPS rule
+     * ([nextBearing]). The map turns (heading up) or the arrow turns (north up) with it.
+     */
+    fun setHeading(deg: Float?) {
+        fusedHeading = deg
+        if (deg != null) _state.update { if (it.bearing == deg) it else it.copy(bearing = deg) }
+    }
+
+    /** P11: the figure-8 hint (see [RadarState.calibrate]). */
+    fun setCalibrate(value: Boolean) {
+        _state.update { if (it.calibrate == value) it else it.copy(calibrate = value) }
+    }
+
+    /** P11: the turn-to-face angle (see [RadarState.faceDeg]). */
+    fun setFace(deg: Float?) {
+        _state.update { if (it.faceDeg == deg) it else it.copy(faceDeg = deg) }
+    }
+
+    /** P11: the other known routes, which route is active among them, and its identity (see [RadarState]). */
+    fun setAlternatives(alternatives: List<RadarAlt>, routeIndex: Int, routeCount: Int, routeId: Int) {
+        _state.update {
+            if (it.alternatives == alternatives && it.routeIndex == routeIndex && it.routeCount == routeCount && it.routeId == routeId) it
+            else it.copy(alternatives = alternatives, routeIndex = routeIndex, routeCount = routeCount, routeId = routeId)
+        }
+    }
+
+    companion object {
+        const val MIN_HEADING_SPEED_MPS = 1.5f
+
+        /** Smaller moves (with the same heading) are jitter: no new radar state, so no re-projection. */
+        const val MIN_REDRAW_MOVE_M = 2.0
+        private const val MIN_MOVE_FOR_HEADING_M = 2.0
+
+        /** Before any movement the map faces along the route's first segment (north without a route). */
+        fun initialBearing(route: List<GeoCoord>): Float =
+            if (route.size >= 2) RadarProjection.bearingBetween(route[0], route[1]).toFloat() else 0f
+
+        /** Heading for [fix]: GPS-derived while moving fast enough, else [previous]. */
+        fun nextBearing(previous: Float, last: Fix?, fix: Fix): Float {
+            val moved = last?.let { RadarProjection.distanceMeters(GeoCoord(it.lat, it.lon), GeoCoord(fix.lat, fix.lon)) }
+            val speed = when {
+                !fix.speedMps.isNaN() -> fix.speedMps
+                last != null && moved != null && fix.elapsedNanos > last.elapsedNanos ->
+                    (moved / ((fix.elapsedNanos - last.elapsedNanos) / 1e9)).toFloat()
+                else -> 0f
+            }
+            if (speed < MIN_HEADING_SPEED_MPS) return previous
+            if (!fix.bearingDeg.isNaN()) return fix.bearingDeg
+            if (last != null && moved != null && moved >= MIN_MOVE_FOR_HEADING_M) {
+                return RadarProjection.bearingBetween(GeoCoord(last.lat, last.lon), GeoCoord(fix.lat, fix.lon)).toFloat()
+            }
+            return previous
+        }
+    }
+}

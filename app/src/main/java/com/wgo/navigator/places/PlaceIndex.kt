@@ -1,0 +1,308 @@
+package com.wgo.navigator.places
+
+import android.content.Context
+import com.wgo.navigator.metrics.WgoMetrics
+import com.wgo.navigator.ui.map.GeoCoord
+import com.wgo.navigator.ui.map.RadarProjection
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.BufferedReader
+import java.io.InputStream
+import java.io.InputStreamReader
+import java.util.zip.GZIPInputStream
+
+/** One place of the offline index (Overture Maps Places, docs/THIRD_PARTY_DATA.md). */
+class IndexedPlace(
+    val name: String,
+    /** Normalised name tokens without category words (the "core" compared with a query). */
+    val core: List<String>,
+    /** Normalised alternate names, each as core tokens. */
+    val alts: List<List<String>>,
+    /** Category words taken out of the name ("drogueria"): an exact match needs the user to have said them too. */
+    val categoryWords: List<String>,
+    val category: String,
+    val address: String,
+    val coord: GeoCoord,
+    val confidence: Float,
+    val source: String,
+    /** P11: every normalised name token, category words included (the whole name the user may have said). */
+    val nameWords: List<String> = emptyList(),
+    /** P11: Overture's brand name ("Mister Pollo MRP"), empty when none. */
+    val brand: String = "",
+    /** P11: the brand's core tokens ([brand] normalised, category words out); a second name for matching. */
+    val brandCore: List<String> = emptyList()
+)
+
+/**
+ * A match of the index: [tier] 3 exact core name, 2 every query token matched, 1 some token matched. P11: [inexact] is
+ * the penalty of the tokens matched only by prefix, sound or spelling (and of an exact core name whose full name has
+ * other words); lower ranks first inside a tier. [brand]: the query matched the row's brand.
+ */
+class IndexHit(
+    val place: IndexedPlace,
+    val tier: Int,
+    val categoryBoost: Boolean,
+    val distanceM: Double,
+    val inexact: Int = 0,
+    val brand: Boolean = false
+)
+
+/**
+ * The offline places index (docs/PLACE_SEARCH.md): loaded lazily off the main thread when the user first presses the
+ * microphone (or on the first place search), never at app start or on Home idle, and kept for the process. Measured on
+ * the Galaxy Watch5 Pro: about 0.5 s and 4 MB in the release-like build; the debug build is 10-50x slower (debuggable
+ * code plus the debug UI's animation work), which the mic-press start hides behind listening. Matching is accent and case insensitive, ignores stop words and category words,
+ * and accepts token prefixes and one edit in tokens of 5+ characters. [open] provides the gzip TSV written by
+ * `tools/build_places_index.py`.
+ */
+class PlaceIndex(private val open: () -> InputStream) {
+    @Volatile
+    private var entries: List<IndexedPlace>? = null
+    private val mutex = Mutex()
+
+    val isLoaded: Boolean get() = entries != null
+
+    /** Every row (empty until loaded): the heading-up map picks its landmark labels from it (P8). */
+    val rows: List<IndexedPlace> get() = entries.orEmpty()
+    val size: Int get() = entries?.size ?: 0
+
+    /** Loads the asset once (IO dispatcher). False when it is missing or unreadable (the search then goes online). */
+    suspend fun ensureLoaded(): Boolean {
+        entries?.let { return true }
+        return mutex.withLock {
+            entries?.let { return@withLock true }
+            withContext(Dispatchers.IO) {
+                val start = System.nanoTime()
+                val runtime = Runtime.getRuntime()
+                val before = runtime.totalMemory() - runtime.freeMemory()
+                val loaded = runCatching { open().use(::parse) }.getOrNull()
+                entries = loaded
+                val after = runtime.totalMemory() - runtime.freeMemory()
+                WgoMetrics.event(
+                    "places_index loaded=${loaded != null} rows=${loaded?.size ?: 0} " +
+                        "ms=${(System.nanoTime() - start) / 1_000_000} heap_delta_kb=${(after - before) / 1024}"
+                )
+                loaded != null
+            }
+        }
+    }
+
+    /**
+     * Index hits for [query] (raw text; normalised here) within [maxKm] of [anchor], best first: tier, brand (P11),
+     * inexact tokens (P11, fewer first), landmark, category boost, distance, confidence. Only tier >= [minTier]; at
+     * most [limit]. Empty when the index is not loaded.
+     */
+    fun search(query: String, anchor: GeoCoord, minTier: Int = 1, maxKm: Double = 25.0, limit: Int = 20): List<IndexHit> {
+        val all = entries ?: return emptyList()
+        val tokens = PlaceText.tokens(query)
+        val (q, fragments) = PlaceCategories.split(tokens)
+        if (q.isEmpty()) return emptyList()
+        val said = tokens.filter(PlaceCategories::isCategoryWord).toSet()
+        val hits = ArrayList<IndexHit>()
+        for (p in all) {
+            var best = scoreOf(q, p.core)
+            // An exact core name whose full name has other words ("Casa Pilares" for "restaurante casa pilares", or the
+            // reverse) ranks after the row whose whole name was said.
+            if (best / SCORE == 3 && p.nameWords != tokens) best -= 1
+            for (alt in p.alts) if (best / SCORE < 3) best = maxOf(best, scoreOf(q, alt))
+            var tier = best / SCORE
+            // "Droguería Plaza de Nariño" is not exactly "Plaza de Nariño" unless the user said "droguería" (P7, watch).
+            if (tier == 3 && !said.containsAll(p.categoryWords)) tier = 2
+            // P11: the brand is a second name ("mr pollo" -> brand "Mister Pollo MRP"), never an exact one.
+            var brand = false
+            if (p.brandCore.isNotEmpty()) {
+                val b = scoreOf(q, p.brandCore)
+                if (b / SCORE >= 2) {
+                    brand = true
+                    // Matched only through its brand: after the rows whose own name matches ("Mister Pizza" carries
+                    // the Mister Pollo brand in Overture).
+                    if (tier < 2) { tier = 2; best = b - 1 }
+                }
+            }
+            if (tier < minTier) continue
+            val d = RadarProjection.distanceMeters(anchor, p.coord)
+            if (d > maxKm * 1000) continue
+            hits += IndexHit(p, tier, PlaceCategories.matches(p.category, fragments), d, inexactOf(best), brand)
+        }
+        // A landmark sorts right after the tier (P8), so it is never cut by [limit] behind same-token businesses; P11:
+        // the brand and the exactness of the tokens come first inside a tier ("Catedral" before "Cátedra").
+        return hits.sortedWith(
+            compareByDescending<IndexHit> { it.tier }
+                .thenByDescending { it.brand }
+                .thenBy { it.inexact }
+                .thenByDescending { PlaceCategories.isLandmark(it.place.category) }
+                .thenByDescending { it.categoryBoost }
+                .thenBy { it.distanceM }
+                .thenByDescending { it.place.confidence }
+        ).take(limit)
+    }
+
+    @Volatile
+    private var chains: List<String>? = null
+
+    /**
+     * P11 Whisper vocabulary hint (docs/PLACE_SEARCH.md): the names of the chains with the most branches, at most
+     * [max], as people say them: for a brand with 2+ rows, its shortest branch name made only of brand words ("Mister
+     * Pollo" for "Mister Pollo MRP"); for a name shared by 3+ rows, that name. Public index data only; empty until the
+     * index is loaded. Computed once.
+     */
+    fun chainNames(max: Int = 15): List<String> {
+        val all = entries ?: return emptyList()
+        chains?.let { return it.take(max) }
+        val found = ArrayList<Pair<String, Int>>()
+        for ((key, rows) in all.filter { it.brandCore.isNotEmpty() }.groupBy { it.brandCore }) {
+            if (rows.size < 2) continue
+            val spoken = rows.filter { it.core.isNotEmpty() && key.containsAll(it.core) }.minByOrNull { it.name.length }?.name
+                ?: rows.first().brand
+            found += spoken to rows.size
+        }
+        for ((core, rows) in all.groupBy { it.core }) {
+            if (core.isEmpty() || rows.size < 3) continue
+            val spoken = rows.minByOrNull { it.name.length }!!.name
+            if (found.none { PlaceText.normalize(it.first) == PlaceText.normalize(spoken) }) found += spoken to rows.size
+        }
+        val names = found.sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+            .map { it.first.trim().trimEnd('.', ',', '-', ' ') }
+            .filter { it.isNotEmpty() }
+        chains = names
+        return names.take(max)
+    }
+
+    /**
+     * P10 category request: the places whose category is that kind ("drogueria" -> pharmacy), nearest to [center]
+     * first (the hint's point or the user), within [maxKm] of it. Names are not compared.
+     */
+    fun searchCategory(word: String, center: GeoCoord, maxKm: Double = 5.0, limit: Int = 3): List<IndexHit> {
+        val all = entries ?: return emptyList()
+        val fragments = PlaceText.tokens(word).flatMap(PlaceCategories::fragmentsOf)
+        if (fragments.isEmpty()) return emptyList()
+        return all.asSequence()
+            .filter { PlaceCategories.matches(it.category, fragments) }
+            .map { IndexHit(it, 2, true, RadarProjection.distanceMeters(center, it.coord)) }
+            .filter { it.distanceM <= maxKm * 1000 }
+            .sortedBy { it.distanceM }
+            .take(limit)
+            .toList()
+    }
+
+    companion object {
+        /**
+         * Not `.gz`: the Android packager gunzips `.gz` assets and drops the extension (measured on the P7 APK), so
+         * the app would not find the file. `.gzip` is stored as is (it is already compressed).
+         */
+        const val ASSET = "places_pasto.tsv.gzip"
+
+        /** The box the index covers (the builder's default, P11: ~25 km around the Pasto centre); outside it the index is skipped. */
+        const val LON_MIN = -77.506
+        const val LON_MAX = -77.056
+        const val LAT_MIN = 0.989
+        const val LAT_MAX = 1.438
+
+        fun covers(c: GeoCoord) = c.lon in LON_MIN..LON_MAX && c.lat in LAT_MIN..LAT_MAX
+
+        fun fromAssets(context: Context): PlaceIndex {
+            val app = context.applicationContext
+            return PlaceIndex { app.assets.open(ASSET) }
+        }
+
+        /** 3 = same core tokens, 2 = every query token matches a name token, 1 = some long query token matches. */
+        fun tierOf(q: List<String>, name: List<String>): Int = scoreOf(q, name) / SCORE
+
+        /** Packs a tier and the inexact penalty of [scoreOf]: tier * SCORE + (SCORE - 1 - penalty). */
+        const val SCORE = 32
+
+        fun inexactOf(score: Int): Int = SCORE - 1 - score % SCORE
+
+        /**
+         * The tier of [q] against [name] and the penalty of the query tokens matched only inexactly (prefix, sound,
+         * spelling: [PlaceText.EQUAL] minus their quality), packed (higher is better). P11: a name that is the query
+         * plus region words ("Catedral Pasto" for "catedral") is exact.
+         */
+        fun scoreOf(q: List<String>, name: List<String>): Int {
+            if (name.isEmpty() || q.isEmpty()) return 0
+            if (q == name) return 3 * SCORE + SCORE - 1
+            var all = true
+            var any = false
+            var inexact = 0
+            for (t in q) {
+                var bestQ = 0
+                for (n in name) {
+                    val m = PlaceText.quality(t, n)
+                    if (m > bestQ) { bestQ = m; if (m == PlaceText.EQUAL) break }
+                }
+                if (bestQ > 0) {
+                    if (t.length >= 4) any = true
+                    inexact += PlaceText.EQUAL - bestQ
+                } else all = false
+            }
+            val tier = when {
+                all && inexact == 0 && name.size > q.size && name.filterNot { it in PlaceText.REGION_WORDS } == q -> 3
+                all -> 2
+                any -> 1
+                else -> 0
+            }
+            return tier * SCORE + (SCORE - 1 - minOf(inexact, SCORE - 1))
+        }
+
+        /**
+         * Parses the gzip TSV: `#` comment lines, one header line, then id, name, name_norm, alt_norm, category, ...,
+         * source and (index v2, P11) brand; a v1 file without the brand column still loads.
+         * Hand-rolled on purpose: Kotlin's `toDoubleOrNull` validates with a large regex and `split` allocates a list
+         * per line, which made the first load take 20 s in the debug build on the watch.
+         */
+        fun parse(input: InputStream): List<IndexedPlace> {
+            val reader = BufferedReader(InputStreamReader(GZIPInputStream(input, 32 * 1024), Charsets.UTF_8), 64 * 1024)
+            val out = ArrayList<IndexedPlace>(8_500)
+            val f = arrayOfNulls<String>(11)
+            var headerSeen = false
+            while (true) {
+                val line = reader.readLine() ?: break
+                if (line.isEmpty() || line[0] == '#') continue
+                if (!headerSeen) { headerSeen = true; continue }
+                var start = 0
+                var n = 0
+                while (n < 11) {
+                    val tab = line.indexOf('\t', start)
+                    f[n++] = if (tab < 0) line.substring(start) else line.substring(start, tab)
+                    if (tab < 0) break
+                    start = tab + 1
+                }
+                if (n < 10) continue
+                val lat = number(f[6]!!) ?: continue
+                val lon = number(f[7]!!) ?: continue
+                val alt = f[3]!!
+                val nameWords = PlaceText.canonical(words(f[2]!!, ' '))
+                val core = PlaceCategories.core(nameWords)
+                val brand = if (n > 10) f[10]!! else ""
+                out += IndexedPlace(
+                    name = f[1]!!, core = core, nameWords = nameWords,
+                    alts = if (alt.isEmpty()) emptyList() else words(alt, '|').map { PlaceCategories.core(PlaceText.canonical(words(it, ' '))) },
+                    categoryWords = if (core.size == nameWords.size) emptyList() else nameWords.filter(PlaceCategories::isCategoryWord),
+                    category = f[4]!!, address = f[5]!!, coord = GeoCoord(lat, lon),
+                    confidence = number(f[8]!!)?.toFloat() ?: 0f, source = f[9]!!, brand = brand,
+                    brandCore = if (brand.isEmpty()) emptyList() else PlaceCategories.core(PlaceText.tokens(brand))
+                )
+            }
+            return out
+        }
+
+        private fun number(s: String): Double? = try {
+            java.lang.Double.parseDouble(s)
+        } catch (e: NumberFormatException) {
+            null
+        }
+
+        private fun words(s: String, sep: Char): List<String> {
+            val out = ArrayList<String>(4)
+            var start = 0
+            while (start <= s.length) {
+                val end = s.indexOf(sep, start).let { if (it < 0) s.length else it }
+                if (end > start) out += s.substring(start, end)
+                start = end + 1
+            }
+            return out
+        }
+    }
+}

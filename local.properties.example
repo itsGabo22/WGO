@@ -1,0 +1,16 @@
+# Copy to local.properties (git-ignored), uncomment and fill in only what you use. Every key is optional:
+# a missing key builds as an empty BuildConfig string and the feature that needs it reports "unavailable".
+# Never commit local.properties and never paste real values into this example file.
+
+# Android SDK location (Android Studio usually writes this line for you)
+# sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
+
+# OpenAI-compatible chat endpoint used by the intent interpreter (later run)
+# LLM_API_KEY=<your-api-key>
+# LLM_BASE_URL=https://api.example.com/openai/v1
+# LLM_MODEL=<model-id>
+# Cloud speech-to-text model on the same provider and key (P9; default whisper-large-v3)
+# STT_MODEL=<model-id>
+
+# Contact sent to public geocoding/routing services as their usage policies require (later run)
+# WGO_CONTACT=<contact-for-usage-policies>

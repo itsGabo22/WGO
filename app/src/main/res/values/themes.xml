@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Wgo" parent="@android:style/Theme.DeviceDefault">
-        <item name="android:windowBackground">@android:color/white</item>
-        <item name="android:windowSwipeToDismiss">true</item>
+        <!-- Window background is set at runtime from WgoPalette.canvas (see MainActivity). -->
+        <item name="android:windowDisablePreview">true</item>
+        <!-- Off: the app handles swipe-back itself from the LEFT EDGE ONLY (wgoEdgeSwipeBack), so horizontal drags
+             inside the map picker dial never leave the app. -->
+        <item name="android:windowSwipeToDismiss">false</item>
     </style>
 </resources>
