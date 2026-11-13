@@ -136,6 +136,18 @@ fixes (one request per trip, screen on or off) ──> NavigationHost ──> Na
   plus reroutes (>= 8 s apart, never a loop) with the identifying User-Agent; the one `OsrmRouter` in flight at a time
   keeps it under 1 per second. **A public release needs its own or a paid router** (`docs/RELEASE_CHECKLIST.md`).
 
+## Heading fusion (P11)
+
+- `heading/HeadingFusion` (pure Kotlin, unit-tested): the rotation-vector quaternion -> rotation matrix -> azimuth of
+  the watch's 12 o'clock axis plus its into-the-screen axis (stable from flat to near vertical), + declination; the GPS
+  course above 3 m/s, the compass below 1 m/s, a circular blend between, a wrap-safe low-pass (alpha 0.25), accuracy
+  gating (UNRELIABLE samples dropped, the calibration hint after 5 s at LOW or worse), and the turn-to-face angle.
+- `heading/CompassSensor` (Android): one `SensorEventListener` on `TYPE_ROTATION_VECTOR` (fallback
+  `TYPE_GEOMAGNETIC_ROTATION_VECTOR`) at `SENSOR_DELAY_UI`; `GeomagneticField` for the declination.
+- `NavigationHost` registers it only while a trip runs AND the navigation screen is visible and not ambient (the same
+  inputs as the screen-on location policy), and unregisters it otherwise; it emits the fused heading to the radar at
+  most every 100 ms and only for a change >= 2°. Home idle and ambient: no listener.
+
 
 Privacy: the remote interpreter never receives coordinates; Nominatim receives the query and a ±0.2° bias box around
 the user (or the Pasto centre); the router receives the origin and the destination coordinates (needed to route).
