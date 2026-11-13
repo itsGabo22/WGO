@@ -134,7 +134,9 @@ class NavigationSession(
     fun selectNext() {
         val order = routeOrder
         if (order.size < 2) return
-        val next = order[(order.indexOfFirst { it === _route.value } + 1).mod(order.size)]
+        // Read outside the lambda: lint's StateFlow detector crashed on a `.value` inside a stdlib lambda (Kotlin 2.1 metadata).
+        val current = _route.value
+        val next = order[(order.indexOfFirst { it === current } + 1).mod(order.size)]
         val index = engine.alternatives.indexOfFirst { it === next }
         if (index >= 0) selectRoute(index)
     }
@@ -215,15 +217,16 @@ class NavigationSession(
         val alts = engine.alternatives
         if (alts.isEmpty()) return emptyList()
         val active = engine.geometry
-        val cached = altCache?.takeIf { (route, list) ->
-            route === active.route && list.size == alts.size && list.indices.all { list[it].first.route === alts[it] }
+        val cached = altCache?.takeIf { c ->
+            c.first === active.route && c.second.size == alts.size && c.second.indices.all { c.second[it].first.route === alts[it] }
         } ?: Pair(active.route, alts.map { a -> RouteGeometry(a).let { g -> g to labelPoint(g, active) } }).also { altCache = it }
         val at = lastPosition ?: nav.snapped
         val activeLeftS = if (active.total > 0) active.route.durationS * nav.remainingM / active.total else 0.0
-        return cached.second.map { (g, label) ->
+        return cached.second.map { entry ->
+            val g = entry.first
             val along = g.alongOf(at.lat, at.lon)
             val leftS = if (g.total > 0) g.route.durationS * (g.total - along) / g.total else 0.0
-            AltLine(g.remainingFrom(along), leftS - activeLeftS, label)
+            AltLine(g.remainingFrom(along), leftS - activeLeftS, entry.second)
         }
     }
 
