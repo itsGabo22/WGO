@@ -18,6 +18,8 @@ Maps Places has both places near the owner's home: a DATA gap in OSM for Cubanit
 | 1 | **My places** (`assets/my_places.json`, git-ignored, owner-curated) | on the watch | none | an alias match beats everything, works offline and without the language model |
 | 2 | **Local places index** (`assets/places_pasto.tsv.gzip`, Overture Maps Places filtered to Pasto) | on the watch | none | businesses, shops, schools, churches... |
 | 3 | **Nominatim** (OpenStreetMap) | online | at most 3 requests per utterance | addresses, streets, neighbourhoods, landmarks, and the fallback when 1-2 have no strong match |
+| 4 | **Photon** (OpenStreetMap, fuzzy; P11) | online | shares the 3 requests with Nominatim | names Nominatim misses because of spelling ("Mr Pollo" -> "Míster Pollo") |
+| - | optional keyed provider (P11) | online | default OFF | not implemented; see "Broad coverage" below |
 | - | the language model | online | - | **never** coordinates: it only returns text (name, hint, category) |
 
 The index (and my places) load off the main thread at the first microphone press of the process, so the work overlaps
@@ -136,3 +138,113 @@ of 200 and the 60 s cool-down after HTTP 429; each place call has a **2.5 s** ti
 the normalised utterance (20 entries). Offline, rate-limited, timed out or with no API key, the local ranking decides
 alone. What is sent: the utterance text and the candidates' public names, categories and addresses. Never: the user's
 position, distances, coordinates, my places, the index as a whole.
+
+## Broad coverage, brand variants and chains (P11)
+
+Why (owner feedback, 2026-11-13): "llévame por favor a Mr. Pollo", a local chicken chain with seven branches in Pasto,
+was not recognised. STEP 0 trace: Overture has the chain (brand "Mister Pollo MRP", 7 rows) and Photon finds 7
+"Míster Pollo ..." points in Pasto, but the query token "mr" never matched "mister", so "Mr. King Pollo" (a different
+restaurant) was picked alone; "mr. pollo" lost "pollo" at the period, "mr pollo más cercano" kept "más cercano" in the
+name (not found), and Nominatim finds the chain only when asked for "Mister". Coverage is never promised to be 100 %:
+the measured numbers are in the benchmark below and in the README.
+
+### Index v2 (`tools/build_places_index.py`)
+
+- **Area**: a box of about 25 km (0.2247°) around the Pasto centre (1.2136, -77.2811): lon -77.506..-77.056,
+  lat 0.989..1.438. It covers the urban area plus the places people from Pasto drive to: the airport (Chachagüí,
+  20 km north; the old box held only wrongly placed copies of it), La Cocha and El Encano (20 km east), Genoy, Catambuco,
+  Tangua, Yacuanquer, Nariño, La Florida, Buesaco. The search keeps its 25 km acceptance rule from the user.
+- **Rows**: every Overture place with a primary name and confidence >= the threshold chosen with the benchmark (the
+  final value and the comparison are in `docs/THIRD_PARTY_DATA.md`), except places whose `operating_status` is closed
+  and the **excluded categories** (services that come to you or work online, usually geocoded to a private home):
+  bartender, event_photography_service, psychic_advising, web_designer, software_development, graphic_designer,
+  fitness_trainer, home_cleaning, janitorial_service, pool_cleaning, pest_control_service, furniture_assembly,
+  tutoring_service, music_production, home_security, b2b_advertising_and_marketing_service, marketing_agency,
+  advertising_agency, information_technology_company. The same normalised name within 50 m keeps its most confident row.
+- **Columns**: the v1 columns plus `brand` (Overture `brand.names.primary`, e.g. "Mister Pollo MRP"); primary and
+  alternate names stay (`names.common` and `names.rules` are empty in release 2026-10-21.0 for this area).
+- **Limits**: <= 1.5 MB gzipped, release load <= 1 s on the Galaxy Watch5 Pro; the build is reproducible
+  (pinned release, `--save-extract` / `--source` to rebuild from a saved box). Notices: `docs/THIRD_PARTY_DATA.md`.
+
+### Normalisation
+
+Applied to the query and to every index name at load (`PlaceText`):
+- lower case, accents removed, punctuation to spaces, stop words dropped (de, la, el, los, las, del, en, por, y, a, al);
+- one form per variant: `mr`, `mister`, `mistr`, `senor`, `sr` -> `mister`; `cll`, `cl` -> `calle`; `cra`, `kr`, `kra`,
+  `cr` -> `carrera`; `av`, `avda` -> `avenida`; `cc` and the pair `c c` (from "C.C.") -> `centro comercial`;
+- region words `pasto`, `narino`, `colombia` in a NAME do not block an exact match ("Catedral Pasto" is exact for
+  "catedral").
+
+### Fuzzy and phonetic matching
+
+A query token matches a name token, best first: **equal**; **prefix** (query >= 3 characters); **same Spanish phonetic
+key** (tokens >= 4 characters; b/v, s/z/soft c, ll/y, silent h, k/qu/hard c, j/soft g, double letters, ñ/n are one
+sound each); **edit distance** <= 1 (5-7 characters) or <= 2 (8+), or a trigram overlap (Jaccard) >= 0.5 for tokens of
+6+ characters. Speech slip: the query token `mi` may match the name token `mister` ("mi pollo" for "Mr. Pollo"). Each
+token match has a quality (equal 3, prefix or phonetic 2, edit/trigram/slip 1); inside a tier, a better summed quality
+ranks first, so exact "Catedral" beats fuzzy "Cátedra".
+
+Tiers are unchanged (3 exact, 2 every query token matched, 1 some long token matched), and the P8/P10 category-word
+rules stay: a category word is a soft boost, a name with an unsaid category word is never exact, a category word alone
+is a category request.
+
+### Brand variants and chains
+
+- The index row's `brand` is a second name for matching (a query that matches the brand matches the row) and gives a
+  brand boost right after the tier.
+- **Chain** = the tier >= 2 candidates that share a normalised brand, or whose name starts with the query's tokens
+  ("Lili Pink Unicentro", "Lili Pink Centro"), when there are 2 or more within 25 km. A chain answer is the pick list
+  of its 3 nearest branches to the user's last known position (computed on the watch; the position is never sent);
+  without a position, the 3 most confident. "más cercano/a", "más próximo/a", "nearest", "closest" are removed from the
+  place and mark the request **nearest**: the nearest branch goes straight to Confirm place (OTRO cycles the others).
+  "Mr." does not end a clause (abbreviations with a period: mr, mrs, sr, sra, dr, av, cra, cll, no, cc, sa).
+- The language model's expansion role (P8, text only) is also told to return the brand's spelling variants
+  ("Mr. Pollo" -> "Mister Pollo", "Míster Pollo"); its answers are searched like any name.
+
+### Whisper vocabulary hint
+
+The transcription `prompt` holds the region, the verified landmark names (P9) and up to 15 chain names from the loaded
+index (brands or name chains with the most branches, shortest branch name as the spoken form, e.g. "Mister Pollo"), at
+most 600 characters in total (Whisper reads only the last 224 tokens of a prompt). Public index data only: never my
+places, the user's position, history or anything typed by the user. Without a loaded index, the P9 prompt.
+
+### Fallback order and budgets
+
+my places -> index -> Nominatim -> **Photon**. Photon is asked only when the index and Nominatim have no candidate of
+tier >= 2 within 25 km, inside the same budget: **at most 3 geocoder requests per utterance in total** (Nominatim +
+Photon), each service at most 1 request per second (process-wide limiters), identifying User-Agent, results cached in
+memory (20 queries). At most 2 language-model calls per utterance, unchanged.
+
+**Photon** (`https://photon.komoot.io/api/`, OpenStreetMap data, ODbL). Terms of the public instance, read on
+2026-11-13 at https://photon.komoot.io/: "You can use the API for your project, but please be fair - extensive usage
+will be throttled. We do not guarantee for the availability and usage might be subject of change in the future."
+WGO sends one request per utterance at most (no search-as-you-type): `q` (the place words), `limit=8`, a FIXED box
+(`bbox` = the index box) and the FIXED Pasto centre as `lat`/`lon` bias: **never the user's position**. Results are
+OSM points (`osm_key:osm_value` as the category) and are credited "© OPENSTREETMAP". A public release needs its own
+Photon instance or a paid one (`docs/RELEASE_CHECKLIST.md`).
+
+**Optional keyed provider**: not implemented and OFF. A provider may be added only behind a key in `local.properties`
+(through `BuildConfig`, never logged) and only if its terms allow showing its results on a non-vendor map with
+OpenStreetMap tiles (Google Places does not; check any other provider's terms before adding it). It would be one more
+`OnlinePlaceSearch` after Photon, inside the same 3-request budget.
+
+### Not found
+
+Unchanged surface ("No encontré «X»", partial matches, DIME LA CALLE). For a place that no source has,
+`docs/PLACES.md` explains how to add it to my places (no invented coordinates).
+
+### Coverage benchmark (`PlaceCoverageBenchmarkTest`)
+
+`tools/build_place_benchmark.py` writes `app/src/test/resources/place_benchmark.tsv` from the index (fixed seed, public
+data only); the test runs each utterance through the local parser and the resolver with no network, from the Pasto
+centre:
+- (a) 60 random real places of the index (confidence >= 0.5, 1-4 words, a unique name, within 20 km) said in a spoken
+  style: accents and articles dropped, "mister"/"mr" swapped, one sound-alike slip (b/v, s/z, ll/y, a silent h) or one
+  letter dropped; hit = same normalised name within 150 m;
+- (b) 30 chains with 2+ branches in Pasto, every second one with "más cercano"; hit = a branch (its name contains the
+  chain's words); the nearest-branch-first rate is reported too;
+- (c) 20 landmarks and nicknames; hit = the place's row (same name) or anything within 300 m of it;
+- (d) 10 places that do not exist; must never be picked automatically (only "No encontré" or the pick list).
+
+Targets: top-3 >= 90 % and top-1 >= 75 % on (a)-(c), 0 automatic picks on (d), p95 local latency (parse + resolve)
+<= 150 ms on the JVM. Baseline (P10 code and index, STEP 0): top-1 71.8 %, top-3 80.0 %, chains 12/30, 0/10, p95 6 ms.
