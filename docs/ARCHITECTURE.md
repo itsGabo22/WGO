@@ -388,6 +388,28 @@ Not verified live on the watch: the re-run of the three phrases with the fixes, 
 phone's Bluetooth network, Wi-Fi and Bluetooth both off, and a network lost mid-capture (the owner was not available for
 the second round; the no-network path is verified on the emulator and by `VoiceLadderTest`).
 
+### Place coverage, routes and compass (P11, emulator Wear OS Small Round + JVM, 2026-11-13)
+
+The owner could not do the live session: every watch item below is **not verified** on the Galaxy Watch5 Pro (only the
+release install, its launch and its cold start were checked there).
+
+| check | where | result |
+|---|---|---|
+| Coverage benchmark (120 queries, same scoring) | JVM | P10: top-1 75.5 %, top-3 80.9 %, chains 13/30; P11: top-1 **95.5 %**, top-3 **99.1 %**, chains **30/30**, nearest branch first 26/30, 0/10 automatic picks of missing places, p95 24 ms |
+| Index v2 load | JVM | 7,984 rows; watch release load (target <= 1 s): not verified (P7: 0.5 s for 6,285 rows) |
+| "llévame por favor a mr pollo" | emulator, debug | chain pick list "¿CUÁL? «mr pollo»", 3 branches, OTRO 1/3; 0 geocoder requests, 0 model calls, 1.1-1.5 s (debug build, index load included); with a position the nearest first ("Mister Pollo", Unicentro, a 690 m), without one the most confident (Mister Pollo JB) |
+| Routes with alternatives | emulator + PC | walking centre -> UDENAR: 2 routes (2,956 m / 2,375 s and 3,240 m / 2,610 s), RUTA 1/2 chip, the alternative drawn lighter with "+4 MIN". Driving pairs tried (3, both OSRM servers): one route each; OSRM offers an alternative only when one is clearly different, so driving trips in Pasto often have none |
+| Driving onto the alternative | emulator, sim drive 14 km/h | AlternativeTaken -> Rerouted, route requests stay at 1 (no network), new instruction and totals at once, travelled part not drawn |
+| New road (80-90 m beside the route) | emulator | OffRouteDetected -> 1 request (916 ms) -> new route with its own alternative ("+3 MIN"); the synthetic path left that route too: next request 8.6 s after the first, never sooner |
+| Jitter (one 60 m jump) and walking back on the route | emulator | no request; the emulator's `geo fix` has no GPS course, so the wrong-way reroute is covered by the unit tests only |
+| Home idle | emulator, debug | location providers OFF, 0 services, 0 sensor listeners, `locActive=0`, recogniser/TTS/audio 0 |
+| Navigating | emulator, debug | 1 location request (2 s), 1 foreground service, the rotation vector listener at 66.7 ms (`SENSOR_DELAY_UI`); `compass stop` on ambient and at the trip end |
+| Haptics with the screen off | emulator, debug, ambient + activity moved behind | Tick at 200 m and DoubleClick at 50 m, three turns; the alternative switch ran in ambient |
+| Jank in navigation (legacy, 30 fps ambience) | emulator, benchmark build, A/B same session | P10 18.2 % / 21.5 %, P11 22.3 % / 20.4 %: no regression measurable, but both above the 3 % target on this emulator session (0-1 % on 2026-11-08); intro baseline 9.8 % (deadline metric). On the watch: not verified |
+| Release APK | build | 3.52 MB (P10: 3.36 MB) |
+| Cold start (release, `am start -W`) | emulator / watch | 873, 851, 900 ms / 1,542, 911, 882 ms |
+| Compass accuracy (target +-20 deg stationary) | watch | not verified (no live session) |
+
 ## Top remaining power and resource risks (real watch)
 
 1. **GPS for the whole trip, wrist down included** (P6-A): the foreground service keeps one high-accuracy request; the
