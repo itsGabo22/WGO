@@ -63,4 +63,8 @@ Overture publishes a release about once a month; places change slowly, so a quar
 ## Geocoding and routing
 
 - Nominatim (OpenStreetMap) for addresses, streets and the fallback search; OSRM on the FOSSGIS OSM-DE servers for
-  routes. Data © OpenStreetMap contributors, ODbL.
+  routes (the OSRM demo server as the driving fallback). Data © OpenStreetMap contributors, ODbL.
+- Photon (P11, https://photon.komoot.io/, run by komoot; software Apache-2.0, https://github.com/komoot/photon) for
+  names Nominatim misses; its data is OpenStreetMap (© OpenStreetMap contributors, ODbL). Public-instance terms (read
+  2026-11-13): "be fair - extensive usage will be throttled", no availability guarantee. Credited on the Credits
+  screen ("Búsqueda: Nominatim y Photon (komoot)") and on Confirm place ("© OPENSTREETMAP").
