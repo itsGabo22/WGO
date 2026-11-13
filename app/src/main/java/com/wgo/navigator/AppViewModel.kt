@@ -432,6 +432,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     /** Up to three geocoding results and the one shown (OTHER cycles locally: no extra request). */
     private val _places = MutableStateFlow<List<Place>>(emptyList())
     val places: StateFlow<List<Place>> = _places.asStateFlow()
+    /** P10: no clear winner: Confirm place is a pick list ("¿CUÁL?"), OTRO cycles the real candidates. */
+    private val _pickList = MutableStateFlow(false)
+    val pickList: StateFlow<Boolean> = _pickList.asStateFlow()
+
     private val _placeIndex = MutableStateFlow(0)
     val placeIndex: StateFlow<Int> = _placeIndex.asStateFlow()
 
@@ -480,7 +484,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 val request = if (retryName != null) PlaceRequest(retryName, hintRetryWords, aiCallsUsed = interpreter.lastRemoteCalls)
                 else PlaceRequest(
                     query, result.placeHint, result.placeCategory, fromAlias = result.placeFromAlias, utterance = text,
-                    aiCallsUsed = interpreter.lastRemoteCalls
+                    aiCallsUsed = interpreter.lastRemoteCalls, vague = result.placeVague
                 )
                 placeRequest = request
                 modeSpoken = result.mode != null
@@ -508,6 +512,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         when (found) {
             is Resolution.Found -> {
                 _places.value = found.places
+                _pickList.value = found.uncertain
                 _placeIndex.value = 0
                 _screen.value = ScreenState.ConfirmPlace
                 _haptics.tryEmit(HapticEvent.Click) // spec section 8: destination understood
@@ -542,6 +547,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         val s = _notFound.value?.suggestions.orEmpty()
         if (s.isEmpty()) return
         _places.value = s
+        _pickList.value = false
         _placeIndex.value = 0
         _error.value = null
         _screen.value = ScreenState.ConfirmPlace

@@ -29,7 +29,9 @@ data class PlaceRequest(
     /** The whole transcript (what the language model may read for a place choice); null: the name alone. */
     val utterance: String? = null,
     /** Language-model calls this utterance already used (the interpreter's); the place search keeps the total <= 2. */
-    val aiCallsUsed: Int = 0
+    val aiCallsUsed: Int = 0,
+    /** P10: a description or a kind of place, not a name: never one silent guess (pick list). */
+    val vague: Boolean = false
 )
 
 /** Where a candidate came from. */
@@ -57,8 +59,11 @@ data class PlaceCandidate(
 }
 
 sealed interface Resolution {
-    /** One or two places, best first; a place over [PlaceResolver.FAR_KM] is never first when a nearer one exists. */
-    data class Found(val candidates: List<PlaceCandidate>) : Resolution {
+    /**
+     * Up to three places, best first; a place over [PlaceResolver.FAR_KM] is never first when a nearer one exists.
+     * [uncertain] (P10 confidence gate): no clear winner, so the user picks from the list ("¿CUÁL?").
+     */
+    data class Found(val candidates: List<PlaceCandidate>, val uncertain: Boolean = false) : Resolution {
         val places: List<Place> get() = candidates.map { it.place }
     }
 
@@ -197,12 +202,14 @@ class PlaceResolver(
 
         lastRequests = s.requests
         lastAiCalls = s.aiCalls
-        val best = ordered.take(MAX_CANDIDATES)
+        val uncertain = ordered.isNotEmpty() && !clearWinner(request, ordered, lastChoice)
+        // The pick list puts the landmarks first (the university before a business that shares a word).
+        val best = (if (uncertain) ordered.sortedByDescending { it.landmark } else ordered).take(MAX_CANDIDATES)
         WgoMetrics.event(
             "places resolved n=${best.size} sources=${best.joinToString("+") { it.source.name }} requests=${s.requests} " +
-                "ai_calls=${s.aiCalls} hint=${request.hint != null}"
+                "ai_calls=${s.aiCalls} hint=${request.hint != null} uncertain=$uncertain choice=$lastChoice"
         )
-        if (best.isNotEmpty()) return Resolution.Found(best)
+        if (best.isNotEmpty()) return Resolution.Found(best, uncertain)
         val suggestions = dedupe(s.partial.sortedBy { it.distanceM }).take(MAX_CANDIDATES).map { it.place }
         val failure = s.onlineFailure
         if (failure != null && suggestions.isEmpty()) return Resolution.Failed(failure)
@@ -299,7 +306,26 @@ class PlaceResolver(
 
     companion object {
         const val MAX_REQUESTS = 3
-        const val MAX_CANDIDATES = 2
+
+        /** P10: up to three candidates (the pick list cycles them with OTRO). */
+        const val MAX_CANDIDATES = 3
+
+        /**
+         * P10 confidence gate (docs/design "Confidence gate and pick list"): straight to Confirm place only for my
+         * places, a nickname answered by its landmark, or a top candidate of a strictly better match tier than the
+         * runner-up (or the model's related pick); never for a vague request, nor when the model was asked and
+         * declined.
+         */
+        fun clearWinner(request: PlaceRequest, ranked: List<PlaceCandidate>, choice: ChoiceOutcome): Boolean {
+            val top = ranked.firstOrNull() ?: return false
+            if (top.source == PlaceSource.MyPlaces) return true
+            if (request.vague) return false
+            if (request.fromAlias && (top.source == PlaceSource.Nominatim || top.tier >= 3)) return true
+            if (choice == ChoiceOutcome.NoPick) return false
+            if (choice == ChoiceOutcome.Picked) return true
+            val second = ranked.getOrNull(1) ?: return true
+            return top.tier > second.tier
+        }
 
         /** Language-model calls per utterance, the interpreter's included (docs/PLACE_SEARCH.md, P8). */
         const val MAX_AI_CALLS = 2

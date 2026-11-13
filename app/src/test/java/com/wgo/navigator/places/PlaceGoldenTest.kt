@@ -204,9 +204,10 @@ class PlaceGoldenTest {
         assertEquals("Universidad de Nariño", i.placeQuery)
     }
 
-    @Test fun duplicatesWithin150mCollapseAndAtMostTwoRemain() {
+    @Test fun duplicatesWithin150mCollapseAndAtMostThreeRemain() {
+        // P10: up to three candidates (the pick list); duplicates within 150 m still collapse.
         val r = resolve(PlaceRequest("Restaurante La Merced"), at = GeoCoord(1.2122, -77.2784)) as Resolution.Found
-        assertEquals(2, r.places.size)
+        assertTrue(r.places.size in 2..PlaceResolver.MAX_CANDIDATES)
         assertEquals(r.places.map { PlaceText.normalize(it.name) + it.coord }.distinct().size, r.places.size)
     }
 
