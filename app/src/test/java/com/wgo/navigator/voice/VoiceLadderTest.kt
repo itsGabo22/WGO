@@ -54,12 +54,13 @@ class VoiceLadderTest {
         mic: Mic,
         system: System,
         transcriber: Transcriber,
-        blocker: String? = null
+        blocker: String? = null,
+        online: () -> Boolean = { true }
     ): VoiceLadder {
         val cloud = CloudVoiceInput(
             AudioCapture({ mic }, dispatcher = Dispatchers.Unconfined), transcriber, CoroutineScope(Dispatchers.Unconfined)
         )
-        return VoiceLadder(system, cloud, { blocker }, { VoiceStrategy.InApp }, io = Dispatchers.Unconfined)
+        return VoiceLadder(system, cloud, { blocker }, { VoiceStrategy.InApp }, io = Dispatchers.Unconfined, online = online)
     }
 
     private fun run(l: VoiceLadder) = runBlocking { l.listen(Language.ES).toList().filterNot { it is VoiceEvent.Level } }
@@ -169,6 +170,55 @@ class VoiceLadderTest {
         run(ladder(Mic(spokenPcm), systemOk, spoken))
         assertEquals(1, spoken.prewarms)
         assertEquals(1, spoken.uploads)
+    }
+
+    // ---- P10: no network ----
+
+    @Test fun withoutANetworkNothingRecordsAndNoRecognizerOpens() {
+        val mic = Mic(spokenPcm)
+        val t = Counting(Transcription.Text("x"))
+        for (blocker in listOf(null, "setting_system", "daily_cap")) {
+            val events = run(ladder(mic, systemOk, t, blocker = blocker, online = { false }))
+            assertEquals(listOf(VoiceEvent.Failed(WgoFailure.Offline)), events)
+        }
+        assertEquals(0, t.uploads + t.prewarms)
+        assertEquals("the system recognizer (and its dialog) never ran", 0, systemOk.sessions)
+        assertEquals("the microphone was never opened", 0, mic.released.get())
+    }
+
+    @Test fun aProxiedNetworkCountsAsConnected() {
+        // The watch reaches the internet through the phone over Bluetooth: the check says online, the ladder runs.
+        val events = run(ladder(Mic(spokenPcm), systemOk, { _, _ -> Transcription.Text("ir a la plaza") }, online = { true }))
+        assertEquals(VoiceEvent.Final("ir a la plaza"), events.last())
+    }
+
+    @Test fun aNetworkLostDuringThePressEndsWithNoConnectionNotTheRecognizer() {
+        var connected = true
+        val t = object : Transcriber {
+            override suspend fun transcribe(wav: ByteArray, language: Language): Transcription {
+                connected = false // the Wi-Fi dropped while uploading
+                return Transcription.Failed(WgoFailure.Offline, "network")
+            }
+        }
+        val events = run(ladder(Mic(spokenPcm), systemOk, t, online = { connected }))
+        assertEquals(listOf(VoiceEvent.Ready, VoiceEvent.Transcribing, VoiceEvent.Failed(WgoFailure.Offline)), events)
+        assertEquals(0, systemOk.sessions)
+    }
+
+    @Test fun withANetworkServerFailuresStillUseTheSystemRung() {
+        for (failure in listOf(WgoFailure.Server(429), WgoFailure.Server(503), WgoFailure.Timeout)) {
+            val system = System(VoiceEvent.Ready, VoiceEvent.Final("texto del sistema"))
+            val events = run(ladder(Mic(spokenPcm), system, { _, _ -> Transcription.Failed(failure, "x") }, online = { true }))
+            assertEquals(failure.toString(), VoiceEvent.Final("texto del sistema"), events.last())
+            assertEquals(1, system.sessions)
+        }
+    }
+
+    @Test fun theNoConnectionTextsExistInBothLanguages() {
+        assertEquals("Sin conexión", com.wgo.navigator.ui.stringFor(com.wgo.navigator.ui.StringKey.ERR_OFFLINE, Language.ES))
+        assertEquals("No connection", com.wgo.navigator.ui.stringFor(com.wgo.navigator.ui.StringKey.ERR_OFFLINE, Language.EN))
+        assertEquals("Activa el Wi-Fi o el Bluetooth.", com.wgo.navigator.ui.stringFor(com.wgo.navigator.ui.StringKey.HINT_CHECK_CONNECTION, Language.ES))
+        assertEquals("Turn on Wi-Fi or Bluetooth.", com.wgo.navigator.ui.stringFor(com.wgo.navigator.ui.StringKey.HINT_CHECK_CONNECTION, Language.EN))
     }
 
     @Test fun onlySilenceAndCancelDoNotFallBack() {

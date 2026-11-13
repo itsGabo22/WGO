@@ -191,6 +191,20 @@ class TranscriptionClientTest {
         }
     }
 
+    @Test fun withoutANetworkThereIsNoUploadAndItFailsFast() = runBlocking {
+        FakeHttpServer { Triple(200, answer(spoken), 0L) }.use { server ->
+            val c = TranscriptionClient(
+                apiKey = key, baseUrl = server.baseUrl, model = "whisper-large-v3", http = HttpClient("WGO-test"),
+                budget = budget(), online = { false }
+            )
+            val t0 = System.nanoTime()
+            assertEquals(Transcription.Failed(WgoFailure.Offline, "offline"), c.transcribe(wav, Language.ES))
+            assertTrue((System.nanoTime() - t0) / 1_000_000 < 200)
+            assertEquals(0, server.requests.size)
+            assertEquals(null, store.value) // no budget unit spent
+        }
+    }
+
     @Test fun prewarmSendsNoKeyAndNoData() = runBlocking {
         FakeHttpServer { Triple(401, "{}", 0L) }.use { server ->
             client(server.baseUrl).prewarm()
