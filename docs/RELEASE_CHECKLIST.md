@@ -47,10 +47,20 @@ in this repo yet):
 - **Nominatim** (osm.org): max 1 request/s, identifying User-Agent with a real contact (`WGO_CONTACT`), no heavy use
   (operations.osmfoundation.org/policies/nominatim). A public app must use its own Nominatim, or a commercial geocoder
   whose terms allow showing results on a non-Google map.
-- **Routing** (`routing.openstreetmap.de`, FOSSGIS): light, non-commercial use only; production needs its own OSRM or
-  a commercial router.
+- **Routing** (`routing.openstreetmap.de`, FOSSGIS): light, non-commercial use only (attribution and a "fix the map"
+  link, valid User-Agent, at most 1 request/s, no heavy use); the OSRM demo server (driving fallback) gives no
+  guarantee and may block heavy users. P11 sends one request per trip start (with alternatives) plus reroutes at least
+  8 s apart. **Production needs its own OSRM or a commercial router** (with alternatives enabled).
+- **Photon** (`photon.komoot.io`, P11): "be fair - extensive usage will be throttled", no availability guarantee. A
+  public release needs its own Photon instance (it ships as one Java program with an OSM extract) or a paid geocoder
+  whose terms allow results on a non-vendor map. Google Places/Geocoding are excluded (their terms forbid use with
+  non-Google maps).
 - **OSM tiles** (the fallback without a key): the OSM tile usage policy forbids heavy app use; production must never
   depend on it.
+
+- **CARTO attribution must be persistent** before public release: today "© OpenStreetMap © CARTO" shows along the
+  bottom arc for 2.5 s when the map appears and while exploring (P8); the CARTO terms ask for a visible credit
+  whenever their tiles are shown.
 
 ## 4. Places index (Overture)
 
@@ -62,7 +72,7 @@ in this repo yet):
 ## 5. Privacy
 
 - A public privacy policy (URL in the Play listing) based on `docs/PRIVACY_DATA_FLOW.md`: what leaves the watch (the
-  transcript text to the language model provider for hard requests, place names to the geocoder, origin and
+  transcript text to the language model provider for hard requests, place names to the geocoders (Nominatim, Photon), origin and
   destination to the router, tile requests to CARTO, phrase text to a network TTS voice if one is chosen), what never
   does (position to the language model, private places, audio), retention (none on the watch beyond settings).
 - Re-check the LLM provider's data terms (no training on inputs, retention) at release time.
