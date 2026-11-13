@@ -27,12 +27,27 @@ class IndexedPlace(
     val coord: GeoCoord,
     val confidence: Float,
     val source: String,
+    /** P11: every normalised name token, category words included (the whole name the user may have said). */
+    val nameWords: List<String> = emptyList(),
     /** P11: Overture's brand name ("Mister Pollo MRP"), empty when none. */
-    val brand: String = ""
+    val brand: String = "",
+    /** P11: the brand's core tokens ([brand] normalised, category words out); a second name for matching. */
+    val brandCore: List<String> = emptyList()
 )
 
-/** A match of the index: [tier] 3 exact core name, 2 every query token matched, 1 some token matched. */
-class IndexHit(val place: IndexedPlace, val tier: Int, val categoryBoost: Boolean, val distanceM: Double)
+/**
+ * A match of the index: [tier] 3 exact core name, 2 every query token matched, 1 some token matched. P11: [inexact] is
+ * the penalty of the tokens matched only by prefix, sound or spelling (and of an exact core name whose full name has
+ * other words); lower ranks first inside a tier. [brand]: the query matched the row's brand.
+ */
+class IndexHit(
+    val place: IndexedPlace,
+    val tier: Int,
+    val categoryBoost: Boolean,
+    val distanceM: Double,
+    val inexact: Int = 0,
+    val brand: Boolean = false
+)
 
 /**
  * The offline places index (docs/PLACE_SEARCH.md): loaded lazily off the main thread when the user first presses the
@@ -75,8 +90,9 @@ class PlaceIndex(private val open: () -> InputStream) {
     }
 
     /**
-     * Index hits for [query] (raw text; normalised here) within [maxKm] of [anchor], best first: tier, landmark,
-     * category boost, distance, confidence. Only tier >= [minTier]; at most [limit]. Empty when the index is not loaded.
+     * Index hits for [query] (raw text; normalised here) within [maxKm] of [anchor], best first: tier, brand (P11),
+     * inexact tokens (P11, fewer first), landmark, category boost, distance, confidence. Only tier >= [minTier]; at
+     * most [limit]. Empty when the index is not loaded.
      */
     fun search(query: String, anchor: GeoCoord, minTier: Int = 1, maxKm: Double = 25.0, limit: Int = 20): List<IndexHit> {
         val all = entries ?: return emptyList()
@@ -86,18 +102,36 @@ class PlaceIndex(private val open: () -> InputStream) {
         val said = tokens.filter(PlaceCategories::isCategoryWord).toSet()
         val hits = ArrayList<IndexHit>()
         for (p in all) {
-            var tier = tierOf(q, p.core)
-            for (alt in p.alts) if (tier < 3) tier = maxOf(tier, tierOf(q, alt))
+            var best = scoreOf(q, p.core)
+            // An exact core name whose full name has other words ("Casa Pilares" for "restaurante casa pilares", or the
+            // reverse) ranks after the row whose whole name was said.
+            if (best / SCORE == 3 && p.nameWords != tokens) best -= 1
+            for (alt in p.alts) if (best / SCORE < 3) best = maxOf(best, scoreOf(q, alt))
+            var tier = best / SCORE
             // "Droguería Plaza de Nariño" is not exactly "Plaza de Nariño" unless the user said "droguería" (P7, watch).
             if (tier == 3 && !said.containsAll(p.categoryWords)) tier = 2
+            // P11: the brand is a second name ("mr pollo" -> brand "Mister Pollo MRP"), never an exact one.
+            var brand = false
+            if (p.brandCore.isNotEmpty()) {
+                val b = scoreOf(q, p.brandCore)
+                if (b / SCORE >= 2) {
+                    brand = true
+                    // Matched only through its brand: after the rows whose own name matches ("Mister Pizza" carries
+                    // the Mister Pollo brand in Overture).
+                    if (tier < 2) { tier = 2; best = b - 1 }
+                }
+            }
             if (tier < minTier) continue
             val d = RadarProjection.distanceMeters(anchor, p.coord)
             if (d > maxKm * 1000) continue
-            hits += IndexHit(p, tier, PlaceCategories.matches(p.category, fragments), d)
+            hits += IndexHit(p, tier, PlaceCategories.matches(p.category, fragments), d, inexactOf(best), brand)
         }
-        // A landmark sorts right after the tier (P8), so it is never cut by [limit] behind same-token businesses.
+        // A landmark sorts right after the tier (P8), so it is never cut by [limit] behind same-token businesses; P11:
+        // the brand and the exactness of the tokens come first inside a tier ("Catedral" before "Cátedra").
         return hits.sortedWith(
             compareByDescending<IndexHit> { it.tier }
+                .thenByDescending { it.brand }
+                .thenBy { it.inexact }
                 .thenByDescending { PlaceCategories.isLandmark(it.place.category) }
                 .thenByDescending { it.categoryBoost }
                 .thenBy { it.distanceM }
@@ -143,20 +177,42 @@ class PlaceIndex(private val open: () -> InputStream) {
         }
 
         /** 3 = same core tokens, 2 = every query token matches a name token, 1 = some long query token matches. */
-        fun tierOf(q: List<String>, name: List<String>): Int {
-            if (name.isEmpty()) return 0
-            if (q == name) return 3
+        fun tierOf(q: List<String>, name: List<String>): Int = scoreOf(q, name) / SCORE
+
+        /** Packs a tier and the inexact penalty of [scoreOf]: tier * SCORE + (SCORE - 1 - penalty). */
+        const val SCORE = 32
+
+        fun inexactOf(score: Int): Int = SCORE - 1 - score % SCORE
+
+        /**
+         * The tier of [q] against [name] and the penalty of the query tokens matched only inexactly (prefix, sound,
+         * spelling: [PlaceText.EQUAL] minus their quality), packed (higher is better). P11: a name that is the query
+         * plus region words ("Catedral Pasto" for "catedral") is exact.
+         */
+        fun scoreOf(q: List<String>, name: List<String>): Int {
+            if (name.isEmpty() || q.isEmpty()) return 0
+            if (q == name) return 3 * SCORE + SCORE - 1
             var all = true
             var any = false
+            var inexact = 0
             for (t in q) {
-                val m = name.any { PlaceText.tokenMatches(t, it) }
-                if (m) { if (t.length >= 4) any = true } else all = false
+                var bestQ = 0
+                for (n in name) {
+                    val m = PlaceText.quality(t, n)
+                    if (m > bestQ) { bestQ = m; if (m == PlaceText.EQUAL) break }
+                }
+                if (bestQ > 0) {
+                    if (t.length >= 4) any = true
+                    inexact += PlaceText.EQUAL - bestQ
+                } else all = false
             }
-            return when {
+            val tier = when {
+                all && inexact == 0 && name.size > q.size && name.filterNot { it in PlaceText.REGION_WORDS } == q -> 3
                 all -> 2
                 any -> 1
                 else -> 0
             }
+            return tier * SCORE + (SCORE - 1 - minOf(inexact, SCORE - 1))
         }
 
         /**
@@ -186,14 +242,16 @@ class PlaceIndex(private val open: () -> InputStream) {
                 val lat = number(f[6]!!) ?: continue
                 val lon = number(f[7]!!) ?: continue
                 val alt = f[3]!!
-                val nameWords = words(f[2]!!, ' ')
+                val nameWords = PlaceText.canonical(words(f[2]!!, ' '))
                 val core = PlaceCategories.core(nameWords)
+                val brand = if (n > 10) f[10]!! else ""
                 out += IndexedPlace(
-                    name = f[1]!!, core = core,
-                    alts = if (alt.isEmpty()) emptyList() else words(alt, '|').map { PlaceCategories.core(words(it, ' ')) },
+                    name = f[1]!!, core = core, nameWords = nameWords,
+                    alts = if (alt.isEmpty()) emptyList() else words(alt, '|').map { PlaceCategories.core(PlaceText.canonical(words(it, ' '))) },
                     categoryWords = if (core.size == nameWords.size) emptyList() else nameWords.filter(PlaceCategories::isCategoryWord),
                     category = f[4]!!, address = f[5]!!, coord = GeoCoord(lat, lon),
-                    confidence = number(f[8]!!)?.toFloat() ?: 0f, source = f[9]!!, brand = if (n > 10) f[10]!! else ""
+                    confidence = number(f[8]!!)?.toFloat() ?: 0f, source = f[9]!!, brand = brand,
+                    brandCore = if (brand.isEmpty()) emptyList() else PlaceCategories.core(PlaceText.tokens(brand))
                 )
             }
             return out

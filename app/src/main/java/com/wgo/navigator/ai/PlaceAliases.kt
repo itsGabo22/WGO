@@ -94,7 +94,7 @@ object PlaceAliases {
     /** Descriptor nouns (and articles) removed from the front before the lookup ("universidad la cooperativa"). */
     private val LEADING = setOf(
         "universidad", "u", "hospital", "clinica", "colegio", "centro", "comercial", "estadio", "terminal", "parque",
-        "plaza", "el", "la", "los", "las", "the"
+        "plaza", "el", "la", "los", "las", "the", "cc" // P11: "C.C. Unicentro" = "centro comercial Unicentro"
     )
 
     private val exact: Map<String, Landmark> = EXACT.mapKeys { LocalIntentParser.normalize(it.key) }

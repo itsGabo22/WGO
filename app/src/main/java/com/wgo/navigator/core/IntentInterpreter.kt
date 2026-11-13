@@ -28,7 +28,9 @@ data class Interpretation(
     /** P10: the destination words as heard ("la cooperativa"), shown on Confirm place to spot a mishearing. */
     val placeHeard: String? = null,
     /** P10: [placeQuery] is a street address ("Calle 6A #36-41"); [placeHint] then holds its neighbourhood. */
-    val placeIsAddress: Boolean = false
+    val placeIsAddress: Boolean = false,
+    /** P11: the user asked for the nearest one ("el más cercano"): a chain's nearest branch goes straight to confirm. */
+    val placeNearest: Boolean = false
 ) {
     companion object {
         const val ACCEPT_CONFIDENCE = 0.75f

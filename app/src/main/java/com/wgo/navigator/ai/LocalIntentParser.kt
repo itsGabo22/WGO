@@ -39,7 +39,7 @@ object LocalIntentParser {
     }
 
     fun parse(transcript: String, @Suppress("UNUSED_PARAMETER") language: Language): Interpretation {
-        var toks = stripPoliteness(tokenize(destinationClause(transcript)))
+        var toks = stripPoliteness(tokenize(destinationClause(protectAbbreviations(transcript))))
         if (toks.isEmpty()) return Interpretation.Unknown
 
         if (toks.first().norm in CANCEL_WORDS && toks.all { it.norm in CANCEL_WORDS || it.norm in CANCEL_FILLER }) {
@@ -82,6 +82,9 @@ object LocalIntentParser {
         }
         toks = stripPoliteness(toks.dropWhile { it.norm in CONNECTORS }).dropWhile { it.norm in CONNECTORS }
         toks = cutAtBreak(toks)
+        // P11: "el más cercano", "the nearest" ask for the nearest branch; the words are never part of the name.
+        val nearest = NEAREST.any { indexOf(toks, it.words) >= 0 }
+        if (nearest) toks = withoutNearest(toks)
 
         val placeToks = dropQuantifiers(cleanPlace(toks))
         val heard = join(toks.dropWhile { it.norm in CONNECTORS }).ifEmpty { null }
@@ -98,7 +101,7 @@ object LocalIntentParser {
         }
         // Local nicknames ("la UDENAR", "el terminal") resolve here, with no remote call.
         PlaceAliases.resolve(placeToks.map { it.norm })?.let {
-            return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeFromAlias = true, placeHeard = heard)
+            return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeFromAlias = true, placeHeard = heard, placeNearest = nearest)
         }
         // "X de la Y" / "X cerca de Y": name X, landmark hint Y (docs/PLACE_SEARCH.md). A vague description
         // ("donde venden helados frente a la plaza") stays whole: the remote interpreter reads it.
@@ -111,12 +114,13 @@ object LocalIntentParser {
             val category = com.wgo.navigator.places.PlaceCategories.categoryWord(nameToks[0].norm)
             if (category != null) return Interpretation(
                 IntentKind.Navigate, nameToks[0].orig, mode, ALIAS_CONFIDENCE, placeHint = split.hint,
-                placeCategory = nameToks[0].orig, placeVague = true, placeHeard = heard
+                placeCategory = nameToks[0].orig, placeVague = true, placeHeard = heard, placeNearest = nearest
             )
         }
         PlaceAliases.resolve(nameToks.map { it.norm })?.let {
             return Interpretation(
-                IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeHint = split.hint, placeFromAlias = true, placeHeard = heard
+                IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeHint = split.hint, placeFromAlias = true, placeHeard = heard,
+                placeNearest = nearest
             )
         }
         val vague = nameToks.any { it.norm in VAGUE_WORDS }
@@ -129,8 +133,28 @@ object LocalIntentParser {
         }
         return Interpretation(
             IntentKind.Navigate, split.name, mode, confidence, placeHint = split.hint, placeVague = vague || vagueWhole,
-            placeHeard = heard
+            placeHeard = heard, placeNearest = nearest
         )
+    }
+
+    /**
+     * P11: a period after an abbreviation ("Mr. Pollo", "C.C. Unicentro", "Cra. 27") does not end a clause; the period
+     * goes (and the inner ones of "C.C."), the word stays.
+     */
+    fun protectAbbreviations(text: String): String =
+        ABBREVIATION.replace(text) { m -> m.groupValues[1].replace(".", "") + " " }
+
+    /** P11: [toks] without the nearest phrases and without the article they leave behind ("el dollarcity el"). */
+    private fun withoutNearest(toks: List<Tok>): List<Tok> {
+        var t = toks
+        for (p in NEAREST) {
+            while (true) {
+                val at = indexOf(t, p.words)
+                if (at < 0) break
+                t = t.take(at) + t.drop(at + p.words.size)
+            }
+        }
+        return t.dropLastWhile { it.norm in ARTICLES || it.norm in CONNECTORS || it.norm == "que" }
     }
 
     /**
@@ -289,6 +313,16 @@ object LocalIntentParser {
     }
 
     private val CLAUSE = Regex("[.;!?¡¿,]")
+    private val ABBREVIATION = Regex(
+        "(?i)(?<![\\p{L}\\p{N}])(c\\.c|s\\.a|mrs|mr|sra|sr|dr|av|cra|cll|no|cc|sa)\\.(?=\\s|$|[,;:])"
+    )
+
+    /** P11: phrases that ask for the nearest branch of a chain (removed from the place). */
+    private val NEAREST = listOf(
+        Phrase("que quede mas cerca"), Phrase("que este mas cerca"), Phrase("mas cercano"), Phrase("mas cercana"),
+        Phrase("mas proximo"), Phrase("mas proxima"), Phrase("mas cerca"), Phrase("the nearest"), Phrase("the closest"),
+        Phrase("nearest"), Phrase("closest")
+    ).sortedByDescending { it.words.size }
     private val COMBINING = Regex("\\p{Mn}+")
     private val CONTROL = Regex("\\p{Cntrl}")
     private val PUNCTUATION = Regex("[¿?¡!.,;:\"“”«»()\\[\\]{}]")

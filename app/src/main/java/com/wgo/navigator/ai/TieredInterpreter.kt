@@ -90,7 +90,10 @@ class TieredInterpreter(
         WgoMetrics.event("interpret tier=Remote kind=${remote.kind} conf=${remote.confidence}")
         // The travel mode only comes from words the user actually said (the local rules catch every mode phrase);
         // live testing showed the remote model inventing one.
-        return remote.copy(mode = local.mode, placeVague = local.placeVague, placeHeard = remote.placeQuery ?: local.placeHeard)
+        return remote.copy(
+            mode = local.mode, placeVague = local.placeVague, placeHeard = remote.placeQuery ?: local.placeHeard,
+            placeNearest = local.placeNearest
+        )
     }
 
     companion object {

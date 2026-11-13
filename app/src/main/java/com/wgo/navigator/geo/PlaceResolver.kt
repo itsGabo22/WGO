@@ -33,7 +33,9 @@ data class PlaceRequest(
     /** P10: a description or a kind of place, not a name: never one silent guess (pick list). */
     val vague: Boolean = false,
     /** P10: [name] is a street address ("Calle 6A #36-41"), [hint] its neighbourhood: Nominatim only, pick list. */
-    val address: Boolean = false
+    val address: Boolean = false,
+    /** P11: the user asked for the nearest one ("el más cercano"); the words are not in [name]. */
+    val nearest: Boolean = false
 )
 
 /** Where a candidate came from. */
@@ -47,7 +49,11 @@ data class PlaceCandidate(
     val distanceM: Double,
     val confidence: Float,
     val source: PlaceSource,
-    val hintScore: Double = 0.0
+    val hintScore: Double = 0.0,
+    /** P11: query tokens matched only by prefix, sound or spelling (index rows; fewer ranks first inside a tier). */
+    val inexact: Int = 0,
+    /** P11: the query matched the row's brand ("Mister Pollo MRP"). */
+    val brand: Boolean = false
 ) {
     /** A destination category (docs/PLACE_SEARCH.md, "Landmark prior"). */
     val landmark: Boolean get() = PlaceCategories.isLandmark(place.category)
@@ -161,7 +167,12 @@ class PlaceResolver(
         }
 
         fun addIndex(hits: List<IndexHit>) {
-            hits.forEach { candidates += PlaceCandidate(it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index) }
+            hits.forEach {
+                candidates += PlaceCandidate(
+                    it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index,
+                    inexact = it.inexact, brand = it.brand
+                )
+            }
         }
 
         /** Nominatim hits within [FAR_KM] (when [nearOnly]); tier 3 when the name equals [asked], else 2. */
@@ -421,10 +432,12 @@ class PlaceResolver(
 
         private fun distance(p: Place, anchor: GeoCoord) = RadarProjection.distanceMeters(p.coord, anchor)
 
-        /** The ranking order of docs/PLACE_SEARCH.md ("Ranking"; landmark and trusted since P8). */
+        /** The ranking order of docs/PLACE_SEARCH.md ("Ranking"; landmark and trusted since P8; brand and exactness P11). */
         fun sortedCandidates(list: List<PlaceCandidate>): List<PlaceCandidate> = list.sortedWith(
             compareBy<PlaceCandidate> { it.distanceM > FAR_KM * 1000 }
                 .thenByDescending { it.tier }
+                .thenByDescending { it.brand }
+                .thenBy { it.inexact }
                 .thenByDescending { it.landmark }
                 .thenByDescending { it.categoryBoost }
                 .thenByDescending { it.hintScore }
