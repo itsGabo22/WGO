@@ -28,14 +28,40 @@ and `docs/THIRD_PARTY_DATA.md`).
   droguería que quede en el centro") or a street address lists real options under "¿CUÁL?", and Confirm place shows
   the words it heard, so nothing is guessed silently.
   Easy requests are understood on the watch, hard ones by a language model (text only, never coordinates).
-- **Real places**: your private places, an offline index of 6,285 Pasto places (Overture), then OpenStreetMap search;
-  "X de la Y" uses Y as a landmark hint; far results are never picked first; Pasto nicknames ("la cooperativa",
-  "la terminal", "Unicentro") and a landmark prior; the language model may only expand a nickname into official
-  names or pick among real candidates by id, never with your position (`docs/PLACE_SEARCH.md`).
+- **Real places**: your private places, an offline index of 7,984 places within about 25 km of Pasto (Overture, P11:
+  brands included), then OpenStreetMap search (Nominatim, then Photon for misspelled names); "X de la Y" uses Y as a
+  landmark hint; far results are never picked first; Pasto nicknames ("la cooperativa", "la terminal", "Unicentro")
+  and a landmark prior; the language model may only expand a nickname or a brand into official names or pick among
+  real candidates by id, never with your position (`docs/PLACE_SEARCH.md`).
+- **Chains and speech slips (P11)**: "llévame por favor a Mr. Pollo" finds the Míster Pollo chain ("Mr", "Mister",
+  "Míster" and even a heard "mi pollo" are the same) and lists its 3 nearest branches with distance and address
+  ("¿CUÁL?", OTRO 1/3); "... el más cercano" goes straight to the nearest one. Names also match by Spanish sound and
+  small spelling slips. Measured on 120 test requests: the right place first 95.5 % of the time, in the first three
+  99.1 % (P10: 75.5 % / 80.9 %), and an invented place is never picked by itself.
+- **Best route, alternatives and live reroute (P11)**: the fastest route by the road network (no live traffic: free
+  data has none), plus up to two alternatives drawn lighter with their extra minutes ("+4 MIN"); the RUTA 1/2 chip
+  switches with no network. Driving onto an alternative switches to it at once; any other road reroutes from where you
+  are (pointing the new route your way, at most every 8 s); the route behind you disappears and the distance and time
+  update live. Without network the old route stays ("SIN CONEXIÓN · RUTA NO ACTUALIZADA") until it is back.
+- **Compass (P11)**: standing or walking, the arrow and the heading-up map follow the watch's compass (fused with the
+  GPS course when moving fast); at the start the HUD arrow shows where to turn to face the route. The sensor runs only
+  while the navigation screen is on.
 - **Legible radar map**: CARTO tiles recoloured into 8 original styles (Day / Night), sharp street names on top;
   north up by default (names always upright) or heading up with upright landmark labels; long texts scroll.
 - **Trip in a foreground service**: haptics per turn, optional spoken guidance (OFF / AUTO with a headset /
   ALWAYS) with a choice of voice, engine, pitch and speed, ambient screen, ongoing activity, celebratory arrival.
+
+## Honest limits
+
+- Free data has gaps: a place missing from Overture and OpenStreetMap cannot be found; add it to your private places
+  (`docs/PLACES.md`). OpenStreetMap has no house numbers in Pasto, so a street address finds the street.
+- No live traffic: "best" is the fastest route by the road network. OSRM offers alternatives only when they differ
+  clearly; many short driving trips in Pasto have none.
+- No offline voice: without a network the app says so instead of listening.
+- Ambient (dimmed) screen: Wear OS redraws the app only about once a minute there, so the distance shown can be stale;
+  the turn haptics stay on time (they come from the trip service). Proposed fix in `docs/ARCHITECTURE.md` (backlog).
+- The public Nominatim, Photon and OSRM servers are for light use; a public release needs its own or paid services and
+  a key proxy (`docs/RELEASE_CHECKLIST.md`).
 
 ## Build
 
