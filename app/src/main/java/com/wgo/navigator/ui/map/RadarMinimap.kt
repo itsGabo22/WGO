@@ -117,9 +117,13 @@ fun RadarMinimap(
             }
         }
     }
+    // Label candidates: the point farthest from the active route first, then the alternative's own points (the first
+    // free spot inside the dial wins, so a label blocked by the HUD moves along its route instead of disappearing).
     val altLabels = remember(alternatives, center, heading, zoom, size, tileSize) {
         if (size == IntSize.Zero) emptyList() else alternatives.filter { it.points.size >= 2 }.map { alt ->
-            RadarProjection.toScreen(alt.label, center, heading, zoom, anchor.x, anchor.y, tileSize).let { Offset(it.x, it.y) } to alt.deltaMin
+            (listOf(alt.label) + alt.points).map {
+                RadarProjection.toScreen(it, center, heading, zoom, anchor.x, anchor.y, tileSize).let { p -> Offset(p.x, p.y) }
+            } to alt.deltaMin
         }
     }
     // The user (chevron, halo, rings, sweep): at the anchor while following, at its real place while exploring.
@@ -172,8 +176,8 @@ fun RadarMinimap(
         if (size != IntSize.Zero) {
             // px / density is already reference dp here (WgoResponsive scales the density once).
             val density = androidx.compose.ui.platform.LocalDensity.current.density
-            for ((at, minutes) in altLabels) {
-                val placed = AltLabelRules.place(at.x / density, at.y / density, labelBlocked) ?: continue
+            for ((candidates, minutes) in altLabels) {
+                val placed = AltLabelRules.firstFree(candidates.map { Offset(it.x / density, it.y / density) }, labelBlocked) ?: continue
                 Box(
                     Modifier
                         .offset(x = (placed.x - AltLabelRules.WIDTH_DP / 2).dp, y = (placed.y - AltLabelRules.HEIGHT_DP / 2).dp)

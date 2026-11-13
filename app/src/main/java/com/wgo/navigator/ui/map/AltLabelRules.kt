@@ -37,4 +37,17 @@ object AltLabelRules {
         if (hypot(x - USER_X_DP, y - USER_Y_DP) < USER_CLEARANCE_DP + HEIGHT_DP / 2) return null
         return Offset(x, y)
     }
+
+    /**
+     * The label's spot: [candidates] (reference dp) in order, the first that [place] accepts; after the first one, only
+     * points already inside the dial (a label never jumps to a clamped spot far from its route).
+     */
+    fun firstFree(candidates: List<Offset>, blocked: List<LabelBlock>): Offset? {
+        candidates.firstOrNull()?.let { first -> place(first.x, first.y, blocked)?.let { return it } }
+        for (c in candidates.drop(1)) {
+            if (hypot(c.x - CENTRE_DP, c.y - CENTRE_DP) > MAX_RADIUS_DP) continue
+            place(c.x, c.y, blocked)?.let { return it }
+        }
+        return null
+    }
 }

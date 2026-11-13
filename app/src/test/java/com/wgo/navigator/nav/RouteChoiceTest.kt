@@ -114,6 +114,12 @@ class RouteChoiceTest {
         assertNull(AltLabelRules.place(45f, 150f, listOf(zoomMinus)))
         assertNull(AltLabelRules.place(113.5f, 150f, emptyList()))
         assertNotNull(AltLabelRules.place(160f, 90f, listOf(hud, zoomMinus)))
+        // Blocked first spot: the label moves to the alternative's next free point inside the dial.
+        val moved = AltLabelRules.firstFree(
+            listOf(androidx.compose.ui.geometry.Offset(60f, 40f), androidx.compose.ui.geometry.Offset(300f, 300f), androidx.compose.ui.geometry.Offset(70f, 100f)),
+            listOf(hud)
+        )!!
+        assertEquals(70f, moved.x, 0.01f)
         assertEquals("+2 MIN", altDeltaLabel(2, Language.ES))
         assertEquals("−1 MIN", altDeltaLabel(-1, Language.EN))
         assertEquals("=", altDeltaLabel(0, Language.ES))
