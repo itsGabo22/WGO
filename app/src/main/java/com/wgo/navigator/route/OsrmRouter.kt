@@ -7,6 +7,7 @@ import com.wgo.navigator.core.Route
 import com.wgo.navigator.core.RouteStep
 import com.wgo.navigator.core.Router
 import com.wgo.navigator.core.WgoFailure
+import com.wgo.navigator.core.map
 import com.wgo.navigator.metrics.WgoMetrics
 import com.wgo.navigator.net.HttpClient
 import com.wgo.navigator.ui.map.GeoCoord
@@ -30,22 +31,33 @@ class OsrmRouter(
 ) : Router {
     private val inFlight = Mutex()
 
-    override suspend fun route(from: GeoCoord, to: GeoCoord, mode: TravelMode): Outcome<Route> = inFlight.withLock {
-        val primary = request(if (mode == TravelMode.Walk) footBase else carBase, from, to, mode)
+    override suspend fun route(from: GeoCoord, to: GeoCoord, mode: TravelMode): Outcome<Route> =
+        fetch(from, to, mode, alternatives = false, bearingDeg = null).map { it.first() }
+
+    /** P11: one request with `alternatives` (and the course as `bearings` when known): up to 3 routes, fastest first. */
+    override suspend fun routes(from: GeoCoord, to: GeoCoord, mode: TravelMode, bearingDeg: Double?): Outcome<List<Route>> =
+        fetch(from, to, mode, alternatives = true, bearingDeg = bearingDeg)
+
+    private suspend fun fetch(
+        from: GeoCoord, to: GeoCoord, mode: TravelMode, alternatives: Boolean, bearingDeg: Double?
+    ): Outcome<List<Route>> = inFlight.withLock {
+        val primary = request(if (mode == TravelMode.Walk) footBase else carBase, from, to, mode, alternatives, bearingDeg)
         val retryable = primary is Outcome.Err && (primary.failure is WgoFailure.Server || primary.failure == WgoFailure.Timeout)
         if (mode == TravelMode.Drive && retryable && carFallbackBase != null) {
             WgoMetrics.event("route fallback=osrm_demo")
-            request(carFallbackBase, from, to, mode)
+            request(carFallbackBase, from, to, mode, alternatives, bearingDeg)
         } else primary
     }
 
-    private suspend fun request(base: String, from: GeoCoord, to: GeoCoord, mode: TravelMode): Outcome<Route> {
-        val response = http.request(WgoMetrics.Net.ROUTE, url(base, from, to), CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS)
+    private suspend fun request(
+        base: String, from: GeoCoord, to: GeoCoord, mode: TravelMode, alternatives: Boolean, bearingDeg: Double?
+    ): Outcome<List<Route>> {
+        val response = http.request(WgoMetrics.Net.ROUTE, url(base, from, to, alternatives, bearingDeg), CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS)
         val ok = when (response) {
             is Outcome.Err -> return response
             is Outcome.Ok -> response.value
         }
-        return parse(ok.body, mode, ok.code)
+        return parseAll(ok.body, mode, ok.code)
     }
 
     companion object {
@@ -57,30 +69,37 @@ class OsrmRouter(
         const val SIMPLIFY_TOLERANCE_M = 4.0
         const val MAX_POINTS = 300
 
-        fun url(base: String, from: GeoCoord, to: GeoCoord): String = base.trimEnd('/') + String.format(
-            Locale.US, "/route/v1/driving/%.6f,%.6f;%.6f,%.6f", from.lon, from.lat, to.lon, to.lat
-        ) + "?overview=full&geometries=polyline&steps=true"
+        /** P11: at most this many routes are kept (the active one and two alternatives). */
+        const val MAX_ROUTES = 3
+
+        /** P11: the tolerance of the `bearings` hint, degrees either side of the course. */
+        const val BEARING_RANGE_DEG = 45
+
+        fun url(base: String, from: GeoCoord, to: GeoCoord, alternatives: Boolean = false, bearingDeg: Double? = null): String =
+            base.trimEnd('/') + String.format(
+                Locale.US, "/route/v1/driving/%.6f,%.6f;%.6f,%.6f", from.lon, from.lat, to.lon, to.lat
+            ) + "?overview=full&geometries=polyline&steps=true" +
+                (if (alternatives) "&alternatives=true" else "") +
+                (bearingDeg?.let {
+                    String.format(Locale.US, "&bearings=%d,%d;", ((Math.round(it) % 360 + 360) % 360).toInt(), BEARING_RANGE_DEG)
+                } ?: "")
 
         /**
-         * Parses an OSRM `route` answer. "NoRoute"/"NoSegment" (no road near a point, or no connection) is
-         * [WgoFailure.NotFound]; other errors are [WgoFailure.Server] with the HTTP status.
+         * Parses an OSRM `route` answer (its first route). "NoRoute"/"NoSegment" (no road near a point, or no
+         * connection) is [WgoFailure.NotFound]; other errors are [WgoFailure.Server] with the HTTP status.
          */
-        fun parse(body: String, mode: TravelMode, httpCode: Int = 200): Outcome<Route> = try {
+        fun parse(body: String, mode: TravelMode, httpCode: Int = 200): Outcome<Route> =
+            parseAll(body, mode, httpCode).map { it.first() }
+
+        /** P11: every route of the answer (at most [MAX_ROUTES]), each with its steps, fastest first. */
+        fun parseAll(body: String, mode: TravelMode, httpCode: Int = 200): Outcome<List<Route>> = try {
             val root = JSONObject(body)
             when (val code = root.optString("code")) {
                 "Ok" -> {
-                    val r = root.getJSONArray("routes").getJSONObject(0)
-                    val raw = Polyline.decode(r.getString("geometry"))
-                    val polyline = Polyline.simplify(raw, SIMPLIFY_TOLERANCE_M, MAX_POINTS)
-                    WgoMetrics.event("route points raw=${raw.size} simplified=${polyline.size}")
-                    val steps = r.getJSONArray("legs").let { legs ->
-                        (0 until legs.length()).flatMap { l ->
-                            val s = legs.getJSONObject(l).getJSONArray("steps")
-                            (0 until s.length()).map { step(s.getJSONObject(it)) }
-                        }
-                    }
-                    if (polyline.size < 2) Outcome.Err(WgoFailure.NotFound)
-                    else Outcome.Ok(Route(polyline, r.getDouble("distance"), r.getDouble("duration"), steps, mode))
+                    val array = root.getJSONArray("routes")
+                    val routes = (0 until minOf(array.length(), MAX_ROUTES)).mapNotNull { routeOf(array.getJSONObject(it), mode) }
+                        .sortedBy { it.durationS }
+                    if (routes.isEmpty()) Outcome.Err(WgoFailure.NotFound) else Outcome.Ok(routes)
                 }
                 "NoRoute", "NoSegment" -> Outcome.Err(WgoFailure.NotFound)
                 else -> Outcome.Err(WgoFailure.Server(if (httpCode in 200..299) 0 else httpCode)).also {
@@ -89,6 +108,19 @@ class OsrmRouter(
             }
         } catch (e: JSONException) {
             Outcome.Err(WgoFailure.Server(httpCode))
+        }
+
+        private fun routeOf(r: JSONObject, mode: TravelMode): Route? {
+            val raw = Polyline.decode(r.getString("geometry"))
+            val polyline = Polyline.simplify(raw, SIMPLIFY_TOLERANCE_M, MAX_POINTS)
+            WgoMetrics.event("route points raw=${raw.size} simplified=${polyline.size}")
+            val steps = r.getJSONArray("legs").let { legs ->
+                (0 until legs.length()).flatMap { l ->
+                    val s = legs.getJSONObject(l).getJSONArray("steps")
+                    (0 until s.length()).map { step(s.getJSONObject(it)) }
+                }
+            }
+            return if (polyline.size < 2) null else Route(polyline, r.getDouble("distance"), r.getDouble("duration"), steps, mode)
         }
 
         private fun step(o: JSONObject): RouteStep {

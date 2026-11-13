@@ -27,4 +27,11 @@ data class Route(
 /** Origin + destination + mode to a route. Never throws; no route between the points is [WgoFailure.NotFound]. */
 interface Router {
     suspend fun route(from: GeoCoord, to: GeoCoord, mode: TravelMode): Outcome<Route>
+
+    /**
+     * P11: up to 3 routes, fastest first, each with its own steps (switching needs no network). [bearingDeg] is the
+     * user's course at [from] (a hint so the route does not start with a pointless U-turn); null when unknown.
+     */
+    suspend fun routes(from: GeoCoord, to: GeoCoord, mode: TravelMode, bearingDeg: Double? = null): Outcome<List<Route>> =
+        route(from, to, mode).map { listOf(it) }
 }

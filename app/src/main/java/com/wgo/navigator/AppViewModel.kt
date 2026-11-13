@@ -613,15 +613,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
             locationSource.setProfile(LocationProfile.IDLE)
             return fail(PipelineError.RouteUnavailable, Step.Route)
         }
-        when (val r = router.route(GeoCoord(fix.lat, fix.lon), place.coord, mode)) {
+        // P11: the fastest route and up to two alternatives, each with its steps (one request).
+        when (val r = router.routes(GeoCoord(fix.lat, fix.lon), place.coord, mode)) {
             is Outcome.Ok -> {
-                _route.value = r.value
+                val best = r.value.first()
+                _route.value = best
                 WgoMetrics.event(
-                    "pipeline routed mode=$mode m=${r.value.distanceM.toInt()} s=${r.value.durationS.toInt()} " +
-                        "steps=${r.value.steps.size} points=${r.value.polyline.size} snapshot=${WgoMetrics.snapshot()}"
+                    "pipeline routed mode=$mode m=${best.distanceM.toInt()} s=${best.durationS.toInt()} " +
+                        "steps=${best.steps.size} points=${best.polyline.size} routes=${r.value.size} snapshot=${WgoMetrics.snapshot()}"
                 )
                 tripStore.saveTrip(place.name, place.coord.lat, place.coord.lon, mode)
-                startNavigation(r.value, place, fix)
+                startNavigation(best, place, fix)
             }
             is Outcome.Err -> {
                 locationSource.setProfile(LocationProfile.IDLE)

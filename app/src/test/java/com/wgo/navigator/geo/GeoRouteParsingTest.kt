@@ -135,6 +135,28 @@ class GeoRouteParsingTest {
         }
     }
 
+    @Test fun alternativesComeFastestFirstEachWithItsSteps() {
+        val routes = (OsrmRouter.parseAll(resource("osrm_alternatives.json"), TravelMode.Drive) as Outcome.Ok).value
+        assertEquals(2, routes.size)
+        assertEquals(389.1, routes[0].durationS, 0.05)
+        assertEquals(539.1, routes[1].durationS, 0.05)
+        assertTrue(routes.all { it.steps.isNotEmpty() && it.polyline.size >= 2 })
+        // parse() keeps its P5 meaning: the first (fastest) route.
+        assertEquals(389.1, (OsrmRouter.parse(resource("osrm_alternatives.json"), TravelMode.Drive) as Outcome.Ok).value.durationS, 0.05)
+    }
+
+    @Test fun routesAskForAlternativesAndTheCourseAsABearingHint() = runBlocking {
+        FakeHttpServer { Triple(200, resource("osrm_alternatives.json"), 0L) }.use { osmde ->
+            val router = OsrmRouter(HttpClient("WGO-test"), osmde.baseUrl + "/routed-foot", osmde.baseUrl + "/routed-car", null)
+            val plain = router.routes(PastoCentre, udenar, TravelMode.Drive)
+            assertEquals(2, (plain as Outcome.Ok).value.size)
+            assertEquals("overview=full&geometries=polyline&steps=true&alternatives=true", osmde.requests.last().query)
+            router.routes(PastoCentre, udenar, TravelMode.Drive, bearingDeg = -91.6)
+            assertEquals("overview=full&geometries=polyline&steps=true&alternatives=true&bearings=268,45;", osmde.requests.last().query)
+            assertEquals(2, osmde.requests.size) // one request each, never a loop
+        }
+    }
+
     // ---- Nominatim ----
 
     @Test fun parsesTheRealNominatimSamples() {
