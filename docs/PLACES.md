@@ -1,8 +1,9 @@
 # My places and missing places
 
 WGO finds a place in this order (details: `docs/PLACE_SEARCH.md`): **my places** (your private list), the **local
-places index** (Overture Maps, on the watch), then **Nominatim** (OpenStreetMap, online). This page explains the first
-one and how to fix a place that none of them knows.
+places index** (Overture Maps, on the watch, about 25 km around Pasto, brands included), then **Nominatim** and
+**Photon** (OpenStreetMap, online; Photon forgives spelling, "Mr Pollo" finds "Míster Pollo"). This page explains the
+first one and how to fix a place that none of them knows.
 
 ## My places (`app/src/main/assets/my_places.json`)
 
@@ -54,6 +55,22 @@ the app and the build work as usual.
    For a place that already exists without an address (for example the restaurant "La Merced", node 879662751), only
    add `addr:street` and `addr:housenumber`. Follow the OpenStreetMap rules: add only what you have checked on the
    ground; do not copy from other maps.
+
+## Chains and their branches (P11)
+
+A chain ("Mister Pollo", "Lili Pink", "Dollarcity") is found by its brand or by branch names that start with its name;
+the pick list shows the 3 branches nearest to you. "Mr. Pollo" (Míster Pollo) is in the index with 7 branches and in
+OpenStreetMap, so it needs nothing from you.
+
+- **A branch is missing**: add it to OpenStreetMap with the chain's usual name plus the area as the name ("Míster
+  Pollo Calle 18") and, if you know it, `brand=Míster Pollo`; the next index update or Photon picks it up.
+- **Only for you, now**: add the branch to my places with coordinates you read yourself (long-press its entrance in a
+  map app). Give it the chain's name as an alias only if you want that one branch every time (an alias beats the
+  chain list):
+
+```json
+{ "aliases": ["mr pollo de la 18"], "name": "Míster Pollo Calle 18", "lat": <your latitude>, "lon": <your longitude>, "note": "Calle 18" }
+```
 
 ## Pasto nicknames (P8)
 
