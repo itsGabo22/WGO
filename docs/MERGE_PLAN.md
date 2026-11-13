@@ -1,6 +1,6 @@
-# Merge plan (prepared in P7, refreshed in P8 and P9; nothing merged)
+# Merge plan (prepared in P7, refreshed in P8, P9 and P10; nothing merged)
 
-State on 2026-11-12 after P9 (read-only analysis: `git rev-list`, `git merge-tree --write-tree`).
+State on 2026-11-13 after P10 (read-only analysis: `git rev-list`, `git merge-tree --write-tree`).
 
 ## Branch graph
 
@@ -11,13 +11,14 @@ origin/main    ── 0c5bcff feat: integrate real OSM ───┤   main is an
                                                       │
 design/foundations (255 behind HEAD, 0 ahead) ─┐      │
 design/pieces      (242 behind, 0 ahead)       │      │
-design/screens-01-02 (231 behind, 0 ahead)     ├──> feat/live-engine (HEAD, 353 commits ahead of master, 4 behind)
+design/screens-01-02 (231 behind, 0 ahead)     ├──> feat/live-engine (HEAD, 375 commits ahead of master, 4 behind)
 design/responsive  (214 behind, 0 ahead)       │      P5 live engine, P6-A service/ambient, P6-B HUD/explore/
 design/radar       (194 behind, 0 ahead)       │      legibility, P7 places/labels/voice/arrival/release prep
 design/map-styles  (162 behind, 0 ahead) ──────┘      P8 (40 commits): first-press mic fixes, AI place choice,
                                                       attribution arc, marquee, voices, orientation, @2x labels,
                                                       targetSdk 35; P9: instant mic (own capture, cloud
-                                                      transcription, recognizer fallback, notice, setting)
+                                                      transcription, recognizer fallback, notice, setting); P10: long
+                                                      phrases, strict choice, pick list, no-network surface, FLAC
 ```
 
 Every `design/*` branch is already fully contained in `feat/live-engine` (0 commits ahead): merging them separately
@@ -29,7 +30,7 @@ adds nothing. `main` is an ancestor of `feat/live-engine`. `master` holds only t
    history tags (`git tag design/foundations-final origin/design/foundations`).
 2. `feat/live-engine` -> `main`: a fast-forward (main is an ancestor), through a pull request so CI and review run.
 3. `main` -> `master`: `git merge-tree --write-tree origin/master HEAD` reports **no conflicts** (exit 0); the merge
-   commit brings 292 files changed (+28,097 / -9,352; P9 run), most of it the native app replacing the old web prototype
+   commit brings 294 files changed (+29,313 / -9,352; P10 run, before its docs), most of it the native app replacing the old web prototype
    (`legacy_web_app/` stays local and git-ignored).
 
 Before step 2: `assembleDebug`, `assembleRelease`, `testDebugUnitTest` and `lintDebug` green; the P7 report reviewed;
@@ -38,7 +39,7 @@ persistent map attribution are not).
 
 ## Predicted conflicts
 
-None (`git merge-tree` against `origin/master`, 2026-11-12 after P9: exit 0, no conflicted files). P9 touches only
+None (`git merge-tree` against `origin/master`, 2026-11-13 after P10: exit 0, no conflicted files). P9 and P10 touch only
 files that `master` does not have or did not change (the app sources and `docs/`), so no new conflict is expected. Re-run it right before merging:
 `git fetch origin; git merge-tree --write-tree --name-only origin/master origin/feat/live-engine`.
 
