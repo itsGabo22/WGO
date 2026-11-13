@@ -58,6 +58,7 @@ class NavigationSession(
      */
     val alternativeLines: StateFlow<List<AltLine>> = _altLines.asStateFlow()
     private var lastPosition: GeoCoord? = null
+    private var guided = false
     private var altCache: Pair<Route, List<Pair<RouteGeometry, GeoCoord>>>? = null
 
     private val _remaining = MutableStateFlow(initialRoute.polyline)
@@ -199,7 +200,9 @@ class NavigationSession(
             is NavState.GpsLost -> s.last
             else -> null
         } ?: return
-        if (changed || kotlin.math.abs(nav.progressM - remainingAlong) >= REMAINING_STEP_M) {
+        // The first guidance (and every route change) always cuts the route and draws the alternatives.
+        if (changed || !guided || kotlin.math.abs(nav.progressM - remainingAlong) >= REMAINING_STEP_M) {
+            guided = true
             remainingAlong = nav.progressM
             _remaining.value = engine.geometry.remainingFrom(nav.progressM)
             val lines = altLines(nav)

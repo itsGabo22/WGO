@@ -85,6 +85,14 @@ class RouteChoiceTest {
         s.stop()
     }
 
+    @Test fun alternativesAreDrawnFromTheVeryFirstFix() = runBlocking {
+        // Emulator finding: at trip start (no progress yet) the alternatives were not drawn until 5 m of progress.
+        val s = NavigationSession(main, geo(0.0, 600.0), NoRouter, this, clock, tickMs = 60_000, initialAlternatives = listOf(east))
+        s.onFix(fix(0.0, 0.0))
+        assertEquals(1, s.alternativeLines.value.size)
+        s.stop()
+    }
+
     @Test fun aSwitchOpensTheExpandedHudWindowWithoutAReroute() {
         val far = HudRules.Input(900.0, "m1", rerouting = false, exploring = false, nowMs = 0L, routeKey = 1)
         var state = HudRules.initial(far)
