@@ -161,6 +161,74 @@ class LongPhraseStrictChoiceTest {
         }
     }
 
+    // ---- kinds of place and addresses (P10 live session) ----
+
+    private fun requestOf(text: String): PlaceRequest {
+        val i = LocalIntentParser.parse(text, Language.ES)
+        return PlaceRequest(
+            i.placeQuery!!, i.placeHint, i.placeCategory, i.placeFromAlias, utterance = text, vague = i.placeVague, address = i.placeIsAddress
+        )
+    }
+
+    @Test fun aKindOfPlaceNearAHintListsRealPlacesOfThatKind() {
+        val centro = Place("Centro", "Pasto", GeoCoord(1.2146, -77.2780))
+        val text = "Llévame a alguna droguería que quede en el centro, porque no conozco Pasto porque soy de Bogotá."
+        val i = LocalIntentParser.parse(text, Language.ES)
+        assertEquals("droguería", i.placeQuery)
+        assertEquals("droguería", i.placeCategory)
+        assertEquals("centro", i.placeHint)
+        assertTrue(i.placeVague)
+        val r = resolve(requestOf(text), Online(answers = mapOf("centro, Pasto" to listOf(centro)))) as Resolution.Found
+        assertTrue(r.uncertain)
+        assertTrue(r.places.size in 1..3)
+        assertTrue(r.places.all { it.category.contains("pharmacy") || it.category.contains("drugstore") })
+    }
+
+    @Test fun theBestRestaurantOnAnAvenueIsACategoryNotTheWordBest() {
+        val text = "Llévame por favor al mejor restaurante de la avenida de los estudiantes porque tengo mucha hambre."
+        val i = LocalIntentParser.parse(text, Language.ES)
+        assertEquals("restaurante", i.placeQuery)
+        assertEquals("avenida de los estudiantes", i.placeHint)
+        val avenue = Place("Avenida de los Estudiantes", "Pasto", GeoCoord(1.2128, -77.2858))
+        val r = resolve(requestOf(text), Online(answers = mapOf("avenida de los estudiantes, Pasto" to listOf(avenue)))) as Resolution.Found
+        assertTrue(r.uncertain)
+        assertTrue(r.places.none { "mejor" in it.name.lowercase() })
+        assertTrue(r.places.all { listOf("restaurant", "eatery", "food").any { f -> it.category.contains(f) } })
+    }
+
+    @Test fun anAddressIsSearchedAsAnAddressAndNeverAsABusiness() {
+        val text = "Llévame a la calle 6A #36-41, barrio San Vicente, porque ahí es mi casa."
+        val i = LocalIntentParser.parse(text, Language.ES)
+        assertTrue(i.placeIsAddress)
+        assertEquals("Calle 6A #36-41", i.placeQuery)
+        assertEquals("San Vicente", i.placeHint)
+        val street = Place("Calle 6A", "Mariluz II, Comuna 8", GeoCoord(1.2190, -77.2900), category = "highway:residential")
+        val inBarrio = Place("Calle 6A", "San Vicente, Comuna 4", GeoCoord(1.2050, -77.2700), category = "highway:residential")
+        val online = Online(answers = mapOf("Calle 6A 36-41, Pasto" to listOf(street), "Calle 6A, San Vicente, Pasto" to listOf(inBarrio)))
+        val r = resolve(requestOf(text), online) as Resolution.Found
+        assertTrue("always the pick list", r.uncertain)
+        assertEquals("the street in the neighbourhood said", inBarrio, r.places.first())
+        assertTrue(online.queries.size <= PlaceResolver.MAX_REQUESTS)
+        // Nothing found: not found, and never business suggestions ("Arturo Calle").
+        val none = resolve(requestOf(text), Online())
+        assertEquals(Resolution.NotFound(emptyList()), none)
+        assertTrue(resolve(requestOf(text), Online(offline = true)) is Resolution.Failed)
+    }
+
+    @Test fun addressShapes() {
+        for ((text, query) in listOf(
+            "llévame a la carrera 27 número 15-30" to "Carrera 27 #15-30",
+            "calle 18 # 24-15" to "Calle 18 #24-15",
+            "vamos a la avenida panamericana" to null
+        )) {
+            val i = LocalIntentParser.parse(text, Language.ES)
+            if (query == null) assertFalse(text, i.placeIsAddress) else {
+                assertTrue(text, i.placeIsAddress)
+                assertEquals(text, query, i.placeQuery)
+            }
+        }
+    }
+
     // ---- strict choice ----
 
     private val hospitalA = Place("Hospital Infantil Los Ángeles", "Calle 18", GeoCoord(1.2190, -77.2830), category = "amenity:hospital")
