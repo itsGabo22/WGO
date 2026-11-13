@@ -100,6 +100,13 @@ class PlaceResolver(
     var lastRequests: Int = 0
         private set
 
+    /** P10: what the model's choice did in the last [resolve] (the confidence gate reads it). */
+    enum class ChoiceOutcome { NotAsked, Picked, NoPick }
+
+    @Volatile
+    var lastChoice: ChoiceOutcome = ChoiceOutcome.NotAsked
+        private set
+
     /** Language-model calls made by the last [resolve] (tests and the place log). */
     @Volatile
     var lastAiCalls: Int = 0
@@ -165,6 +172,7 @@ class PlaceResolver(
     suspend fun resolve(request: PlaceRequest, fix: GeoCoord?, language: Language): Resolution {
         lastRequests = 0
         lastAiCalls = 0
+        lastChoice = ChoiceOutcome.NotAsked
         val anchor = fix ?: PastoCentre
         val name = request.name.trim()
         if (name.isEmpty()) return Resolution.NotFound(emptyList())
@@ -273,9 +281,16 @@ class PlaceResolver(
         val options = ordered.take(LlmPlaceChooser.MAX_OPTIONS).mapIndexed { i, c ->
             ChoiceOption("c${i + 1}", c.place.name, c.place.category, c.place.address)
         }
-        val id = chooser.choose(request.utterance ?: name, options, language)
-        val picked = options.indexOfFirst { it.id == id }
+        val id = chooser.choose(request.utterance ?: name, options, language, destination = name)
+        var picked = options.indexOfFirst { it.id == id }
+        // P10 strict choice: a pick whose name has nothing to do with the destination (or its nickname's names) is
+        // ignored, whatever the model says.
+        if (picked >= 0 && !relatedToDestination(ordered[picked].place.name, name)) {
+            WgoMetrics.event("places ai_choice_ignored=unrelated")
+            picked = -1
+        }
         WgoMetrics.event("places ai_choice options=${options.size} picked=$picked")
+        lastChoice = if (picked >= 0) ChoiceOutcome.Picked else ChoiceOutcome.NoPick
         return promote(ordered, picked)
     }
 
@@ -288,6 +303,19 @@ class PlaceResolver(
 
         /** Language-model calls per utterance, the interpreter's included (docs/PLACE_SEARCH.md, P8). */
         const val MAX_AI_CALLS = 2
+
+        /** Region words every Pasto place may carry: never enough to tie a name to the destination. */
+        private val REGION = setOf("pasto", "narino", "colombia", "san", "juan")
+
+        /**
+         * P10: [placeName] shares a content word (prefix or one edit allowed) with the destination [name] or with the
+         * index names of the nickname it came from ("UCC Pasto" for "Universidad Cooperativa de Colombia").
+         */
+        fun relatedToDestination(placeName: String, name: String): Boolean {
+            val words = (listOf(name) + PlaceAliases.indexNames(name)).flatMap { PlaceText.tokens(it) }.filter { it !in REGION }
+            val place = PlaceText.tokens(placeName).filter { it !in REGION }
+            return words.any { w -> place.any { p -> PlaceText.tokenMatches(w, p) || PlaceText.tokenMatches(p, w) } }
+        }
 
         /**
          * Moves the candidate at [index] first (the model's pick); out of range: unchanged. A candidate beyond

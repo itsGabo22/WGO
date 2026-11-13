@@ -60,7 +60,7 @@ class PlaceAiChoiceTest {
     private class FakeChooser(val pick: (List<ChoiceOption>) -> String? = { null }, val names: List<String> = emptyList()) : PlaceChooser {
         val chosen = ArrayList<List<ChoiceOption>>()
         var expansions = 0
-        override suspend fun choose(utterance: String, options: List<ChoiceOption>, language: Language): String? {
+        override suspend fun choose(utterance: String, options: List<ChoiceOption>, language: Language, destination: String?): String? {
             chosen += options
             return pick(options)
         }

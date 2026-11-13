@@ -11,7 +11,7 @@ data class ChoiceOption(val id: String, val name: String, val category: String, 
  */
 interface PlaceChooser {
     /** Role 2: the id of the place [utterance] most obviously means, ONLY one of [options]' ids, or null. */
-    suspend fun choose(utterance: String, options: List<ChoiceOption>, language: Language): String?
+    suspend fun choose(utterance: String, options: List<ChoiceOption>, language: Language, destination: String? = null): String?
 
     /** Role 1: up to 3 official place names (text) that [words] may stand for; empty when unsure or unavailable. */
     suspend fun expand(utterance: String, words: String, language: Language): List<String> = emptyList()
