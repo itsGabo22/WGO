@@ -227,6 +227,14 @@ class PlaceAiChoiceTest {
         assertNull(LlmPlaceChooser.parseChoice("garbage", ids))
     }
 
+    @Test fun theExpansionAsksForBrandSpellingsAsTextOnly() {
+        // P11: "Mr. Pollo" -> "Mister Pollo" / "Míster Pollo" (names only, searched like any name).
+        val body = LlmPlaceChooser.expansionBody("m", "llévame a mr pollo", "mr pollo", Language.ES)
+        assertTrue(body.contains("spelling variants"))
+        assertTrue(body.contains("Mister Pollo"))
+        assertFalse(body.contains("\"lat\"") || body.contains("longitude"))
+    }
+
     @Test fun noCoordinatesDistancesOrPositionInAnyModelRequest() {
         val r = resolve(request("llévame al hospital")).found()
         val options = r.candidates.mapIndexed { i, c -> ChoiceOption("c${i + 1}", c.place.name, c.place.category, c.place.address) }
