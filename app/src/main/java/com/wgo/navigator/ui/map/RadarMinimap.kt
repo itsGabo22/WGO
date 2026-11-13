@@ -119,11 +119,20 @@ fun RadarMinimap(
     }
     // Label candidates: the point farthest from the active route first, then the alternative's own points (the first
     // free spot inside the dial wins, so a label blocked by the HUD moves along its route instead of disappearing).
+    val density = androidx.compose.ui.platform.LocalDensity.current
     val altLabels = remember(alternatives, center, heading, zoom, size, tileSize) {
         if (size == IntSize.Zero) emptyList() else alternatives.filter { it.points.size >= 2 }.map { alt ->
-            (listOf(alt.label) + alt.points).map {
-                RadarProjection.toScreen(it, center, heading, zoom, anchor.x, anchor.y, tileSize).let { p -> Offset(p.x, p.y) }
-            } to alt.deltaMin
+            val project = { g: GeoCoord ->
+                RadarProjection.toScreen(g, center, heading, zoom, anchor.x, anchor.y, tileSize).let { p -> Offset(p.x, p.y) }
+            }
+            // The route sampled every 12 dp on screen (a simplified route has few vertices inside the dial).
+            val step = 12f * density.density
+            val along = ArrayList<Offset>()
+            alt.points.map(project).zipWithNext { a, b ->
+                val n = maxOf(1, ((b - a).getDistance() / step).toInt())
+                for (k in 0 until n) along += a + (b - a) * (k.toFloat() / n)
+            }
+            (listOf(project(alt.label)) + along) to alt.deltaMin
         }
     }
     // The user (chevron, halo, rings, sweep): at the anchor while following, at its real place while exploring.
@@ -175,9 +184,9 @@ fun RadarMinimap(
         // P11: each alternative's time difference, a small pill clamped inside the dial and kept off the controls.
         if (size != IntSize.Zero) {
             // px / density is already reference dp here (WgoResponsive scales the density once).
-            val density = androidx.compose.ui.platform.LocalDensity.current.density
+            val dp = density.density
             for ((candidates, minutes) in altLabels) {
-                val placed = AltLabelRules.firstFree(candidates.map { Offset(it.x / density, it.y / density) }, labelBlocked) ?: continue
+                val placed = AltLabelRules.firstFree(candidates.map { Offset(it.x / dp, it.y / dp) }, labelBlocked) ?: continue
                 Box(
                     Modifier
                         .offset(x = (placed.x - AltLabelRules.WIDTH_DP / 2).dp, y = (placed.y - AltLabelRules.HEIGHT_DP / 2).dp)
