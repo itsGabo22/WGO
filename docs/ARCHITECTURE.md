@@ -89,14 +89,18 @@ death the app starts at Home: a trip never resumes by itself.
 ## Data flow
 
 ```
-press ──(FAST mode, notice accepted, online, under cap)──> AudioCapture ──SpeechEndpointer──> WAV (memory only)
+press ──(no network: P10)──> "Sin conexión" surface (no capture, no recognizer, no system dialog; REINTENTAR)
+press ──(FAST mode, notice accepted, online, under cap)──> AudioCapture ──SpeechEndpointer──> FLAC while recording (WAV fallback, memory only)
       │                                                         └─(no speech in 6 s)──> "No te oí" (nothing sent)
-      │   WAV ──TranscriptionClient (provider, 3 s connect / 6 s total, 1 retry on connect failure)──> verbose_json
+      │   audio ──TranscriptionClient (provider, 3 s connect / 4 s + 1 s per 32 KB, max 10 s, 1 retry on connect failure)──> verbose_json
       │        └─TranscriptGuard (no_speech_prob, avg_logprob, compression, silence phrases, prompt echo)──> transcript
-      │   any cloud failure ──> "DILO DE NUEVO" ──> SpeechRecognizer chain (P8, unchanged) ──> transcript
+      │   cloud failure with a network ──> "DILO DE NUEVO" ──> SpeechRecognizer chain (P8) ──> transcript
+      │   cloud failure and the network gone ──> "Sin conexión" (P10)
       └─(SYSTEM mode / no key / offline / cool-down / cap)──> SpeechRecognizer chain ──> transcript
 SpeechRecognizer chain: on device; network recognizer only when the device has no offline model; system dialog last
 transcript ──LocalIntentParser + PlaceAliases──> place query (+ mode)        (no network)
+          P10: destination clause, filler, verb anywhere, nickname prefix, kind of place, street address; heard phrase
+          P10: no clear winner / vague / category / address ──> pick list "¿CUÁL?" (up to 3), else Confirm place
           └─(low confidence only)──> LLM provider: transcript text only, no location, no identifiers
 place name (+ landmark hint) ──> my places (private, on the watch) ──> local places index (Overture, on the watch)
           └─(no strong local match)──> Nominatim (identifying User-Agent, 1 request/s, <= 3 per utterance) ──> <= 2 places
