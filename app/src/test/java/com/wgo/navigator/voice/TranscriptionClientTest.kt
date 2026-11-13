@@ -205,6 +205,27 @@ class TranscriptionClientTest {
         }
     }
 
+    @Test fun aFlacClipIsSentAsFlac() = runBlocking {
+        FakeHttpServer { Triple(200, answer(spoken), 0L) }.use { server ->
+            val flac = "fLaC".toByteArray() + ByteArray(1000) { 7 }
+            assertTrue(client(server.baseUrl).transcribe(flac, Language.ES) is Transcription.Text)
+            val body = server.requests.single().body
+            assertTrue(body.contains("filename=\"utterance.flac\"\r\nContent-Type: audio/flac"))
+            assertFalse(body.contains("RIFF"))
+        }
+        assertTrue(TranscriptionClient.isFlac("fLaC1234".toByteArray()))
+        assertFalse(TranscriptionClient.isFlac(wav))
+    }
+
+    @Test fun theTotalTimeoutScalesWithThePayloadAndIsCapped() {
+        assertEquals(4_000L, TranscriptionClient.totalTimeoutFor(0))
+        assertEquals(5_000L, TranscriptionClient.totalTimeoutFor(32 * 1024))
+        // An 8 s clip: 99 KB as FLAC (STEP 0) -> about 7 s; 256 KB as WAV -> capped at 10 s.
+        assertTrue(TranscriptionClient.totalTimeoutFor(99_191) in 6_900L..7_100L)
+        assertEquals(10_000L, TranscriptionClient.totalTimeoutFor(256_044))
+        assertEquals(10_000L, TranscriptionClient.totalTimeoutFor(5_000_000))
+    }
+
     @Test fun prewarmSendsNoKeyAndNoData() = runBlocking {
         FakeHttpServer { Triple(401, "{}", 0L) }.use { server ->
             client(server.baseUrl).prewarm()

@@ -61,6 +61,58 @@ class AudioCaptureTest {
         assertEquals(1, src.released.get())
     }
 
+    /** Records what it was fed; answers "fLaC" + the sample count, or fails where asked. */
+    private class FakeEncoder(val startOk: Boolean = true, val feedOk: Boolean = true, val finishOk: Boolean = true) : StreamEncoder {
+        val ranges = ArrayList<IntRange>()
+        var released = 0
+        override fun start() = startOk
+        override fun feed(pcm: ShortArray, from: Int, to: Int): Boolean {
+            ranges += from until to
+            return feedOk
+        }
+        override fun finish(): ByteArray? = if (finishOk) "fLaC".toByteArray() + ByteArray(ranges.sumOf { it.count() }) else null
+        override fun release() {
+            released++
+        }
+    }
+
+    private val spoken = concat(zeros(200), noise(600, 20), tone(1000, 3000), noise(1500, 20))
+
+    private fun encoded(enc: FakeEncoder) = runBlocking {
+        AudioCapture({ FakeSource(spoken) }, dispatcher = Dispatchers.Unconfined, newEncoder = { enc }).recordAndRelease()
+    }
+
+    @Test fun theCompressedClipCoversThePreRollToTheEndAndIsUsed() {
+        val enc = FakeEncoder()
+        val r = encoded(enc) as AudioCapture.Result.Speech
+        assertEquals("fLaC", String(r.audio, 0, 4))
+        val first = enc.ranges.first().first
+        val last = enc.ranges.last().last + 1
+        assertEquals("starts at the pre-roll (speech at 800 ms - 500 ms)", SyntheticPcm.samples(300), first)
+        assertTrue("reaches the clip end (1800 ms + 300 ms tail)", last >= SyntheticPcm.samples(2100))
+        assertTrue("never past the clip end + 300 ms", last <= SyntheticPcm.samples(2400))
+        // Contiguous, in order: no sample twice, none skipped.
+        enc.ranges.zipWithNext().forEach { (a, b) -> assertEquals(a.last + 1, b.first) }
+        assertEquals(1, enc.released)
+    }
+
+    @Test fun anyEncoderFailureFallsBackToTheWav() {
+        for (enc in listOf(FakeEncoder(startOk = false), FakeEncoder(feedOk = false), FakeEncoder(finishOk = false))) {
+            val r = encoded(enc) as AudioCapture.Result.Speech
+            assertEquals("RIFF", String(r.audio, 0, 4))
+            assertTrue("released", enc.released >= 1)
+        }
+    }
+
+    @Test fun silenceNeverStartsAnEncoder() {
+        var created = 0
+        val r = runBlocking {
+            AudioCapture({ FakeSource(noise(500, 20)) }, dispatcher = Dispatchers.Unconfined, newEncoder = { created++; FakeEncoder() }).recordAndRelease()
+        }
+        assertEquals(AudioCapture.Result.NoSpeech, r)
+        assertEquals(0, created)
+    }
+
     @Test fun silenceSendsNothingAndReleases() = runBlocking {
         val src = FakeSource(noise(500, 20))
         val r = capture(src).recordAndRelease()
