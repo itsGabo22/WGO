@@ -78,9 +78,9 @@ class CloudVoiceInput(
             is AudioCapture.Result.Speech -> {
                 send(VoiceEvent.Transcribing)
                 val text = try {
-                    transcriber.transcribe(result.wav, language)
+                    transcriber.transcribe(result.audio, language)
                 } finally {
-                    result.wav.fill(0)
+                    result.audio.fill(0)
                 }
                 when (text) {
                     is Transcription.Text -> {

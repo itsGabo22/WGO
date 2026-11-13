@@ -87,11 +87,16 @@ class AndroidPcmSource(private val context: Context) : PcmSource {
 class AudioCapture(
     private val openSource: () -> PcmSource,
     private val config: SpeechEndpointer.Config = SpeechEndpointer.Config(),
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /**
+     * P10: the compressed upload (FLAC), fed while recording from the speech start with a [ENCODE_LAG_MS] lag so
+     * nothing past the clip's end is encoded; null or any failure: the WAV of the same clip.
+     */
+    private val newEncoder: (() -> StreamEncoder)? = null
 ) {
     sealed interface Result {
-        /** Speech was heard; [wav] is the clip (the caller zeroes it after the upload). */
-        class Speech(val wav: ByteArray, val clipMs: Long, val captureMs: Long, val reason: SpeechEndpointer.EndReason) : Result
+        /** Speech was heard; [audio] is the clip, FLAC or WAV (the caller zeroes it after the upload). */
+        class Speech(val audio: ByteArray, val clipMs: Long, val captureMs: Long, val reason: SpeechEndpointer.EndReason) : Result
         /** No speech within the no-speech window (or a manual stop before any): nothing is sent. */
         data object NoSpeech : Result
         /** The microphone could not be opened or read. */
@@ -122,6 +127,10 @@ class AudioCapture(
         val buf = ShortArray(frame)
         val smoother = LevelSmoother(minDb = 0f, maxDb = 1f, attack = 0.6f, release = 0.2f)
         var stored = 0
+        var encoder: StreamEncoder? = null
+        var encodeFrom = 0
+        var encoded = 0
+        val lag = config.samples(ENCODE_LAG_MS).toInt()
         val source = openSource()
         WgoMetrics.inc(WgoMetrics.Counter.AUDIO_CAPTURE)
         VoiceLog.event("capture_open")
@@ -165,9 +174,27 @@ class AudioCapture(
                                 "threshold_db=${endpointer.thresholdDb.toInt()}"
                         )
                         onSpeechStart()
+                        val e = newEncoder?.invoke()
+                        if (e != null && e.start()) {
+                            encoder = e
+                            encodeFrom = maxOf(maxOf(endpointer.firstAudioSample, 0L), step.startSample - config.samples(config.preRollMs)).toInt()
+                            encoded = encodeFrom
+                        } else if (e != null) {
+                            e.release()
+                            VoiceLog.event("encode_fallback reason=start")
+                        }
                     }
                     is SpeechEndpointer.Step.Ended -> break
                     SpeechEndpointer.Step.Continue -> Unit
+                }
+                // Encode what is surely inside the clip (the lag covers the silence that ends speech).
+                val e = encoder
+                if (e != null && stored - lag > encoded) {
+                    if (e.feed(pcm, encoded, stored - lag)) encoded = stored - lag else {
+                        e.release()
+                        encoder = null
+                        VoiceLog.event("encode_fallback reason=feed")
+                    }
                 }
             }
             val reason = endpointer.ended ?: SpeechEndpointer.EndReason.Manual
@@ -180,15 +207,39 @@ class AudioCapture(
             if (clip == null) return@withContext Result.NoSpeech
             val from = clip.first.toInt().coerceAtMost(stored)
             val to = (clip.last + 1).toInt().coerceAtMost(stored)
-            val wav = WavEncoder.encode(pcm, from, to, config.sampleRate)
             val clipMs = endpointer.msOf((to - from).toLong())
-            VoiceLog.event("capture_done clip_ms=$clipMs bytes=${wav.size}")
-            Result.Speech(wav, clipMs, captureMs, reason)
+            val wavBytes = WavEncoder.HEADER_BYTES + (to - from) * 2
+            val compressed = encoder?.let { e -> finishEncoding(e, pcm, encodeFrom, encoded, from, to, wavBytes) }
+            val audio = compressed ?: WavEncoder.encode(pcm, from, to, config.sampleRate)
+            VoiceLog.event("capture_done clip_ms=$clipMs bytes=${audio.size} fmt=${if (compressed != null) "flac" else "wav"}")
+            Result.Speech(audio, clipMs, captureMs, reason)
         } finally {
+            encoder?.release()
             pcm.fill(0)
             buf.fill(0)
             releaseInBackground(source)
         }
+    }
+
+    /** Feeds the rest of the clip and drains the encoder; null (and a log line) when it cannot give the stream. */
+    private fun finishEncoding(e: StreamEncoder, pcm: ShortArray, encodeFrom: Int, encoded: Int, from: Int, to: Int, wavBytes: Int): ByteArray? {
+        if (encodeFrom != from) {
+            VoiceLog.event("encode_fallback reason=range")
+            return null
+        }
+        val t0 = System.nanoTime()
+        if (encoded < to && !e.feed(pcm, encoded, to)) {
+            VoiceLog.event("encode_fallback reason=feed")
+            return null
+        }
+        val bytes = e.finish()
+        val drainMs = (System.nanoTime() - t0) / 1_000_000
+        if (bytes == null) {
+            VoiceLog.event("encode_fallback reason=finish drain_ms=$drainMs")
+            return null
+        }
+        VoiceLog.event("encode_done fmt=flac wav_bytes=$wavBytes bytes=${bytes.size} drain_ms=$drainMs")
+        return bytes
     }
 
     private fun releaseInBackground(source: PcmSource) {
@@ -205,5 +256,8 @@ class AudioCapture(
 
     private companion object {
         const val RELEASE_WAIT_MS = 2_000L
+
+        /** The end of speech is found 900 ms after the last loud frame and the clip keeps 300 ms of it: 600 ms. */
+        const val ENCODE_LAG_MS = 600
     }
 }

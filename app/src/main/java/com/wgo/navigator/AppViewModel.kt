@@ -32,6 +32,7 @@ import com.wgo.navigator.voice.CloudVoiceInput
 import com.wgo.navigator.voice.TranscriptionClient
 import com.wgo.navigator.audio.AudioCapture
 import com.wgo.navigator.audio.AndroidPcmSource
+import com.wgo.navigator.audio.FlacEncoder
 import com.wgo.navigator.ai.LlmInterpreter
 import com.wgo.navigator.net.isOnline
 import com.wgo.navigator.voice.VoiceLevel
@@ -157,7 +158,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     /** The cloud rung exists only when local.properties provided the provider key (same key as the model). */
     private val cloudVoice: CloudVoiceInput? = BuildConfig.LLM_API_KEY.takeIf { it.isNotBlank() }?.let { key ->
         CloudVoiceInput(
-            capture = AudioCapture({ AndroidPcmSource(application) }),
+            capture = AudioCapture({ AndroidPcmSource(application) }, newEncoder = { FlacEncoder() }),
             transcriber = TranscriptionClient(
                 apiKey = key,
                 baseUrl = BuildConfig.LLM_BASE_URL.ifBlank { LlmInterpreter.DEFAULT_BASE_URL },

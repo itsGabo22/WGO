@@ -54,7 +54,7 @@ class AudioCaptureTest {
         val r = capture(src).recordAndRelease(onLevel = { levels += it }, onSpeechStart = { speechStarts++ })
         assertTrue(r is AudioCapture.Result.Speech)
         r as AudioCapture.Result.Speech
-        assertEquals("RIFF", String(r.wav, 0, 4))
+        assertEquals("RIFF", String(r.audio, 0, 4))
         assertEquals(1800L, r.clipMs) // 500 ms pre-roll + 1000 ms of speech + 300 ms tail
         assertEquals(1, speechStarts)
         assertTrue(levels.max() > 0.5f)

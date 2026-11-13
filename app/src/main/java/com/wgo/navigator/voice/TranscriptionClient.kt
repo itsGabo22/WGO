@@ -30,7 +30,8 @@ class TranscriptionClient(
     private val http: HttpClient,
     private val budget: AiCallBudget,
     private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
-    private val totalTimeoutMs: Long = TOTAL_TIMEOUT_MS,
+    /** A fixed total per attempt (tests); null: [totalTimeoutFor] the payload (P10). */
+    private val totalTimeoutMs: Long? = null,
     private val retryWindowMs: Long = RETRY_WINDOW_MS,
     private val now: () -> Long = ::elapsed,
     /** P10: no upload and no retry without a network (fail fast; the ladder shows SIN CONEXIÓN). */
@@ -60,20 +61,25 @@ class TranscriptionClient(
         }
         val prompt = promptFor(language)
         val boundary = "wgo" + UUID.randomUUID().toString().replace("-", "")
-        val body = multipart(boundary, wav, language, prompt)
+        val flac = isFlac(wav)
+        val body = multipart(boundary, wav, language, prompt, flac)
+        val total = totalTimeoutMs ?: totalTimeoutFor(body.size)
         try {
             val started = now()
             var attempt = 0
             while (true) {
                 attempt++
                 val t0 = now()
-                VoiceLog.event("stt_request attempt=$attempt bytes=${body.size} audio_bytes=${wav.size} model=$model")
-                val outcome = withTimeoutOrNull(totalTimeoutMs) {
+                VoiceLog.event(
+                    "stt_request attempt=$attempt bytes=${body.size} audio_bytes=${wav.size} fmt=${if (flac) "flac" else "wav"} " +
+                        "timeout_ms=$total model=$model"
+                )
+                val outcome = withTimeoutOrNull(total) {
                     http.request(
                         kind = WgoMetrics.Net.STT,
                         url = endpoint,
                         connectTimeoutMs = connectTimeoutMs,
-                        readTimeoutMs = totalTimeoutMs.toInt(),
+                        readTimeoutMs = total.toInt(),
                         method = "POST",
                         headers = mapOf(
                             "Authorization" to "Bearer $apiKey",
@@ -135,7 +141,7 @@ class TranscriptionClient(
         return Transcription.Text(clean(text))
     }
 
-    private fun multipart(boundary: String, wav: ByteArray, language: Language, prompt: String): ByteArray {
+    private fun multipart(boundary: String, wav: ByteArray, language: Language, prompt: String, flac: Boolean): ByteArray {
         val out = ByteArrayOutputStream(wav.size + 1024)
         fun text(s: String) = out.write(s.toByteArray(Charsets.UTF_8))
         fun field(name: String, value: String) =
@@ -145,7 +151,8 @@ class TranscriptionClient(
         field("temperature", "0")
         field("response_format", "verbose_json")
         field("prompt", prompt)
-        text("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"utterance.wav\"\r\nContent-Type: audio/wav\r\n\r\n")
+        val (fileName, type) = if (flac) "utterance.flac" to "audio/flac" else "utterance.wav" to "audio/wav"
+        text("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\nContent-Type: $type\r\n\r\n")
         out.write(wav)
         text("\r\n--$boundary--\r\n")
         return out.toByteArray()
@@ -154,7 +161,18 @@ class TranscriptionClient(
     companion object {
         const val DEFAULT_MODEL = "whisper-large-v3"
         const val CONNECT_TIMEOUT_MS = 3_000
-        const val TOTAL_TIMEOUT_MS = 6_000L
+        /** P10 total per attempt: [BASE_TIMEOUT_MS] plus 1 s per 32 KB of payload, at most [MAX_TIMEOUT_MS]. */
+        const val BASE_TIMEOUT_MS = 4_000L
+        const val MAX_TIMEOUT_MS = 10_000L
+        private const val BYTES_PER_SECOND = 32 * 1024
+
+        fun totalTimeoutFor(payloadBytes: Int): Long =
+            minOf(MAX_TIMEOUT_MS, BASE_TIMEOUT_MS + payloadBytes * 1000L / BYTES_PER_SECOND)
+
+        /** A FLAC stream starts with "fLaC"; anything else is sent as WAV. */
+        fun isFlac(audio: ByteArray): Boolean =
+            audio.size >= 4 && audio[0] == 'f'.code.toByte() && audio[1] == 'L'.code.toByte() &&
+                audio[2] == 'a'.code.toByte() && audio[3] == 'C'.code.toByte()
         const val RETRY_WINDOW_MS = 3_000L
         const val DAILY_CAP = 300
         private const val PREWARM_READ_MS = 3_000
