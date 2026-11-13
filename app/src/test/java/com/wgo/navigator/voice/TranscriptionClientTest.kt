@@ -74,6 +74,41 @@ class TranscriptionClientTest {
         }
     }
 
+    @Test fun chainNamesFromTheRealIndexJoinThePromptWithinItsCap() {
+        val index = com.wgo.navigator.places.PlaceIndex { java.io.File("src/main/assets/places_pasto.tsv.gzip").inputStream() }
+        assertTrue(index.chainNames().isEmpty()) // nothing before the index is loaded (the P9 prompt is used)
+        runBlocking { index.ensureLoaded() }
+        val chains = index.chainNames()
+        assertTrue(chains.toString(), "Mister Pollo" in chains)
+        assertTrue(chains.size <= 15)
+        val prompt = TranscriptionClient.promptFor(Language.ES, chains)
+        assertTrue(prompt.length <= TranscriptionClient.MAX_PROMPT_CHARS)
+        assertTrue(prompt.startsWith(TranscriptionClient.promptFor(Language.ES).removeSuffix(".")))
+        assertTrue(prompt.contains("Mister Pollo"))
+        // Public names only: no coordinates or numbers that look like them.
+        assertFalse(Regex("-?\\d{1,3}\\.\\d{3,}").containsMatchIn(prompt))
+    }
+
+    @Test fun aLongVocabularyIsCutAtTheCap() {
+        val many = (1..200).map { "Cadena Numero $it" }
+        val prompt = TranscriptionClient.promptFor(Language.ES, many)
+        assertTrue(prompt.length <= TranscriptionClient.MAX_PROMPT_CHARS)
+        assertTrue(prompt.contains("Cadena Numero 1,"))
+        assertFalse(prompt.contains("Cadena Numero 200"))
+    }
+
+    @Test fun theClientSendsTheVocabularyInThePrompt() = runBlocking {
+        FakeHttpServer { Triple(200, answer(" Llévame a Mister Pollo."), 0L) }.use { server ->
+            TranscriptionClient(
+                apiKey = key, baseUrl = server.baseUrl, model = "whisper-large-v3", http = HttpClient("WGO-test"),
+                budget = budget(), connectTimeoutMs = 1_000, totalTimeoutMs = 2_000L, retryWindowMs = 3_000L,
+                vocabulary = { listOf("Mister Pollo", "Lili Pink") }
+            ).transcribe(wav, Language.ES)
+            val body = server.requests.single().body
+            assertTrue(body.contains("\r\n\r\n${TranscriptionClient.promptFor(Language.ES, listOf("Mister Pollo", "Lili Pink"))}\r\n"))
+        }
+    }
+
     @Test fun thePromptHoldsOnlyTheRegionAndTheVerifiedPublicLandmarks() {
         for (language in Language.entries) {
             val prompt = TranscriptionClient.promptFor(language)

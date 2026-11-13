@@ -18,8 +18,8 @@ import java.util.UUID
 /**
  * Cloud speech-to-text over an OpenAI-compatible `audio/transcriptions` endpoint (P9; default Groq, the same provider
  * and key as the language model). It sends ONE in-memory WAV and these fields only: model, language, temperature 0,
- * verbose_json and a vocabulary prompt of public landmark names ([PlaceAliases.landmarkNames]); never coordinates,
- * identifiers, my places or history. Connect 3 s, total 6 s per attempt; one retry only when the connection itself
+ * verbose_json and a vocabulary prompt of public landmark names ([PlaceAliases.landmarkNames]) and, P11, the chain
+ * names of the loaded places index ([vocabulary]); never coordinates, identifiers, my places or history. Connect 3 s, total 6 s per attempt; one retry only when the connection itself
  * failed early; 429 starts the [budget]'s 60 s cool-down; the [budget]'s daily cap (300) is checked before sending.
  * The result goes through [TranscriptGuard]. Logged under `WgoVoice`: sizes, codes, times and lengths only.
  */
@@ -35,7 +35,9 @@ class TranscriptionClient(
     private val retryWindowMs: Long = RETRY_WINDOW_MS,
     private val now: () -> Long = ::elapsed,
     /** P10: no upload and no retry without a network (fail fast; the ladder shows SIN CONEXIÓN). */
-    private val online: () -> Boolean = { true }
+    private val online: () -> Boolean = { true },
+    /** P11: public chain names for the prompt (the places index's [com.wgo.navigator.places.PlaceIndex.chainNames]). */
+    private val vocabulary: () -> List<String> = { emptyList() }
 ) : Transcriber {
     private val endpoint = baseUrl.trimEnd('/') + "/audio/transcriptions"
     private val warmUrl = baseUrl.trimEnd('/') + "/models"
@@ -59,7 +61,7 @@ class TranscriptionClient(
             VoiceLog.event("stt_skip reason=$why")
             return Transcription.Failed(WgoFailure.Unavailable, why)
         }
-        val prompt = promptFor(language)
+        val prompt = promptFor(language, vocabulary())
         val boundary = "wgo" + UUID.randomUUID().toString().replace("-", "")
         val flac = isFlac(wav)
         val body = multipart(boundary, wav, language, prompt, flac)
@@ -184,10 +186,25 @@ class TranscriptionClient(
             System.nanoTime() / 1_000_000 // JVM unit tests
         }
 
-        /** The vocabulary hint: the region and the verified public landmark names, nothing else. */
-        fun promptFor(language: Language): String {
+        /** P11: the prompt's length cap (Whisper reads only the last 224 tokens of a prompt). */
+        const val MAX_PROMPT_CHARS = 600
+
+        /**
+         * The vocabulary hint: the region and the verified public landmark names, then (P11) as many of the public
+         * [chains] names as fit in [MAX_PROMPT_CHARS]; nothing else.
+         */
+        fun promptFor(language: Language, chains: List<String> = emptyList()): String {
             val region = if (language == Language.ES) "Pasto, Nariño." else "Pasto, Nariño, Colombia."
-            return region + " " + PlaceAliases.landmarkNames.joinToString(", ") + "."
+            val base = region + " " + PlaceAliases.landmarkNames.joinToString(", ") + "."
+            val fit = ArrayList<String>()
+            var length = base.length + 2
+            for (name in chains) {
+                val add = name.length + if (fit.isEmpty()) 0 else 2
+                if (length + add > MAX_PROMPT_CHARS) break
+                fit += name
+                length += add
+            }
+            return if (fit.isEmpty()) base else base + " " + fit.joinToString(", ") + "."
         }
 
         /** The text and the segments of a verbose_json answer, or null when it is not one. */

@@ -165,7 +165,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 model = BuildConfig.STT_MODEL.ifBlank { TranscriptionClient.DEFAULT_MODEL },
                 http = HttpClient(WgoUserAgent.plain),
                 budget = sttBudget,
-                online = { isOnline(application) }
+                online = { isOnline(application) },
+                // P11: public chain names of the index (loaded at the press); never my places.
+                vocabulary = { offlineIndex.chainNames() }
             )
         )
     }

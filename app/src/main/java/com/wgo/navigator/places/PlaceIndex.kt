@@ -139,6 +139,37 @@ class PlaceIndex(private val open: () -> InputStream) {
         ).take(limit)
     }
 
+    @Volatile
+    private var chains: List<String>? = null
+
+    /**
+     * P11 Whisper vocabulary hint (docs/PLACE_SEARCH.md): the names of the chains with the most branches, at most
+     * [max], as people say them: for a brand with 2+ rows, its shortest branch name made only of brand words ("Mister
+     * Pollo" for "Mister Pollo MRP"); for a name shared by 3+ rows, that name. Public index data only; empty until the
+     * index is loaded. Computed once.
+     */
+    fun chainNames(max: Int = 15): List<String> {
+        val all = entries ?: return emptyList()
+        chains?.let { return it.take(max) }
+        val found = ArrayList<Pair<String, Int>>()
+        for ((key, rows) in all.filter { it.brandCore.isNotEmpty() }.groupBy { it.brandCore }) {
+            if (rows.size < 2) continue
+            val spoken = rows.filter { it.core.isNotEmpty() && key.containsAll(it.core) }.minByOrNull { it.name.length }?.name
+                ?: rows.first().brand
+            found += spoken to rows.size
+        }
+        for ((core, rows) in all.groupBy { it.core }) {
+            if (core.isEmpty() || rows.size < 3) continue
+            val spoken = rows.minByOrNull { it.name.length }!!.name
+            if (found.none { PlaceText.normalize(it.first) == PlaceText.normalize(spoken) }) found += spoken to rows.size
+        }
+        val names = found.sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+            .map { it.first.trim().trimEnd('.', ',', '-', ' ') }
+            .filter { it.isNotEmpty() }
+        chains = names
+        return names.take(max)
+    }
+
     /**
      * P10 category request: the places whose category is that kind ("drogueria" -> pharmacy), nearest to [center]
      * first (the hint's point or the user), within [maxKm] of it. Names are not compared.
