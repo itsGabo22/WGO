@@ -83,8 +83,10 @@ class InterpreterHttpTest {
         server.respond = { Triple(200, chat("{\"kind\":\"Navigate\",\"placeQuery\":\"Universidad de Nariño\",\"mode\":\"Walk\",\"confidence\":0.9}"), 0L) }
         val t = tiered()
         val r = t.interpret("quiero ir a esa universidad pública grande que queda en Torobajo", Language.ES)
-        assertEquals(InterpreterTier.Remote, t.lastTier)
-        assertEquals("Universidad de Nariño", r.placeQuery)
+        // P10: "Universidad de Nariño" is not made of the user's words: the interpreter's name is ignored (the place
+        // search's own expansion role names landmarks); the local phrase stands and no mode is invented.
+        assertEquals(InterpreterTier.Local, t.lastTier)
+        assertEquals("esa universidad pública grande que queda en Torobajo", r.placeQuery)
         assertEquals(null, r.mode)
         val spoken = t.interpret("quiero ir en carro a esa universidad que queda en Torobajo", Language.ES)
         assertEquals(com.wgo.navigator.TravelMode.Drive, spoken.mode)

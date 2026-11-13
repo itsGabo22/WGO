@@ -52,7 +52,7 @@ class TieredInterpreter(
         }
         lastRemoteCalls = 1
         return when (val r = remote.interpret(transcript, language)) {
-            is LlmInterpreter.Result.Ok -> merge(local, r.value)
+            is LlmInterpreter.Result.Ok -> merge(local, grounded(r.value, transcript))
             LlmInterpreter.Result.RateLimited -> {
                 budget?.onRateLimited()
                 lastRemoteFailed = true
@@ -67,6 +67,20 @@ class TieredInterpreter(
         }
     }
 
+    /**
+     * P10: the model's destination must be the user's own words; an invented or completed name is dropped (and an
+     * ungrounded hint with it), so the local result stands.
+     */
+    private fun grounded(remote: Interpretation, transcript: String): Interpretation {
+        val name = remote.placeQuery ?: return remote
+        if (!LocalIntentParser.groundedIn(name, transcript)) {
+            WgoMetrics.event("interpret remote_name_ignored=ungrounded")
+            return remote.copy(kind = IntentKind.Unknown, placeQuery = null, placeHint = null)
+        }
+        val hint = remote.placeHint?.takeIf { LocalIntentParser.groundedIn(it, transcript) }
+        return remote.copy(placeHint = hint)
+    }
+
     private fun merge(local: Interpretation, remote: Interpretation): Interpretation {
         if (remote.kind == IntentKind.Unknown && local.kind != IntentKind.Unknown) {
             WgoMetrics.event("interpret tier=Local reason=remote_unknown")
@@ -76,7 +90,7 @@ class TieredInterpreter(
         WgoMetrics.event("interpret tier=Remote kind=${remote.kind} conf=${remote.confidence}")
         // The travel mode only comes from words the user actually said (the local rules catch every mode phrase);
         // live testing showed the remote model inventing one.
-        return remote.copy(mode = local.mode)
+        return remote.copy(mode = local.mode, placeVague = local.placeVague)
     }
 
     companion object {

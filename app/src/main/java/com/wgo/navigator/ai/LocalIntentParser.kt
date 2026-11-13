@@ -14,9 +14,21 @@ import java.text.Normalizer
  *
  * Confidence: verb + concrete place 0.9; bare short place (<= 4 words) 0.75; anything vague ("donde venden ...",
  * "near the ...") or long without a verb 0.5-0.55, so a remote interpreter may be consulted.
+ *
+ * Long phrases (P10, docs/design "Long phrases, strict place choice"): the clause with the navigation verb is kept
+ * (the cloud transcript is punctuated), politeness and filler go at both ends, the verb may stand anywhere in the
+ * clause, the place stops at a clause-breaking word ("... la cooperativa es lo único que te pido"), and a request for
+ * help ("ayúdame") is never a destination. A place still longer than [MAX_PLACE_WORDS] words goes to the remote
+ * interpreter, whose phrase must be made of the utterance's own words ([groundedIn]).
  */
 object LocalIntentParser {
     const val MAX_PLACE_CHARS = 80
+
+    /** P10: a place longer than this is not trusted locally (the remote interpreter extracts the destination). */
+    const val MAX_PLACE_WORDS = 8
+
+    /** P10: a clause this short right after the verb clause is part of the place ("..., la cooperativa"). */
+    private const val APPOSITION_WORDS = 3
 
     /** A known Pasto nickname ([PlaceAliases]) is as certain as a verb + concrete place. */
     const val ALIAS_CONFIDENCE = 0.9f
@@ -27,7 +39,7 @@ object LocalIntentParser {
     }
 
     fun parse(transcript: String, @Suppress("UNUSED_PARAMETER") language: Language): Interpretation {
-        var toks = stripPoliteness(tokenize(transcript))
+        var toks = stripPoliteness(tokenize(destinationClause(transcript)))
         if (toks.isEmpty()) return Interpretation.Unknown
 
         if (toks.first().norm in CANCEL_WORDS && toks.all { it.norm in CANCEL_WORDS || it.norm in CANCEL_FILLER }) {
@@ -50,17 +62,33 @@ object LocalIntentParser {
                 break
             }
         }
+        // P10: a mode said in another clause ("a pie, llévame al parque") still counts.
+        if (mode == null) {
+            val all = tokenize(transcript)
+            mode = MODES.firstOrNull { indexOf(all, it.words) >= 0 }?.mode
+        }
         toks = stripPoliteness(toks)
         if (verb == null) {
             verb = leadingVerb(toks)
             if (verb != null) toks = toks.drop(verb.words.size)
         }
-        toks = toks.dropWhile { it.norm in CONNECTORS }
+        if (verb == null) {
+            // P10: "amigo, quiero ir a la cooperativa": a full navigation verb later in the clause.
+            val found = innerVerb(toks)
+            if (found != null) {
+                verb = found.first
+                toks = toks.drop(found.second + found.first.words.size)
+            }
+        }
+        toks = stripPoliteness(toks.dropWhile { it.norm in CONNECTORS }).dropWhile { it.norm in CONNECTORS }
+        toks = cutAtBreak(toks)
 
         val placeToks = cleanPlace(toks)
         if (placeToks.isEmpty()) {
             return if (mode != null) Interpretation(IntentKind.ChangeMode, null, mode, 0.9f) else Interpretation.Unknown
         }
+        // P10: "por favor ayúdame" asks for help, it names no place.
+        if (placeToks.all { it.norm in NON_PLACE }) return Interpretation.Unknown
         // Local nicknames ("la UDENAR", "el terminal") resolve here, with no remote call.
         PlaceAliases.resolve(placeToks.map { it.norm })?.let {
             return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeFromAlias = true)
@@ -76,11 +104,67 @@ object LocalIntentParser {
         val vague = nameToks.any { it.norm in VAGUE_WORDS }
         val confidence = when {
             vague -> 0.5f
+            placeToks.size > MAX_PLACE_WORDS -> 0.55f
             verb != null -> 0.9f
             placeToks.size <= 4 -> Interpretation.ACCEPT_CONFIDENCE // the whole phrase: long descriptions go remote
             else -> 0.55f
         }
-        return Interpretation(IntentKind.Navigate, split.name, mode, confidence, placeHint = split.hint)
+        return Interpretation(IntentKind.Navigate, split.name, mode, confidence, placeHint = split.hint, placeVague = vague || vagueWhole)
+    }
+
+    /**
+     * P10: true when every content word of [phrase] (articles and connectors aside, accents and case ignored) is a word
+     * of [utterance]: the remote interpreter may only copy the destination, never invent or complete it.
+     */
+    fun groundedIn(phrase: String, utterance: String): Boolean {
+        val said = tokenize(utterance).map { it.norm }.toSet()
+        val words = tokenize(phrase).map { it.norm }.filter { it !in ARTICLES && it !in CONNECTORS && it !in REGION_CONNECTORS }
+        return words.isNotEmpty() && words.all { it in said }
+    }
+
+    /**
+     * The clause that names the destination: the transcript split at its punctuation; the first clause with a
+     * navigation verb (joined to the next one when nothing follows the verb), else the first one that is not only
+     * politeness. One clause, or none with content: the whole transcript.
+     */
+    private fun destinationClause(transcript: String): String {
+        val parts = transcript.split(CLAUSE).map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.size <= 1) return transcript
+        val toks = parts.map { stripPoliteness(tokenize(it)) }
+        val withVerb = toks.indexOfFirst { t -> leadingVerb(t) != null || innerVerb(t) != null }
+        if (withVerb >= 0) {
+            val t = toks[withVerb]
+            val verb = leadingVerb(t) ?: innerVerb(t)?.first
+            val at = if (leadingVerb(t) != null) 0 else innerVerb(t)!!.second
+            val after = t.drop(at + (verb?.words?.size ?: 0)).filter { it.norm !in CONNECTORS }
+            val next = toks.getOrNull(withVerb + 1)
+            // The place continues in the next clause: nothing after the verb yet, or a short apposition that is not a new
+            // clause ("quiero ir a mi U, la cooperativa"; but not "..., es lo único que te pido").
+            val apposition = next != null && next.isNotEmpty() && next.size <= APPOSITION_WORDS &&
+                next.first().norm !in BREAK_WORDS && leadingVerb(next) == null && innerVerb(next) == null &&
+                !next.all { it.norm in NON_PLACE }
+            return if ((after.isEmpty() || apposition) && withVerb + 1 < parts.size) parts[withVerb] + " " + parts[withVerb + 1] else parts[withVerb]
+        }
+        return parts.firstOrNull { stripPoliteness(tokenize(it)).isNotEmpty() } ?: transcript
+    }
+
+    /** A navigation verb of two words or more inside the clause (one-word verbs only count at its start). */
+    private fun innerVerb(toks: List<Tok>): Pair<Phrase, Int>? {
+        for (i in 1 until toks.size) {
+            val v = VERBS.firstOrNull { it.words.size >= 2 && it.mode == null && startsWith(toks.drop(i), it.words) }
+            if (v != null) return v to i
+        }
+        return null
+    }
+
+    /** The place stops before a word that opens another clause ("... cooperativa es lo único", "... porque ..."). */
+    private fun cutAtBreak(toks: List<Tok>): List<Tok> {
+        for (i in 1 until toks.size) {
+            val w = toks[i].norm
+            val next = toks.getOrNull(i + 1)?.norm
+            if (w in BREAK_WORDS || (w == "por" && next == "favor") || (w == "y" && next in AND_FILLER)) return toks.take(i)
+        }
+        return toks
     }
 
     /** Cleans a place query from any source (also the remote interpreter): articles, trailing city, length, controls. */
@@ -143,6 +227,7 @@ object LocalIntentParser {
         return toks.dropWhile { it.norm in ARTICLES }
     }
 
+    private val CLAUSE = Regex("[.;!?¡¿,]")
     private val COMBINING = Regex("\\p{Mn}+")
     private val CONTROL = Regex("\\p{Cntrl}")
     private val PUNCTUATION = Regex("[¿?¡!.,;:\"“”«»()\\[\\]{}]")
@@ -153,6 +238,8 @@ object LocalIntentParser {
         Phrase("como hago para llegar a"), Phrase("how do i get to"), Phrase("i want to go to"), Phrase("i need to go to"),
         Phrase("como llego a"), Phrase("como llego al"), Phrase("como voy a"), Phrase("como voy al"), Phrase("como ir a"),
         Phrase("quiero ir a"), Phrase("quiero ir al"), Phrase("quisiera ir a"), Phrase("quisiera ir al"),
+        Phrase("necesito llegar a"), Phrase("necesito llegar al"), Phrase("quiero llegar a"), Phrase("quiero llegar al"),
+        Phrase("tengo que llegar a"), Phrase("tengo que llegar al"), Phrase("quisiera llegar a"), Phrase("i need to get to"),
         Phrase("necesito ir a"), Phrase("necesito ir al"), Phrase("tengo que ir a"), Phrase("tengo que ir al"),
         Phrase("me llevas a"), Phrase("me llevas al"), Phrase("me lleva a"), Phrase("me lleva al"),
         Phrase("lets go to"), Phrase("let s go to"), Phrase("take me to"), Phrase("bring me to"), Phrase("get me to"),
@@ -181,8 +268,20 @@ object LocalIntentParser {
     private val POLITE = listOf(
         Phrase("por favor"), Phrase("porfavor"), Phrase("porfa"), Phrase("please"), Phrase("gracias"), Phrase("thanks"),
         Phrase("thank you"), Phrase("hey"), Phrase("oye"), Phrase("ok"), Phrase("okay"), Phrase("hola"), Phrase("hello"),
-        Phrase("hi"), Phrase("bueno"), Phrase("mejor"), Phrase("wgo"), Phrase("ahora"), Phrase("now"), Phrase("pues")
+        Phrase("hi"), Phrase("bueno"), Phrase("mejor"), Phrase("wgo"), Phrase("ahora"), Phrase("now"), Phrase("pues"),
+        // P10 filler of long phrases
+        Phrase("amigo"), Phrase("amiga"), Phrase("parce"), Phrase("hermano"), Phrase("hermana"), Phrase("mano"),
+        Phrase("mira"), Phrase("y bueno"), Phrase("mas cosas"), Phrase("y mas cosas"), Phrase("muchas gracias"),
+        Phrase("ya"), Phrase("rapido"), Phrase("es lo unico que te pido"), Phrase("eso es todo"), Phrase("buddy"),
+        Phrase("man"), Phrase("dude"), Phrase("right now"), Phrase("thank you very much")
     ).sortedByDescending { it.words.size }
+
+    /** P10: words that open another clause after the place. */
+    private val BREAK_WORDS = setOf("es", "porque", "pues", "eso", "gracias", "please", "because", "thanks", "so")
+    private val AND_FILLER = setOf("bueno", "mas", "ya", "nada")
+
+    /** P10: a request for help or nothing at all, never a destination. */
+    private val NON_PLACE = setOf("ayudame", "ayuda", "ayudenme", "auxilio", "help", "me", "no", "se", "nada", "nothing", "please")
 
     private val REPEAT = listOf(Phrase("repite"), Phrase("repitelo"), Phrase("repetir"), Phrase("otra vez"),
         Phrase("repeat"), Phrase("say again"), Phrase("say that again"))

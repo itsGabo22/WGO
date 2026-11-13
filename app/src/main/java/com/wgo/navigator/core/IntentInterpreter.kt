@@ -22,7 +22,9 @@ data class Interpretation(
     /** A category word the user said ("restaurante"); only a soft ranking boost. */
     val placeCategory: String? = null,
     /** [placeQuery] came from a Pasto nickname (PlaceAliases): a search string verified on Nominatim. */
-    val placeFromAlias: Boolean = false
+    val placeFromAlias: Boolean = false,
+    /** P10: the place is a description or a kind of place ("un lugar donde pueda comer algo"), not a name. */
+    val placeVague: Boolean = false
 ) {
     companion object {
         const val ACCEPT_CONFIDENCE = 0.75f
