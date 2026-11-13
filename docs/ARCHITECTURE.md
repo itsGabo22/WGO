@@ -105,10 +105,37 @@ transcript ──LocalIntentParser + PlaceAliases──> place query (+ mode)   
 place name (+ landmark hint) ──> my places (private, on the watch) ──> local places index (Overture, on the watch)
           └─(no strong local match)──> Nominatim (identifying User-Agent, 1 request/s, <= 3 per utterance) ──> <= 2 places
           (ranking and acceptance rules: docs/PLACE_SEARCH.md)
-origin fix + destination + mode ──> OSRM (OSM-DE) ──> route polyline + steps
+origin fix + destination + mode ──> OSRM (OSM-DE) ──> up to 3 routes (fastest active), polyline + steps each (P11)
 fixes (one request per trip, screen on or off) ──> NavigationHost ──> NavigationSession ──> NavState / NavEvent ──> UI + haptics + ongoing activity
-                                                     └─(off route, at most 1 per 20 s, 3 in a row)──> OSRM again
+          ├─(on a known alternative for 3 fixes)──> switch, no network (P11)
+          └─(off route or wrong way; >= 8 s apart, back-off 8/16/32/60 s, 3 failures in a row; never offline)──> OSRM again
 ```
+
+## Routing and reroute (P11)
+
+- **Router**: `OsrmRouter.routes(from, to, mode, bearing)` asks one OSRM `route` with `alternatives=true`, `steps=true`,
+  `overview=full`, `geometries=polyline` (and `bearings=<course>,45;` when a course is given) and returns up to 3
+  routes, fastest first; walking on the FOSSGIS OSM-DE foot server, driving on its car server, the OSRM demo as the
+  driving fallback (server error or timeout). "Best route" is the fastest by the road network: **no live traffic** in
+  free data.
+- **Engine** (`NavigationEngine`, framework-free): the active route plus its alternatives (each a `RouteGeometry`).
+  On every usable fix: snapping and progress on the active route as in P5; when the fix is more than 40 m from it, the
+  distance to each alternative's polyline; 3 fixes in a row within 20 m of one alternative -> that alternative becomes
+  active (no request; `NavEvent.Rerouted`, the old route joins the alternatives). Wrong way: on the route but the GPS
+  course more than 135° from the route's direction at >= 3 m/s driving (>= 1 m/s walking) for 3 fixes -> off route.
+  Off route -> a reroute request with the fix and, above 3 m/s, its course as the bearing hint; requests at least 8 s
+  apart, the wait doubling after each failure (max 60 s), LOST ROUTE after 3 failures in a row. The session checks
+  connectivity before each request (no listener): without a network nothing is sent, the engine keeps the old route in
+  `OffRoute(offline = true)` and asks again as soon as a network is back; offline waits never count as failures.
+  `selectRoute(i)` (the RUTA chip) makes a known route active the same way, with no request.
+- **Usage policies** (read 2026-11-13): FOSSGIS (https://routing.openstreetmap.de/about.html, full terms in German at
+  https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen/): attribution and a "fix the map" link, a valid
+  User-Agent, **at most 1 request per second**, no scraping, no heavy use. The OSRM demo server
+  (https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy): no excessive use, ODbL attribution and OSRM as
+  the route source, a valid User-Agent, no guarantees, access may be withdrawn. WGO sends one request per trip start
+  plus reroutes (>= 8 s apart, never a loop) with the identifying User-Agent; the one `OsrmRouter` in flight at a time
+  keeps it under 1 per second. **A public release needs its own or a paid router** (`docs/RELEASE_CHECKLIST.md`).
+
 
 Privacy: the remote interpreter never receives coordinates; Nominatim receives the query and a ±0.2° bias box around
 the user (or the Pasto centre); the router receives the origin and the destination coordinates (needed to route).
