@@ -50,6 +50,7 @@ import com.wgo.navigator.geo.PlaceRequest
 import com.wgo.navigator.geo.PlaceResolver
 import com.wgo.navigator.geo.Resolution
 import com.wgo.navigator.places.MyPlaces
+import com.wgo.navigator.geo.PhotonGeocoder
 import com.wgo.navigator.places.PlaceIndex
 import com.wgo.navigator.net.HttpClient
 import com.wgo.navigator.net.WgoUserAgent
@@ -414,7 +415,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         index = offlineIndex,
         online = OnlinePlaceSearch { q, center, bounded -> geocoder.once(q, center, pipelineLanguage, ONLINE_RESULTS, bounded) },
         privatePlaces = MyPlaces.fromAssets(application),
-        chooser = LlmPlaceChooser.create(application, WgoUserAgent.plain, aiBudget)
+        chooser = LlmPlaceChooser.create(application, WgoUserAgent.plain, aiBudget),
+        // P11: Photon after Nominatim, inside the same 3 requests; fixed box and bias, never the user's position.
+        fallback = PhotonGeocoder(HttpClient(WgoUserAgent.identifying))
     )
     private val router = OsrmRouter(HttpClient(WgoUserAgent.identifying))
 

@@ -39,7 +39,7 @@ data class PlaceRequest(
 )
 
 /** Where a candidate came from. */
-enum class PlaceSource { MyPlaces, Index, Nominatim }
+enum class PlaceSource { MyPlaces, Index, Nominatim, Photon }
 
 /** A scored candidate (docs/PLACE_SEARCH.md, "Ranking"). */
 data class PlaceCandidate(
@@ -108,7 +108,9 @@ class PlaceResolver(
     private val online: OnlinePlaceSearch?,
     private val privatePlaces: PrivatePlaces? = null,
     /** The language model's roles (P8); null without an API key: the local ranking decides alone. */
-    private val chooser: PlaceChooser? = null
+    private val chooser: PlaceChooser? = null,
+    /** P11: Photon after Nominatim, inside the same [MAX_REQUESTS]; null: no fallback. */
+    private val fallback: OnlinePlaceSearch? = null
 ) {
     /** Requests used by the last [resolve] (debug metric and tests). */
     @Volatile
@@ -157,6 +159,30 @@ class PlaceResolver(
                     if (r.failure != WgoFailure.NotFound) onlineFailure = r.failure
                     emptyList()
                 }
+            }
+        }
+
+        /**
+         * P11: one Photon request within the same [MAX_REQUESTS]; skipped when the network is already known to be
+         * down. Photon is fuzzy, so only results whose name matches the words locally (tier >= 2) are kept.
+         */
+        suspend fun askFallback(q: String): List<PlaceCandidate> {
+            val search = fallback ?: return emptyList()
+            if (requests >= MAX_REQUESTS || onlineFailure == WgoFailure.Offline) return emptyList()
+            requests++
+            val found = when (val r = search.once(q, anchor, false)) {
+                is Outcome.Ok -> r.value
+                is Outcome.Err -> {
+                    if (r.failure != WgoFailure.NotFound) onlineFailure = r.failure
+                    emptyList()
+                }
+            }
+            val query = PlaceCategories.core(PlaceText.tokens(q))
+            return found.mapNotNull { p ->
+                val score = PlaceIndex.scoreOf(query, PlaceCategories.core(PlaceText.tokens(p.name)))
+                val tier = score / PlaceIndex.SCORE
+                if (tier < 2 || distance(p, anchor) > FAR_KM * 1000) null
+                else PlaceCandidate(p, tier, false, distance(p, anchor), NOMINATIM_CONFIDENCE, PlaceSource.Photon, inexact = PlaceIndex.inexactOf(score))
             }
         }
 
@@ -291,6 +317,8 @@ class PlaceResolver(
             if (first.any { distance(it, s.anchor) <= FAR_KM * 1000 }) first else s.ask(name, bounded = true).ifEmpty { first }
         }
         s.addOnline(found, name, nearOnly = false) // Nominatim decided it matches: tier 3 for the same name, else 2
+        // P11: nothing near and strong yet -> Photon (fuzzy OSM: "Mr Pollo" finds "Míster Pollo"), same budget.
+        if (s.candidates.none { it.tier >= 2 && it.distanceM <= FAR_KM * 1000 }) s.candidates += s.askFallback(name)
     }
 
     /**
@@ -429,7 +457,8 @@ class PlaceResolver(
          */
         fun chainOf(request: PlaceRequest, ordered: List<PlaceCandidate>, hasFix: Boolean): List<PlaceCandidate>? {
             val top = ordered.firstOrNull() ?: return null
-            if (top.source != PlaceSource.Index || top.tier < 2 || top.landmark || request.fromAlias || request.address) return null
+            val local = setOf(PlaceSource.Index, PlaceSource.Photon)
+            if (top.source !in local || top.tier < 2 || top.landmark || request.fromAlias || request.address) return null
             val query = PlaceCategories.core(PlaceText.tokens(request.name))
             if (query.isEmpty()) return null
             fun namedChain(c: PlaceCandidate): Boolean {
@@ -442,7 +471,7 @@ class PlaceResolver(
             if (!byBrand && !byName) return null
             val saidCategory = ordered.any { it.categoryBoost }
             val members = ordered.filter { c ->
-                c.source == PlaceSource.Index && c.tier >= 2 && !c.landmark && c.distanceM <= FAR_KM * 1000 &&
+                c.source in local && c.tier >= 2 && !c.landmark && c.distanceM <= FAR_KM * 1000 &&
                     (!saidCategory || c.categoryBoost) &&
                     ((byBrand && c.brand && c.brandKey == top.brandKey) || (byName && namedChain(c)))
             }
