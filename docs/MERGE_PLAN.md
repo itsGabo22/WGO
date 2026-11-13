@@ -1,6 +1,9 @@
-# Merge plan (prepared in P7, refreshed in P8, P9 and P10; nothing merged)
+# Merge plan (prepared in P7, refreshed in P8, P9, P10 and P11)
 
-State on 2026-11-13 after P10 (read-only analysis: `git rev-list`, `git merge-tree --write-tree`).
+State on 2026-11-13 after P11 (read-only analysis: `git rev-list`, `git merge-tree --write-tree`): `feat/live-engine`
+is 408+ commits ahead of `origin/master` and 4 behind (the PR merge commits of `main`), 0 behind `origin/main`.
+**P11 decision (owner's prompt): one pull request `feat/live-engine` -> `master`, merged with a merge commit** (every
+atomic commit kept; no squash, no rebase; the branch is kept).
 
 ## Branch graph
 
@@ -18,7 +21,9 @@ design/map-styles  (162 behind, 0 ahead) ──────┘      P8 (40 commi
                                                       attribution arc, marquee, voices, orientation, @2x labels,
                                                       targetSdk 35; P9: instant mic (own capture, cloud
                                                       transcription, recognizer fallback, notice, setting); P10: long
-                                                      phrases, strict choice, pick list, no-network surface, FLAC
+                                                      phrases, strict choice, pick list, no-network surface, FLAC;
+                                                      P11: index v2 + chains + Photon, alternatives and live
+                                                      reroute, watch compass
 ```
 
 Every `design/*` branch is already fully contained in `feat/live-engine` (0 commits ahead): merging them separately
@@ -28,10 +33,12 @@ adds nothing. `main` is an ancestor of `feat/live-engine`. `master` holds only t
 
 1. `design/*` -> nothing to do (already in `feat/live-engine`); delete them after the final merge, or keep them as
    history tags (`git tag design/foundations-final origin/design/foundations`).
-2. `feat/live-engine` -> `main`: a fast-forward (main is an ancestor), through a pull request so CI and review run.
-3. `main` -> `master`: `git merge-tree --write-tree origin/master HEAD` reports **no conflicts** (exit 0); the merge
-   commit brings 294 files changed (+29,313 / -9,352; P10 run, before its docs), most of it the native app replacing the old web prototype
-   (`legacy_web_app/` stays local and git-ignored).
+2. P11: `feat/live-engine` -> `master` through one pull request, merged with a merge commit:
+   `git merge-tree --write-tree origin/master HEAD` reports **no conflicts** (exit 0); 308 files changed
+   (+32,492 / -9,351), most of it the native app replacing the old web prototype (`legacy_web_app/` stays local and
+   git-ignored).
+3. `main` (an ancestor of `feat/live-engine`) can then be fast-forwarded to `master` or left as history; nothing
+   depends on it.
 
 Before step 2: `assembleDebug`, `assembleRelease`, `testDebugUnitTest` and `lintDebug` green; the P7 report reviewed;
 the owner's decision on publishing (`docs/RELEASE_CHECKLIST.md`; target API 35 is done since P8, the key proxy and a
@@ -39,7 +46,7 @@ persistent map attribution are not).
 
 ## Predicted conflicts
 
-None (`git merge-tree` against `origin/master`, 2026-11-13 after P10: exit 0, no conflicted files). P9 and P10 touch only
+None (`git merge-tree` against `origin/master`, 2026-11-13 after P11: exit 0, no conflicted files). P9 to P11 touch only
 files that `master` does not have or did not change (the app sources and `docs/`), so no new conflict is expected. Re-run it right before merging:
 `git fetch origin; git merge-tree --write-tree --name-only origin/master origin/feat/live-engine`.
 
@@ -60,7 +67,8 @@ files that `master` does not have or did not change (the app sources and `docs/`
 Wear OS Small Round emulator; budgets in `docs/ARCHITECTURE.md`.
 
 **Not in this PR**: publishing (the key proxy, now mandatory because every press uploads with the key; a persistent
-map attribution), vector tiles, a compressed audio upload.
+map attribution; own or paid router and geocoders), vector tiles, the ambient staleness fix (backlog in
+`docs/ARCHITECTURE.md`). The final PR body (P11) is written at PR time and summarises P5-P11.
 
 ## Commit messages that do not match their content
 
