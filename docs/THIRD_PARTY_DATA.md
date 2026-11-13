@@ -39,7 +39,8 @@ The app shows these credits on its Credits screen (Settings).
 2. `python tools/build_places_index.py --release latest` (the default is the pinned release; `--box` and
    `--min-confidence` change the area and the threshold; `--save-extract box.parquet` keeps the raw rows so
    `--source box.parquet` rebuilds the same file offline).
-3. Check the printed counts and that the file stays under 1.5 MB, update the release id, date and counts above, then
+3. Regenerate the benchmark (`python tools/build_place_benchmark.py`) and run `PlaceCoverageBenchmarkTest`; check
+   the printed counts and that the file stays under 1.5 MB, update the release id, date and counts above, then
    commit the script output on its own (`chore(places): update the Overture places index to <release>`).
 
 Overture publishes a release about once a month; places change slowly, so a quarterly update is enough.

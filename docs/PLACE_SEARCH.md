@@ -247,4 +247,6 @@ centre:
 - (d) 10 places that do not exist; must never be picked automatically (only "No encontré" or the pick list).
 
 Targets: top-3 >= 90 % and top-1 >= 75 % on (a)-(c), 0 automatic picks on (d), p95 local latency (parse + resolve)
-<= 150 ms on the JVM. Baseline (P10 code and index, STEP 0): top-1 71.8 %, top-3 80.0 %, chains 12/30, 0/10, p95 6 ms.
+<= 150 ms on the JVM. Same 120 queries and scoring (2026-11-13): P10 code and index: top-1 75.5 %, top-3 80.9 %
+(a 52/60, b 13/30, c 18/20), 0/10 automatic picks, p95 10.5 ms; P11: top-1 95.5 %, top-3 99.1 % (a 56/60, b 30/30,
+c 19/20), nearest branch first 26/30, 0/10, p95 24 ms. (The STEP 0 draft scoring gave 71.8 % / 80.0 % for P10.)
