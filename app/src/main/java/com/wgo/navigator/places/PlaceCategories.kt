@@ -32,6 +32,20 @@ object PlaceCategories {
     fun isCategoryWord(token: String) = token in WORDS
 
     /**
+     * P10: the category word a normalised token is, singular or plural ("restaurantes" -> "restaurante",
+     * "droguerias" -> "drogueria"), or null.
+     */
+    fun categoryWord(token: String): String? = when {
+        token in WORDS -> token
+        token.endsWith("es") && token.dropLast(2) in WORDS -> token.dropLast(2)
+        token.endsWith("s") && token.dropLast(1) in WORDS -> token.dropLast(1)
+        else -> null
+    }
+
+    /** The Overture category fragments of a category word (singular or plural); empty when it is not one. */
+    fun fragmentsOf(token: String): List<String> = categoryWord(token)?.let { WORDS.getValue(it) }.orEmpty()
+
+    /**
      * Splits normalised query tokens into the core name tokens and the category fragments. Category words stay in the
      * core when nothing else would be left ("hotel" alone is a name to search).
      */

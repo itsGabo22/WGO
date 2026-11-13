@@ -83,7 +83,7 @@ object LocalIntentParser {
         toks = stripPoliteness(toks.dropWhile { it.norm in CONNECTORS }).dropWhile { it.norm in CONNECTORS }
         toks = cutAtBreak(toks)
 
-        val placeToks = cleanPlace(toks)
+        val placeToks = dropQuantifiers(cleanPlace(toks))
         val heard = join(toks.dropWhile { it.norm in CONNECTORS }).ifEmpty { null }
         if (placeToks.isEmpty()) {
             return if (mode != null) Interpretation(IntentKind.ChangeMode, null, mode, 0.9f) else Interpretation.Unknown
@@ -98,7 +98,16 @@ object LocalIntentParser {
         // ("donde venden helados frente a la plaza") stays whole: the remote interpreter reads it.
         val vagueWhole = placeToks.any { it.norm in VAGUE_WORDS && it.norm !in RELATION_WORDS }
         val split = if (vagueWhole) PlaceHint.Split(join(placeToks), null) else PlaceHint.split(join(placeToks))
-        val nameToks = tokenize(split.name)
+        val nameToks = dropQuantifiers(tokenize(split.name))
+        // P10 category request: the place is only a kind of place ("droguería", "restaurantes"): real places of that
+        // category near the hint, always as the pick list.
+        if (nameToks.size == 1) {
+            val category = com.wgo.navigator.places.PlaceCategories.categoryWord(nameToks[0].norm)
+            if (category != null) return Interpretation(
+                IntentKind.Navigate, nameToks[0].orig, mode, ALIAS_CONFIDENCE, placeHint = split.hint,
+                placeCategory = nameToks[0].orig, placeVague = true, placeHeard = heard
+            )
+        }
         PlaceAliases.resolve(nameToks.map { it.norm })?.let {
             return Interpretation(
                 IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeHint = split.hint, placeFromAlias = true, placeHeard = heard
@@ -161,6 +170,21 @@ object LocalIntentParser {
             if (v != null) return v to i
         }
         return null
+    }
+
+    /** P10: "alguna droguería", "el mejor restaurante", "un buen hotel": the quantifier is not part of the place. */
+    private fun dropQuantifiers(toks: List<Tok>): List<Tok> {
+        var t = toks
+        var changed = true
+        while (changed && t.size > 1) {
+            changed = false
+            for (q in QUANTIFIERS) if (startsWith(t, q.words) && t.size > q.words.size) {
+                t = t.drop(q.words.size).dropWhile { it.norm in ARTICLES }
+                changed = true
+                break
+            }
+        }
+        return t
     }
 
     /** The place stops before a word that opens another clause ("... cooperativa es lo único", "... porque ..."). */
@@ -280,6 +304,15 @@ object LocalIntentParser {
         Phrase("mira"), Phrase("y bueno"), Phrase("mas cosas"), Phrase("y mas cosas"), Phrase("muchas gracias"),
         Phrase("ya"), Phrase("rapido"), Phrase("es lo unico que te pido"), Phrase("eso es todo"), Phrase("buddy"),
         Phrase("man"), Phrase("dude"), Phrase("right now"), Phrase("thank you very much")
+    ).sortedByDescending { it.words.size }
+
+    /** P10: quantifiers and judgements before a kind of place. */
+    private val QUANTIFIERS = listOf(
+        Phrase("el mejor"), Phrase("la mejor"), Phrase("los mejores"), Phrase("las mejores"), Phrase("mejor"),
+        Phrase("mejores"), Phrase("algun"), Phrase("alguna"), Phrase("alguno"), Phrase("algunos"), Phrase("algunas"),
+        Phrase("cualquier"), Phrase("cualquiera"), Phrase("un buen"), Phrase("una buena"), Phrase("buen"), Phrase("buena"),
+        Phrase("un"), Phrase("una"), Phrase("some"), Phrase("any"), Phrase("a good"), Phrase("the best"), Phrase("best"),
+        Phrase("the nearest"), Phrase("nearest"), Phrase("good")
     ).sortedByDescending { it.words.size }
 
     /** P10: words that open another clause after the place. */

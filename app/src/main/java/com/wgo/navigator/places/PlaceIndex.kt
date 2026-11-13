@@ -103,6 +103,23 @@ class PlaceIndex(private val open: () -> InputStream) {
         ).take(limit)
     }
 
+    /**
+     * P10 category request: the places whose category is that kind ("drogueria" -> pharmacy), nearest to [center]
+     * first (the hint's point or the user), within [maxKm] of it. Names are not compared.
+     */
+    fun searchCategory(word: String, center: GeoCoord, maxKm: Double = 5.0, limit: Int = 3): List<IndexHit> {
+        val all = entries ?: return emptyList()
+        val fragments = PlaceText.tokens(word).flatMap(PlaceCategories::fragmentsOf)
+        if (fragments.isEmpty()) return emptyList()
+        return all.asSequence()
+            .filter { PlaceCategories.matches(it.category, fragments) }
+            .map { IndexHit(it, 2, true, RadarProjection.distanceMeters(center, it.coord)) }
+            .filter { it.distanceM <= maxKm * 1000 }
+            .sortedBy { it.distanceM }
+            .take(limit)
+            .toList()
+    }
+
     companion object {
         /**
          * Not `.gz`: the Android packager gunzips `.gz` assets and drops the extension (measured on the P7 APK), so

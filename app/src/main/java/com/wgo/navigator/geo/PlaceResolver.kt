@@ -189,6 +189,16 @@ class PlaceResolver(
         }
 
         val s = Search(anchor, request.aiCallsUsed)
+        // P10 category request ("alguna droguería que quede en el centro"): real places of that kind near the hint,
+        // nearest first, always the pick list; no model call.
+        if (request.vague && request.category != null && PlaceCategories.categoryWord(PlaceText.normalize(request.category)) != null) {
+            val near = gatherCategory(request, s)
+            lastRequests = s.requests
+            if (near.isNotEmpty()) {
+                WgoMetrics.event("places resolved category n=${near.size} requests=${s.requests}")
+                return Resolution.Found(near, uncertain = true)
+            }
+        }
         if (request.fromAlias) gatherNickname(name, s) else gatherName(request, name, s)
         // Role 1 (P8): no nickname and only weak candidates -> the model names the landmark (text), searched normally.
         if (!request.fromAlias && chooser != null && ChoiceTriggers.weak(request, sortedCandidates(s.candidates)) && s.takeAiCall()) {
@@ -248,6 +258,15 @@ class PlaceResolver(
             if (first.any { distance(it, s.anchor) <= FAR_KM * 1000 }) first else s.ask(name, bounded = true).ifEmpty { first }
         }
         s.addOnline(found, name, nearOnly = false) // Nominatim decided it matches: tier 3 for the same name, else 2
+    }
+
+    /** P10: up to [MAX_CANDIDATES] index places of the request's category, nearest to the hint's point (or the user). */
+    private suspend fun gatherCategory(request: PlaceRequest, s: Search): List<PlaceCandidate> {
+        if (!indexReady(s.anchor)) return emptyList()
+        val center = request.hint?.let { s.ask("$it, Pasto", bounded = true).firstOrNull()?.coord } ?: s.anchor
+        return index!!.searchCategory(request.category!!, center, limit = MAX_CANDIDATES).map {
+            PlaceCandidate(it.place.toPlace(), 2, true, RadarProjection.distanceMeters(s.anchor, it.place.coord), it.place.confidence, PlaceSource.Index)
+        }
     }
 
     /** Role 1: up to three official names (text) from the model, each searched in the index, then on Nominatim. */

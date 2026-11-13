@@ -18,6 +18,10 @@ object PlaceHint {
         Connector("al lado de", true), Connector("al lado del", true), Connector("cerca de", true),
         Connector("cerca del", true), Connector("junto a", true), Connector("junto al", true),
         Connector("frente a", true), Connector("frente al", true), Connector("next to", true), Connector("near", true),
+        // P10: "alguna droguería que quede en el centro"
+        Connector("que quede en", true), Connector("que queda en", true), Connector("que este en", true),
+        Connector("que esta en", true), Connector("ubicado en", true), Connector("ubicada en", true),
+        Connector("que quede por", true), Connector("que queda por", true), Connector("that is in", true),
         Connector("de la", false), Connector("del", false), Connector("de", false), Connector("por la", false),
         Connector("por el", false), Connector("por", false), Connector("en la", false), Connector("en el", false),
         Connector("en", false), Connector("sobre la", false), Connector("sobre el", false), Connector("sobre", false),
