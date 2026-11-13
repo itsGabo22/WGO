@@ -144,6 +144,29 @@ WGO is a **100% native Wear OS app** (Kotlin + Jetpack Compose for Wear OS; no w
   it); PowerShell `Set-Content` mangles UTF-8 accents in Kotlin sources (write files with the editor or Python); the
   watch's Wi-Fi adb hangs when its screen sleeps: use short `timeout`s and stop instead of retrying.
 
+## Rules learned in P11
+
+* **Places**: index v2 = Overture within ~25 km of Pasto, confidence >= 0.2, brand column, rebuilt reproducibly
+  (`--save-extract` / `--source`); keep `PlaceCoverageBenchmarkTest` green (top-1 >= 75 %, top-3 >= 90 %, no automatic
+  pick of a missing place) after any matching or index change, and regenerate its data with
+  `tools/build_place_benchmark.py` after an index rebuild. Spelling variants (mr = mister...) live in
+  `PlaceText.canonical`, applied at load, not in the Python builder.
+* **Chains**: a name chain needs the query's words EXACTLY ("Max" is not "Maxiel"), a said category word must match
+  every branch, copies within 60 m keep the better-matched name (Overture brands "Mister Pizza" as Mister Pollo), and an
+  exact whole name with no brand stays one place. Branch distances are computed on the watch only.
+* **Geocoders**: Nominatim + Photon share 3 requests per utterance; Photon gets a fixed box and centre, never the
+  position; its fuzzy results count only when they match the words locally (tier >= 2). No Google APIs.
+* **Routes**: OSRM gives alternatives only when they differ clearly (driving pairs in Pasto often have none; a walking
+  pair had one): never promise them. Reroutes >= 8 s apart with back-off; offline sends nothing and never counts toward
+  LOST ROUTE. The emulator's `geo fix` has no GPS course: the wrong-way rule is unit-tested only.
+* **Compass**: one rotation-vector listener, only while `CompassPolicy.shouldListen` (trip + visible + not ambient);
+  heading to the radar at <= 10 Hz and >= 2 deg; the azimuth uses the 12 o'clock + into-the-screen axes (no flip when
+  the wrist is raised).
+* **Lint**: `ComposableStateFlowValueDetector` crashes on a StateFlow `.value` read inside a stdlib lambda (Kotlin 2.1
+  metadata): read `.value` into a local first.
+* **Tooling**: bash heredocs with quotes break in this shell: write edit scripts to the scratchpad and run them; a
+  worktree in the scratchpad needs `ANDROID_HOME` and `rm -rf` + `git worktree prune` (long paths).
+
 ## Git
 
 * Atomic Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...), one concern per commit.
