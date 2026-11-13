@@ -26,7 +26,9 @@ class IndexedPlace(
     val address: String,
     val coord: GeoCoord,
     val confidence: Float,
-    val source: String
+    val source: String,
+    /** P11: Overture's brand name ("Mister Pollo MRP"), empty when none. */
+    val brand: String = ""
 )
 
 /** A match of the index: [tier] 3 exact core name, 2 every query token matched, 1 some token matched. */
@@ -127,11 +129,11 @@ class PlaceIndex(private val open: () -> InputStream) {
          */
         const val ASSET = "places_pasto.tsv.gzip"
 
-        /** The box the index covers (the builder's default); outside it the index is skipped. */
-        const val LON_MIN = -77.40
-        const val LON_MAX = -77.17
-        const val LAT_MIN = 1.08
-        const val LAT_MAX = 1.32
+        /** The box the index covers (the builder's default, P11: ~25 km around the Pasto centre); outside it the index is skipped. */
+        const val LON_MIN = -77.506
+        const val LON_MAX = -77.056
+        const val LAT_MIN = 0.989
+        const val LAT_MAX = 1.438
 
         fun covers(c: GeoCoord) = c.lon in LON_MIN..LON_MAX && c.lat in LAT_MIN..LAT_MAX
 
@@ -158,14 +160,15 @@ class PlaceIndex(private val open: () -> InputStream) {
         }
 
         /**
-         * Parses the gzip TSV: `#` comment lines, one header line, then id, name, name_norm, alt_norm, category, ...
+         * Parses the gzip TSV: `#` comment lines, one header line, then id, name, name_norm, alt_norm, category, ...,
+         * source and (index v2, P11) brand; a v1 file without the brand column still loads.
          * Hand-rolled on purpose: Kotlin's `toDoubleOrNull` validates with a large regex and `split` allocates a list
          * per line, which made the first load take 20 s in the debug build on the watch.
          */
         fun parse(input: InputStream): List<IndexedPlace> {
             val reader = BufferedReader(InputStreamReader(GZIPInputStream(input, 32 * 1024), Charsets.UTF_8), 64 * 1024)
-            val out = ArrayList<IndexedPlace>(6_500)
-            val f = arrayOfNulls<String>(10)
+            val out = ArrayList<IndexedPlace>(8_500)
+            val f = arrayOfNulls<String>(11)
             var headerSeen = false
             while (true) {
                 val line = reader.readLine() ?: break
@@ -173,7 +176,7 @@ class PlaceIndex(private val open: () -> InputStream) {
                 if (!headerSeen) { headerSeen = true; continue }
                 var start = 0
                 var n = 0
-                while (n < 10) {
+                while (n < 11) {
                     val tab = line.indexOf('\t', start)
                     f[n++] = if (tab < 0) line.substring(start) else line.substring(start, tab)
                     if (tab < 0) break
@@ -190,7 +193,7 @@ class PlaceIndex(private val open: () -> InputStream) {
                     alts = if (alt.isEmpty()) emptyList() else words(alt, '|').map { PlaceCategories.core(words(it, ' ')) },
                     categoryWords = if (core.size == nameWords.size) emptyList() else nameWords.filter(PlaceCategories::isCategoryWord),
                     category = f[4]!!, address = f[5]!!, coord = GeoCoord(lat, lon),
-                    confidence = number(f[8]!!)?.toFloat() ?: 0f, source = f[9]!!
+                    confidence = number(f[8]!!)?.toFloat() ?: 0f, source = f[9]!!, brand = if (n > 10) f[10]!! else ""
                 )
             }
             return out

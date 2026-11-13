@@ -2,14 +2,19 @@
 
 ## Overture Maps Places (`app/src/main/assets/places_pasto.tsv.gzip`)
 
-- **What**: the places index used offline by the place search (`docs/PLACE_SEARCH.md`): 6,285 places with a primary
-  name and confidence >= 0.3 inside the Pasto box (lon -77.40..-77.17, lat 1.08..1.32), 413 KB.
-- **Release**: Overture Maps Foundation release `2026-10-21.0` (the latest in https://stac.overturemaps.org/catalog.json
-  on 2026-11-11), theme `places`, type `place`. Built with `tools/build_places_index.py` on 2026-11-11.
+- **What**: the places index used offline by the place search (`docs/PLACE_SEARCH.md`), index v2 (P11): 7,984 places
+  with a primary name and confidence >= 0.2 inside a box of about 25 km around the Pasto centre (lon -77.506..-77.056,
+  lat 0.989..1.438), without the excluded categories (159 rows) and with same-name duplicates within 50 m merged
+  (11 rows); 247 rows carry an Overture brand. 527 KB (515 KiB). v1 (P7) had 6,285 places >= 0.3 in the urban box.
+- **Threshold**: chosen with the coverage benchmark (`docs/PLACE_SEARCH.md`): on the same 120 queries, 0.3 and 0.2 gave
+  the same hit rates and no automatic pick of a non-existent place; 0.2 keeps 1,305 more real places, so 0.2.
+- **Release**: Overture Maps Foundation release `2026-10-21.0` (still the latest in
+  https://stac.overturemaps.org/catalog.json on 2026-11-13), theme `places`, type `place`. Built with
+  `tools/build_places_index.py` on 2026-11-13 (from a saved extract of that release's box: `--save-extract`/`--source`).
 - **No OpenStreetMap data inside**: the Places theme is not derived from OpenStreetMap, so the Open Database License
   does not apply to this file.
-- **Sources of the rows** (first source per place, counted in the asset): Meta 6,157, Microsoft 64, Foursquare 35,
-  AllThePlaces 16, Uberall 10, DAC 3. The `source` column of each row names it.
+- **Sources of the rows** (first source per place, counted in the asset): Meta 7,849, Microsoft 66, Foursquare 37,
+  AllThePlaces 18, Uberall 11, DAC 3. The `source` column of each row names it.
 
 ### Notices (from https://docs.overturemaps.org/attribution/, read 2026-11-11)
 
@@ -31,9 +36,10 @@ The app shows these credits on its Credits screen (Settings).
 ### Update the index
 
 1. In a throwaway virtual environment outside the repo: `pip install duckdb`.
-2. `python tools/build_places_index.py` (latest release; `--release <id>` pins one, `--box` and `--min-confidence`
-   change the area and the threshold).
-3. Check the printed counts and that the file stays under 3 MB, update the release id, date and counts above, then
+2. `python tools/build_places_index.py --release latest` (the default is the pinned release; `--box` and
+   `--min-confidence` change the area and the threshold; `--save-extract box.parquet` keeps the raw rows so
+   `--source box.parquet` rebuilds the same file offline).
+3. Check the printed counts and that the file stays under 1.5 MB, update the release id, date and counts above, then
    commit the script output on its own (`chore(places): update the Overture places index to <release>`).
 
 Overture publishes a release about once a month; places change slowly, so a quarterly update is enough.

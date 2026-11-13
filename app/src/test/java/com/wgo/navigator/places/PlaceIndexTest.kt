@@ -27,7 +27,27 @@ class PlaceIndexTest {
 
     @Test fun loadsTheAsset() = runBlocking {
         assertTrue(index.ensureLoaded())
-        assertTrue(index.size > 6_000)
+        assertTrue(index.size > 7_500)
+    }
+
+    @Test fun indexV2KeepsBrandsAndCoversTheAirport() = runBlocking {
+        assertTrue(index.ensureLoaded())
+        // P11: the Mister Pollo branches carry their Overture brand.
+        val branches = index.rows.filter { it.brand == "Mister Pollo MRP" }
+        assertTrue(branches.size >= 6)
+        // The real airport (Chachagüí, ~20 km north) is inside the v2 box.
+        assertTrue(PlaceIndex.covers(GeoCoord(1.397185, -77.291843)))
+        assertTrue(index.rows.any { it.category == "airport" && it.coord.lat > 1.39 })
+    }
+
+    @Test fun aVersionOneFileWithoutTheBrandColumnStillLoads() {
+        val v1 = "# v1\nid\tname\tname_norm\talt_norm\tcategory\taddress\tlat\tlon\tconfidence\tsource\n" +
+            "x1\tCubanitos\tcubanitos\t\trestaurant\tCalle 1\t1.2\t-77.28\t0.9\tmeta\n"
+        val bytes = java.io.ByteArrayOutputStream().also { o -> java.util.zip.GZIPOutputStream(o).use { it.write(v1.toByteArray()) } }
+        val rows = PlaceIndex.parse(bytes.toByteArray().inputStream())
+        assertEquals(1, rows.size)
+        assertEquals("", rows[0].brand)
+        assertEquals("meta", rows[0].source)
     }
 
     @Test fun cubanitosExactFirstThenTheExpressBranchByFuzzyMatch() {
