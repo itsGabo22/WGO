@@ -126,6 +126,24 @@ WGO is a **100% native Wear OS app** (Kotlin + Jetpack Compose for Wear OS; no w
 * **Emulator microphone**: the AVD's `hw.audioInput` is the PC microphone; run `adb -s emulator-5554 emu avd
   hostmicoff` before any capture test so the owner's room is never recorded.
 
+## Rules learned in P10
+
+* **No network, no voice**: check connectivity at the press (`NET_CAPABILITY_INTERNET`, a Bluetooth-proxied network
+  counts, no listener); without one show "Sin conexión" and never start a capture, a recognizer or the system speech
+  dialog. The system-recognizer rung runs only with a network; an offline failure must not latch the chain to the dialog.
+* **Long phrases**: keep the clause with the navigation verb, strip filler at both ends, allow the verb anywhere, cut the
+  place at clause words ("es", "porque"); a remote phrase must be made of the user's own words (`groundedIn`).
+* **Strict choice**: the model's pick must share a content word with the destination (or its nickname's names); no clear
+  winner, a vague request, a category or an address -> the pick list ("¿CUÁL?"), never one silent guess.
+* **Kinds of place and addresses**: a category word (singular or plural) is a category search near the hint's point,
+  never a name match ("mejor" matched "Peluquería canina mi mejor amigo"); a street address goes to Nominatim only
+  (OpenStreetMap in Pasto has no house numbers).
+* **Upload**: FLAC via `MediaCodec`, fed while recording (600 ms lag), in memory, WAV fallback; Opus changed transcripts
+  of short clips. Timeout 4 s + 1 s per 32 KB, max 10 s.
+* **Tooling**: never change device location settings or test providers on the emulator without the owner (he declined
+  it); PowerShell `Set-Content` mangles UTF-8 accents in Kotlin sources (write files with the editor or Python); the
+  watch's Wi-Fi adb hangs when its screen sleeps: use short `timeout`s and stop instead of retrying.
+
 ## Git
 
 * Atomic Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, ...), one concern per commit.
