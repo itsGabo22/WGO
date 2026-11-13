@@ -17,14 +17,16 @@ data class NavConfig(
     /** How far ahead of the last matched position the forward-only snapping window can reach (after a long gap). */
     val lookaheadM: Double,
     /** Fastest plausible speed: between two fixes the window reaches at most this far plus [NavigationEngine.SLACK_M]. */
-    val maxSpeedMps: Double
+    val maxSpeedMps: Double,
+    /** P11: the wrong-way rule needs at least this speed (a reliable GPS course). */
+    val wrongWaySpeedMps: Float = 3f
 ) {
     /** Back on the route when within half the off-route distance (hysteresis). */
     val backOnRouteM: Double get() = offRouteM / 2
 
     companion object {
-        val WALK = NavConfig(maxAccuracyM = 50f, offRouteM = 35.0, arrivalM = 15.0, lookaheadM = 150.0, maxSpeedMps = 4.0)
-        val DRIVE = NavConfig(maxAccuracyM = 80f, offRouteM = 50.0, arrivalM = 25.0, lookaheadM = 400.0, maxSpeedMps = 40.0)
+        val WALK = NavConfig(maxAccuracyM = 50f, offRouteM = 35.0, arrivalM = 15.0, lookaheadM = 150.0, maxSpeedMps = 4.0, wrongWaySpeedMps = 1f)
+        val DRIVE = NavConfig(maxAccuracyM = 80f, offRouteM = 50.0, arrivalM = 25.0, lookaheadM = 400.0, maxSpeedMps = 40.0, wrongWaySpeedMps = 3f)
 
         fun forMode(mode: TravelMode): NavConfig = if (mode == TravelMode.Drive) DRIVE else WALK
     }
@@ -46,8 +48,14 @@ data class NavConfig(
  *   the first fix and while confirmed off route (to rejoin anywhere).
  * - Progress never goes back except on a confirmed U-turn: 3 usable fixes in a row matched more than 10 m behind.
  * - Off route: snapped distance > 35 m (walk) / 50 m (drive) for 3 usable fixes in a row; back on route within half.
- * - Reroute: requested on off route, at most once per 20 s and 3 times in a row without being back on the route; then
- *   [NavState.LostRoute] asks the user. A failed request keeps guiding on the old route.
+ * - Reroute (P11): requested on off route from the current fix, with the GPS course as a bearing hint above
+ *   [HINT_MIN_SPEED_MPS]; at least [REROUTE_MIN_INTERVAL_MS] apart, the wait doubling after each failed request (max
+ *   [REROUTE_MAX_INTERVAL_MS]); 3 requests in a row without being back on a route -> [NavState.LostRoute]. A failed
+ *   request keeps guiding on the old route; an offline answer ([onRerouteResult] with offline) is not a failure: the
+ *   state is [NavState.OffRoute] with offline set, and the next request goes out as soon as the session has a network.
+ * - Wrong way (P11): on the route but the course more than [WRONG_WAY_DEG] from its direction, at >=
+ *   [NavConfig.wrongWaySpeedMps], for [WRONG_WAY_FIXES] fixes -> off route at once (a driver turning back on the same road
+ *   is never [NavConfig.offRouteM] from it); a course along the route again clears it.
  * - Arrival: within 15 m (walk) / 25 m (drive) of the destination, or snapped to the very end of the route.
  * - GPS lost: no usable fix for 10 s after the first one, or for two expected fix intervals plus 2 s when the owner
  *   asked for slower fixes ([expectedFixIntervalMs], screen-off power policy); any usable fix recovers.
@@ -64,7 +72,8 @@ class NavigationEngine(
     route: Route,
     private val clock: NavClock,
     private val onEvent: (NavEvent) -> Unit = {},
-    private val onRerouteRequest: (GeoCoord) -> Unit = {},
+    /** The user's position and, above [HINT_MIN_SPEED_MPS], the GPS course in degrees (else null). */
+    private val onRerouteRequest: (GeoCoord, Double?) -> Unit = { _, _ -> },
     alternatives: List<Route> = emptyList()
 ) {
     val config: NavConfig = NavConfig.forMode(route.mode)
@@ -106,6 +115,14 @@ class NavigationEngine(
     private var rerouteAttempts = 0
     private var rerouteInFlight = false
     private var lastRerouteMs = Long.MIN_VALUE / 2
+
+    /** P11: failed requests in a row (the back-off), and whether the last answer was "no network". */
+    private var rerouteFailures = 0
+    private var offline = false
+
+    /** P11: fixes in a row going against the route, and the latched wrong-way state. */
+    private var wrongWayCount = 0
+    private var wrongWay = false
 
     // ---- GPS ----
     private var everUsable = false
@@ -165,14 +182,26 @@ class NavigationEngine(
      * The answer to [onRerouteRequest]: a new route, or null when the request failed. Returns false (and ignores it)
      * when no request was pending, for example because the user came back on the old route meanwhile.
      */
-    fun onRerouteResult(newRoute: Route?, newAlternatives: List<Route> = emptyList()): Boolean {
+    fun onRerouteResult(newRoute: Route?, newAlternatives: List<Route> = emptyList(), offline: Boolean = false): Boolean {
         if (!rerouteInFlight) return false
         rerouteInFlight = false
         val last = lastNavigating
         if (newRoute == null || newRoute.polyline.size < 2) {
+            if (offline) {
+                // No network: nothing was sent; it is not a failure (no back-off, no step toward LOST ROUTE).
+                rerouteAttempts = (rerouteAttempts - 1).coerceAtLeast(0)
+                this.offline = true
+            } else {
+                rerouteFailures++
+                this.offline = false
+            }
             if (offRoute && last != null) state = offRouteState(last)
             return true
         }
+        rerouteFailures = 0
+        this.offline = false
+        wrongWay = false
+        wrongWayCount = 0
         setAlternatives(newAlternatives)
         activate(RouteGeometry(newRoute))
         return true
@@ -206,6 +235,10 @@ class NavigationEngine(
         // A reroute answer still on its way is for the old situation: ignore it.
         rerouteInFlight = false
         rerouteAttempts = 0
+        rerouteFailures = 0
+        offline = false
+        wrongWay = false
+        wrongWayCount = 0
         activate(chosen)
     }
 
@@ -232,6 +265,7 @@ class NavigationEngine(
     fun retryReroute() {
         if (state !is NavState.LostRoute) return
         rerouteAttempts = 0
+        rerouteFailures = 0
         lastRerouteMs = Long.MIN_VALUE / 2
         maybeReroute(clock.elapsedMs())
     }
@@ -270,17 +304,22 @@ class NavigationEngine(
             return
         }
 
+        // P11 wrong way: on the route but moving against it.
+        checkWrongWay(fix)
+
         // Off-route counting with hysteresis.
         when {
             candDist > config.offRouteM -> offCount++
-            candDist <= config.backOnRouteM -> {
+            candDist <= config.backOnRouteM && !wrongWay -> {
                 offCount = 0
                 offRoute = false
+                offline = false
                 rerouteAttempts = 0 // back on a route: a fresh series of reroutes is allowed again
+                rerouteFailures = 0
             }
             else -> if (!offRoute) offCount = 0
         }
-        if (!offRoute && offCount >= OFF_ROUTE_FIXES) {
+        if (!offRoute && (offCount >= OFF_ROUTE_FIXES || wrongWay)) {
             offRoute = true
             onEvent(NavEvent.OffRouteDetected)
         }
@@ -328,21 +367,47 @@ class NavigationEngine(
     private fun offRouteState(nav: NavState.Navigating): NavState = when {
         rerouteInFlight -> NavState.Rerouting(nav, rerouteAttempts)
         rerouteAttempts >= MAX_REROUTES -> NavState.LostRoute(nav)
-        else -> NavState.OffRoute(nav)
+        else -> NavState.OffRoute(nav, offline)
     }
+
+    /** P11: the wait before the next request: 8 s, doubled after each failure in a row, at most 60 s. */
+    fun rerouteIntervalMs(): Long =
+        minOf(REROUTE_MAX_INTERVAL_MS, REROUTE_MIN_INTERVAL_MS shl rerouteFailures.coerceAtMost(4))
 
     private fun maybeReroute(now: Long) {
         if (!offRoute || rerouteInFlight || rerouteAttempts >= MAX_REROUTES) {
             lastNavigating?.let { if (offRoute) state = offRouteState(it) }
             return
         }
-        if (now - lastRerouteMs < REROUTE_MIN_INTERVAL_MS) return
+        if (now - lastRerouteMs < rerouteIntervalMs()) return
         val fix = lastFix ?: return
         rerouteInFlight = true
         rerouteAttempts++
         lastRerouteMs = now
         lastNavigating?.let { state = NavState.Rerouting(it, rerouteAttempts) }
-        onRerouteRequest(GeoCoord(fix.lat, fix.lon))
+        onRerouteRequest(GeoCoord(fix.lat, fix.lon), courseHint(fix))
+    }
+
+    /** P11: the fix's course as the router's bearing hint, only when moving fast enough for it to be reliable. */
+    private fun courseHint(fix: Fix): Double? =
+        if (!fix.bearingDeg.isNaN() && !fix.speedMps.isNaN() && fix.speedMps >= HINT_MIN_SPEED_MPS) fix.bearingDeg.toDouble() else null
+
+    /** P11: counts the fixes on the route moving against its direction; latches [wrongWay] at [WRONG_WAY_FIXES]. */
+    private fun checkWrongWay(fix: Fix) {
+        if (!matched || candDist > config.offRouteM || fix.bearingDeg.isNaN() || fix.speedMps.isNaN() ||
+            fix.speedMps < config.wrongWaySpeedMps
+        ) return
+        val g = geometry
+        val routeDeg = Math.toDegrees(Math.atan2(g.xs[candSeg + 1] - g.xs[candSeg], g.ys[candSeg + 1] - g.ys[candSeg]))
+        var diff = Math.abs(fix.bearingDeg - routeDeg) % 360.0
+        if (diff > 180) diff = 360 - diff
+        when {
+            diff > WRONG_WAY_DEG -> if (++wrongWayCount >= WRONG_WAY_FIXES) wrongWay = true
+            diff < ALONG_DEG -> {
+                wrongWayCount = 0
+                wrongWay = false
+            }
+        }
     }
 
     private fun arrive() {
@@ -511,8 +576,20 @@ class NavigationEngine(
 
         /** ...for this many usable fixes in a row on the same alternative. */
         const val ALT_FIXES = 3
-        const val REROUTE_MIN_INTERVAL_MS = 20_000L
+        /** P11: at least this long between reroute requests (doubled after each failure, up to the max). */
+        const val REROUTE_MIN_INTERVAL_MS = 8_000L
+        const val REROUTE_MAX_INTERVAL_MS = 60_000L
         const val MAX_REROUTES = 3
+
+        /** P11: the GPS course is sent as a bearing hint only at or above this speed. */
+        const val HINT_MIN_SPEED_MPS = 3f
+
+        /** P11 wrong way: a course this far from the route's direction, for [WRONG_WAY_FIXES] fixes in a row. */
+        const val WRONG_WAY_DEG = 135.0
+        const val WRONG_WAY_FIXES = 3
+
+        /** P11: a course within this of the route's direction clears the wrong way. */
+        const val ALONG_DEG = 45.0
 
         /** Spec section 8: turn at 200 m (Tick) and at 50 m (DoubleClick). */
         const val APPROACH_M = 200.0

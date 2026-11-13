@@ -57,7 +57,7 @@ class NavigationEngineTest {
     private val events = ArrayList<NavEvent>()
     private val reroutes = ArrayList<GeoCoord>()
 
-    private fun engine(r: Route) = NavigationEngine(r, clock, { events += it }, { reroutes += it })
+    private fun engine(r: Route) = NavigationEngine(r, clock, { events += it }, { from, _ -> reroutes += from })
 
     private fun fix(x: Double, y: Double, accuracy: Float = 5f, speed: Float = Float.NaN) =
         geo(x, y).let { Fix(it.lat, it.lon, accuracy, speed, Float.NaN, 0L, clock.ms * 1_000_000L) }
@@ -211,14 +211,15 @@ class NavigationEngineTest {
         assertEquals(1, reroutes.size)
         e.onRerouteResult(null)
         assertTrue("a failed reroute keeps guiding on the old route", e.state is NavState.OffRoute)
-        repeat(19) { e.at(80.0, 60.0) } // 19 s after the first request
+        // P11: at least 8 s apart, doubled after each failure in a row.
+        repeat(15) { e.at(80.0, 60.0) } // 15 s after the first request
         assertEquals(1, reroutes.size)
-        e.at(80.0, 60.0) // 20 s
+        e.at(80.0, 60.0) // 16 s
         assertEquals(2, reroutes.size)
         e.onRerouteResult(null)
-        repeat(19) { e.at(80.0, 60.0) }
+        repeat(31) { e.at(80.0, 60.0) }
         assertEquals(2, reroutes.size)
-        e.at(80.0, 60.0) // 20 s after the second request
+        e.at(80.0, 60.0) // 32 s after the second request
         assertEquals(3, reroutes.size)
         e.onRerouteResult(null)
         assertTrue(e.state is NavState.LostRoute)

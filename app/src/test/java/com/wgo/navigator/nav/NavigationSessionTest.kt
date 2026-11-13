@@ -62,6 +62,29 @@ class NavigationSessionTest {
         s.stop()
     }
 
+    @Test fun offlineSendsNothingAndAsksAgainWhenTheNetworkIsBack() = runBlocking {
+        // P11: no request without a network; the old route stays; the reroute goes out once a network is back.
+        var online = false
+        val router = CountingRouter(Outcome.Ok(north(80.0, 500.0)))
+        val original = north(0.0, 500.0)
+        val s = NavigationSession(original, geo(0.0, 500.0), router, this, clock, tickMs = 60_000, online = { online })
+        s.onFix(fix(0.0, 100.0))
+        repeat(3) { now += 1_000; s.onFix(fix(80.0, 120.0)) }
+        yield()
+        assertEquals(0, router.calls.size)
+        assertEquals(0, s.rerouteRequests)
+        assertEquals(original, s.route.value)
+        assertTrue((s.state.value as NavState.OffRoute).offline)
+        repeat(20) { now += 1_000; s.onFix(fix(80.0, 120.0)); yield() } // still offline: still nothing
+        assertEquals(0, router.calls.size)
+        online = true
+        repeat(8) { now += 1_000; s.onFix(fix(80.0, 120.0)); yield() }
+        assertEquals(1, router.calls.size)
+        assertEquals(1, s.rerouteRequests)
+        assertTrue(s.state.value is NavState.Navigating)
+        s.stop()
+    }
+
     @Test fun failedRerouteKeepsTheOldRoute() = runBlocking {
         val router = CountingRouter(Outcome.Err(WgoFailure.Offline))
         val original = north(0.0, 500.0)

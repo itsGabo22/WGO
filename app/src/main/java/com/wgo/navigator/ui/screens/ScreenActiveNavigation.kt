@@ -451,7 +451,7 @@ private fun hudContent(navState: NavState?): HudContent {
     val nav = navState?.guidance()
     val next = nav?.next
     val status = when (navState) {
-        is NavState.OffRoute -> string(StringKey.NAV_OFF_ROUTE)
+        is NavState.OffRoute -> string(if (navState.offline) StringKey.NAV_OFFLINE_NOT_UPDATED else StringKey.NAV_OFF_ROUTE)
         is NavState.Rerouting -> string(StringKey.NAV_REROUTING)
         else -> null
     }

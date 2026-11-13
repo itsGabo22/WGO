@@ -31,6 +31,7 @@ import com.wgo.navigator.nav.NavState
 import com.wgo.navigator.nav.NavigationSession
 import com.wgo.navigator.net.HttpClient
 import com.wgo.navigator.net.WgoUserAgent
+import com.wgo.navigator.net.isOnline
 import com.wgo.navigator.route.OsrmRouter
 import com.wgo.navigator.ui.map.GeoCoord
 import com.wgo.navigator.ui.map.LiveRadarSource
@@ -177,7 +178,8 @@ class NavigationHost private constructor(context: Context) {
     fun start(route: Route, place: Place, origin: Fix, alternatives: List<Route> = emptyList()) {
         stopTrip()
         val s = NavigationSession(
-            route, place.coord, router, scope, NavClock { SystemClock.elapsedRealtime() }, initialAlternatives = alternatives
+            route, place.coord, router, scope, NavClock { SystemClock.elapsedRealtime() }, initialAlternatives = alternatives,
+            online = { isOnline(app) }
         )
         session = s
         _lastEnd.value = null

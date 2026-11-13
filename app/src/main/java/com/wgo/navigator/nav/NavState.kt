@@ -28,8 +28,12 @@ sealed interface NavState {
         val snapped: GeoCoord
     ) : NavState
 
-    /** Off the route for 3 usable fixes in a row; guidance stays on the old route until a new one arrives. */
-    data class OffRoute(val last: Navigating) : NavState
+    /**
+     * Off the route for 3 usable fixes in a row (or going the wrong way, P11); guidance stays on the old route until a
+     * new one arrives. [offline] (P11): the last reroute could not be sent for lack of a network; the route is not
+     * updated until one is back.
+     */
+    data class OffRoute(val last: Navigating, val offline: Boolean = false) : NavState
 
     /** A new route has been requested (attempt 1..3 since the user was last on the route). */
     data class Rerouting(val last: Navigating, val attempt: Int) : NavState

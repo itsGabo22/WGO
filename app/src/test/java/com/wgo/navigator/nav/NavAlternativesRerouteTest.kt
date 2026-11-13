@@ -53,9 +53,10 @@ class NavAlternativesRerouteTest {
     private val clock = FakeClock()
     private val events = ArrayList<NavEvent>()
     private val reroutes = ArrayList<GeoCoord>()
+    private val bearings = ArrayList<Double?>()
 
     private fun engine(r: Route = main, alternatives: List<Route> = listOf(detour)) =
-        NavigationEngine(r, clock, { events += it }, { reroutes += it }, alternatives)
+        NavigationEngine(r, clock, { events += it }, { from, bearing -> reroutes += from; bearings += bearing }, alternatives)
 
     private fun NavigationEngine.at(x: Double, y: Double, dtMs: Long = 1_000, speed: Float = 10f, bearing: Float = Float.NaN) {
         clock.ms += dtMs
@@ -103,6 +104,120 @@ class NavAlternativesRerouteTest {
         assertSame(main, e.geometry.route)
         assertTrue(reroutes.isEmpty())
         assertTrue(events.none { it == NavEvent.Rerouted })
+    }
+
+    // ---- reroute from the position (P11) ----
+
+    /** Leaves the main route eastwards along y = 200 at [speed] m/s heading east; returns the request times. */
+    private fun NavigationEngine.driveEast(speed: Float = 10f, seconds: Int = 3): Unit {
+        at(0.0, 190.0, speed = speed, bearing = 0f)
+        at(0.0, 200.0, speed = speed, bearing = 0f)
+        for (i in 1..seconds) at(50.0 + 10 * i, 200.0, speed = speed, bearing = 90f)
+    }
+
+    @Test fun aNewRoadReroutesOnceFromThePositionWithTheCourse() {
+        val e = engine(alternatives = emptyList())
+        e.driveEast()
+        assertEquals(1, reroutes.size)
+        assertEquals(geo(80.0, 200.0).lat, reroutes[0].lat, 1e-9)
+        assertEquals(90.0, bearings[0]!!, 1e-9)
+        assertTrue(e.state is NavState.Rerouting)
+    }
+
+    @Test fun slowMovementSendsNoCourseHint() {
+        val e = engine(r = route(1.25, 0.0 to 0.0, 0.0 to 600.0, mode = TravelMode.Walk), alternatives = emptyList())
+        e.at(0.0, 190.0, speed = 1.2f, bearing = 0f)
+        e.at(0.0, 200.0, speed = 1.2f, bearing = 0f)
+        for (i in 1..3) e.at(40.0 + 5 * i, 200.0, speed = 1.2f, bearing = 90f)
+        assertEquals(1, reroutes.size)
+        assertEquals(null, bearings[0])
+    }
+
+    @Test fun requestsAreAtLeastEightSecondsApartAndBackOffAfterFailures() {
+        val e = engine(alternatives = emptyList())
+        e.driveEast()
+        val times = arrayListOf(clock.ms)
+        var x = 80.0
+        repeat(120) {
+            if (e.state is NavState.Rerouting) e.onRerouteResult(null) // the router failed
+            x += 10
+            val before = reroutes.size
+            e.at(x, 200.0, speed = 10f, bearing = 90f)
+            if (reroutes.size > before) times += clock.ms
+        }
+        val gaps = times.zipWithNext { a, b -> b - a }
+        assertEquals(listOf(16_000L, 32_000L), gaps) // 8 s doubled after each failure
+        assertTrue(e.state is NavState.LostRoute) // 3 requests in a row without a route: ask the user
+        assertEquals(3, reroutes.size)
+    }
+
+    @Test fun aSuccessfulRerouteFollowsTheNewRouteAndItsAlternatives() {
+        val e = engine(alternatives = emptyList())
+        e.driveEast()
+        val fresh = route(10.0, 80.0 to 200.0, 80.0 to 600.0, 0.0 to 600.0)
+        val other = route(10.0, 80.0 to 200.0, 300.0 to 200.0, 300.0 to 600.0, 0.0 to 600.0)
+        assertTrue(e.onRerouteResult(fresh, listOf(other)))
+        assertSame(fresh, e.geometry.route)
+        assertSame(other, e.alternatives.single())
+        assertTrue(e.state is NavState.Navigating)
+        assertEquals(1, events.count { it == NavEvent.Rerouted })
+    }
+
+    @Test fun drivingBackOnTheSameRoadIsAWrongWayReroute() {
+        val e = engine(alternatives = emptyList())
+        for (y in listOf(260.0, 270.0, 280.0, 290.0, 300.0)) e.at(0.0, y, speed = 8f, bearing = 0f)
+        assertTrue(reroutes.isEmpty())
+        e.at(0.0, 292.0, speed = 8f, bearing = 180f) // turned around: still ON the route
+        e.at(0.0, 284.0, speed = 8f, bearing = 180f)
+        assertTrue(reroutes.isEmpty()) // two fixes are not enough
+        e.at(0.0, 276.0, speed = 8f, bearing = 180f)
+        assertEquals(1, events.count { it == NavEvent.OffRouteDetected })
+        assertEquals(1, reroutes.size)
+        assertEquals(180.0, bearings[0]!!, 1e-9)
+    }
+
+    @Test fun aCourseAlongTheRouteAgainClearsTheWrongWay() {
+        val e = engine(alternatives = emptyList())
+        e.at(0.0, 300.0, speed = 8f, bearing = 0f)
+        e.at(0.0, 292.0, speed = 8f, bearing = 180f)
+        e.at(0.0, 290.0, speed = 8f, bearing = 0f) // GPS course noise, then along the route
+        e.at(0.0, 298.0, speed = 8f, bearing = 0f)
+        e.at(0.0, 306.0, speed = 8f, bearing = 0f)
+        assertTrue(reroutes.isEmpty())
+        assertTrue(e.state is NavState.Navigating)
+    }
+
+    @Test fun offlineAnswersKeepTheRouteAndNeverLeadToLostRoute() {
+        val e = engine(alternatives = emptyList())
+        e.driveEast()
+        val times = arrayListOf(clock.ms)
+        var x = 80.0
+        repeat(60) {
+            if (e.state is NavState.Rerouting) e.onRerouteResult(null, offline = true)
+            x += 10
+            val before = reroutes.size
+            e.at(x, 200.0, speed = 10f, bearing = 90f)
+            if (reroutes.size > before) times += clock.ms
+        }
+        assertSame(main, e.geometry.route)
+        val s = e.state as NavState.OffRoute
+        assertTrue(s.offline)
+        assertTrue(times.zipWithNext { a, b -> b - a }.all { it == 8_000L }) // no back-off, no LOST ROUTE
+    }
+
+    @Test fun remainingAndEtaOnlyShrinkWhileFollowingTheRoute() {
+        val e = engine()
+        var lastRemaining = Double.MAX_VALUE
+        var lastEta = Double.MAX_VALUE
+        for (y in 0..560 step 10) {
+            e.at(0.0, y.toDouble(), speed = 10f, bearing = 0f)
+            val n = e.nav()
+            assertTrue("remaining at $y", n.remainingM <= lastRemaining)
+            assertTrue("eta at $y", n.etaS <= lastEta + 1e-6)
+            assertEquals(600.0 - y, n.remainingM, 1.0)
+            lastRemaining = n.remainingM
+            lastEta = n.etaS
+        }
     }
 
     @Test fun theUserCanPickAnotherKnownRouteWithNoRequest() {

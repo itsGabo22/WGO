@@ -33,7 +33,9 @@ class NavigationSession(
     private val clock: NavClock,
     private val tickMs: Long = 1_000L,
     /** P11: the other routes OSRM offered at the start (each with its steps). */
-    initialAlternatives: List<Route> = emptyList()
+    initialAlternatives: List<Route> = emptyList(),
+    /** P11: a network exists now (no listener; checked before each reroute request). */
+    private val online: () -> Boolean = { true }
 ) {
     private val _state = MutableStateFlow<NavState>(NavState.WaitingForGps)
     val state: StateFlow<NavState> = _state.asStateFlow()
@@ -147,12 +149,18 @@ class NavigationSession(
         rerouteJob = null
     }
 
-    private fun requestReroute(from: GeoCoord) {
-        rerouteRequests++
+    private fun requestReroute(from: GeoCoord, bearingDeg: Double?) {
         val mode = _route.value.mode
         rerouteJob = scope.launch {
-            // P11: the new route comes with its own alternatives (one request).
-            val result = router.routes(from, destination, mode).valueOrNull()
+            // P11: no network -> nothing is sent; the engine keeps the old route and asks again later.
+            if (!online()) {
+                engine.onRerouteResult(null, offline = true)
+                publish()
+                return@launch
+            }
+            rerouteRequests++
+            // P11: from the current position, the course as a hint, and the new route's own alternatives (one request).
+            val result = router.routes(from, destination, mode, bearingDeg).valueOrNull()
             engine.onRerouteResult(result?.firstOrNull(), result?.drop(1).orEmpty())
             publish()
         }

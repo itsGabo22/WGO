@@ -67,6 +67,8 @@ enum class StringKey {
     SET_SPEECH, SPEECH_CLOUD, SPEECH_SYSTEM, PICK_WHICH, NOTICE_TITLE, NOTICE_BODY, BTN_ACCEPT, BTN_USE_SYSTEM, CR_STT_D, HUD_EXPAND, HUD_COLLAPSE, RECENTER,
     // Live navigation states (P5-D)
     NAV_GPS_SEARCHING, NAV_GPS_SEARCH_HINT, NAV_PAUSED, NAV_GPS_LOST, NAV_GPS_LOST_HINT, NAV_OFF_ROUTE, NAV_REROUTING,
+    // P11 offline reroute
+    NAV_OFFLINE_NOT_UPDATED,
     NAV_LOST_BADGE, NAV_LOST_TITLE, NAV_LOST_HINT, NAV_END_TITLE, BTN_END, BTN_KEEP, NAV_ARRIVED, BTN_FINISH,
     // Foreground service notification and ongoing activity (P6-A)
     NOTIF_CHANNEL_NAV, NOTIF_CHANNEL_NAV_DESC, NOTIF_NAVIGATING, ONGOING_SEARCHING, ONGOING_GPS_LOST, ONGOING_REROUTING,
@@ -246,6 +248,7 @@ private val es = mapOf(
     StringKey.NAV_GPS_LOST_HINT to "Buscando satélites",
     StringKey.NAV_OFF_ROUTE to "FUERA DE RUTA",
     StringKey.NAV_REROUTING to "RECALCULANDO…",
+    StringKey.NAV_OFFLINE_NOT_UPDATED to "SIN CONEXIÓN · RUTA NO ACTUALIZADA",
     StringKey.NAV_LOST_BADGE to "SIN RUTA",
     StringKey.NAV_LOST_TITLE to "No pude recalcular la ruta",
     StringKey.NAV_LOST_HINT to "Reintenta o termina.",
@@ -449,6 +452,7 @@ private val en = mapOf(
     StringKey.NAV_GPS_LOST_HINT to "Searching satellites",
     StringKey.NAV_OFF_ROUTE to "OFF ROUTE",
     StringKey.NAV_REROUTING to "REROUTING…",
+    StringKey.NAV_OFFLINE_NOT_UPDATED to "OFFLINE · ROUTE NOT UPDATED",
     StringKey.NAV_LOST_BADGE to "NO ROUTE",
     StringKey.NAV_LOST_TITLE to "Couldn't find a new route",
     StringKey.NAV_LOST_HINT to "Retry or end it.",
