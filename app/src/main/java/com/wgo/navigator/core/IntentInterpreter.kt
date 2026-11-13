@@ -24,7 +24,9 @@ data class Interpretation(
     /** [placeQuery] came from a Pasto nickname (PlaceAliases): a search string verified on Nominatim. */
     val placeFromAlias: Boolean = false,
     /** P10: the place is a description or a kind of place ("un lugar donde pueda comer algo"), not a name. */
-    val placeVague: Boolean = false
+    val placeVague: Boolean = false,
+    /** P10: the destination words as heard ("la cooperativa"), shown on Confirm place to spot a mishearing. */
+    val placeHeard: String? = null
 ) {
     companion object {
         const val ACCEPT_CONFIDENCE = 0.75f

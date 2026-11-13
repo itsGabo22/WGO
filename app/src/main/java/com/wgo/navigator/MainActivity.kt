@@ -367,6 +367,8 @@ class MainActivity : ComponentActivity() {
                                 val places by appViewModel.places.collectAsState()
                                 val index by appViewModel.placeIndex.collectAsState()
                                 val near by appViewModel.near.collectAsState()
+                                val heard by appViewModel.heard.collectAsState()
+                                val pickList by appViewModel.pickList.collectAsState()
                                 places.getOrNull(index)?.let { place ->
                                     // Far = over 25 km from the fix, or from the Pasto centre without one (then shown).
                                     val fromAnchor = RadarProjection.distanceMeters(near ?: PastoCentre, place.coord)
@@ -379,7 +381,9 @@ class MainActivity : ComponentActivity() {
                                         index = index,
                                         count = places.size,
                                         onGo = appViewModel::onGo,
-                                        onOther = appViewModel::onOtherPlace
+                                        onOther = appViewModel::onOtherPlace,
+                                        heard = heard,
+                                        pickList = pickList
                                     )
                                 }
                             }

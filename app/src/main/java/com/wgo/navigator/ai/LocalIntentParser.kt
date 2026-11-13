@@ -84,6 +84,7 @@ object LocalIntentParser {
         toks = cutAtBreak(toks)
 
         val placeToks = cleanPlace(toks)
+        val heard = join(toks.dropWhile { it.norm in CONNECTORS }).ifEmpty { null }
         if (placeToks.isEmpty()) {
             return if (mode != null) Interpretation(IntentKind.ChangeMode, null, mode, 0.9f) else Interpretation.Unknown
         }
@@ -91,7 +92,7 @@ object LocalIntentParser {
         if (placeToks.all { it.norm in NON_PLACE }) return Interpretation.Unknown
         // Local nicknames ("la UDENAR", "el terminal") resolve here, with no remote call.
         PlaceAliases.resolve(placeToks.map { it.norm })?.let {
-            return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeFromAlias = true)
+            return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeFromAlias = true, placeHeard = heard)
         }
         // "X de la Y" / "X cerca de Y": name X, landmark hint Y (docs/PLACE_SEARCH.md). A vague description
         // ("donde venden helados frente a la plaza") stays whole: the remote interpreter reads it.
@@ -99,7 +100,9 @@ object LocalIntentParser {
         val split = if (vagueWhole) PlaceHint.Split(join(placeToks), null) else PlaceHint.split(join(placeToks))
         val nameToks = tokenize(split.name)
         PlaceAliases.resolve(nameToks.map { it.norm })?.let {
-            return Interpretation(IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeHint = split.hint, placeFromAlias = true)
+            return Interpretation(
+                IntentKind.Navigate, it, mode, ALIAS_CONFIDENCE, placeHint = split.hint, placeFromAlias = true, placeHeard = heard
+            )
         }
         val vague = nameToks.any { it.norm in VAGUE_WORDS }
         val confidence = when {
@@ -109,7 +112,10 @@ object LocalIntentParser {
             placeToks.size <= 4 -> Interpretation.ACCEPT_CONFIDENCE // the whole phrase: long descriptions go remote
             else -> 0.55f
         }
-        return Interpretation(IntentKind.Navigate, split.name, mode, confidence, placeHint = split.hint, placeVague = vague || vagueWhole)
+        return Interpretation(
+            IntentKind.Navigate, split.name, mode, confidence, placeHint = split.hint, placeVague = vague || vagueWhole,
+            placeHeard = heard
+        )
     }
 
     /**

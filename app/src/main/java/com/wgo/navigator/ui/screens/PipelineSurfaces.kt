@@ -33,6 +33,7 @@ import com.wgo.navigator.core.PlaceOrigin
 import com.wgo.navigator.core.permissions.PermissionStatus
 import com.wgo.navigator.core.permissions.WgoPermission
 import com.wgo.navigator.ui.LocalLanguage
+import com.wgo.navigator.places.PlaceText
 import com.wgo.navigator.ui.StringKey
 import com.wgo.navigator.ui.components.BezelGauge
 import com.wgo.navigator.ui.components.WgoMarqueeText
@@ -154,7 +155,11 @@ fun ScreenConfirmPlace(
     onGo: () -> Unit,
     onOther: () -> Unit,
     modifier: Modifier = Modifier,
-    far: Boolean = false
+    far: Boolean = false,
+    /** P10: the destination words as heard ("la cooperativa"); hidden when they equal the place name. */
+    heard: String? = null,
+    /** P10: no clear winner: the first line reads "¿CUÁL?" and OTRO cycles the candidates. */
+    pickList: Boolean = false
 ) {
     val palette = Wgo.palette
     val language = LocalLanguage.current
@@ -175,6 +180,26 @@ fun ScreenConfirmPlace(
     val option = String.format(string(StringKey.CONFIRM_OPTION), index + 1, count)
 
     Box(modifier.fillMaxSize().background(palette.canvas)) {
+        // P10 heard phrase: 70x12 @16 (fit 102.0), one line, marquee when longer; read before the name.
+        val heardShown = heard?.takeIf { it.isNotBlank() && PlaceText.normalize(it) != PlaceText.normalize(place.name) }
+        if (pickList || heardShown != null) {
+            val which = string(StringKey.PICK_WHICH)
+            val line = buildAnnotatedString {
+                if (pickList) withStyle(SpanStyle(color = palette.primaryInk)) { append(which) }
+                if (heardShown != null) {
+                    if (pickList) append(" ")
+                    append("«$heardShown»")
+                }
+            }
+            WgoMarqueeText(
+                text = line,
+                color = palette.inkMuted,
+                style = WgoType.labelSm,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.TopCenter).offset(y = 16.dp).width(70.dp).wgoRiseIn()
+            )
+        }
         // Long names scroll (P8 marquee): "Universidad Cooperativa de Colombia" is read whole, then rests clamped.
         WgoMarqueeText(
             text = place.name,

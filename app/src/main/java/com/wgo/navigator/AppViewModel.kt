@@ -432,6 +432,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     /** Up to three geocoding results and the one shown (OTHER cycles locally: no extra request). */
     private val _places = MutableStateFlow<List<Place>>(emptyList())
     val places: StateFlow<List<Place>> = _places.asStateFlow()
+    /** P10: the destination words as heard, shown in quotes on Confirm place (null: none). */
+    private val _heard = MutableStateFlow<String?>(null)
+    val heard: StateFlow<String?> = _heard.asStateFlow()
+
     /** P10: no clear winner: Confirm place is a pick list ("¿CUÁL?"), OTRO cycles the real candidates. */
     private val _pickList = MutableStateFlow(false)
     val pickList: StateFlow<Boolean> = _pickList.asStateFlow()
@@ -487,6 +491,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                     aiCallsUsed = interpreter.lastRemoteCalls, vague = result.placeVague
                 )
                 placeRequest = request
+                _heard.value = if (retryName != null) null else (result.placeHeard ?: query)
                 modeSpoken = result.mode != null
                 _selectedMode.value = result.mode
                 resolve(request)
