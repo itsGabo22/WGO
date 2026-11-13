@@ -314,6 +314,37 @@ that shows HABLA AHORA; "audio" = first non-zero sample; "end->text" = end of sp
 Remaining gap: uploads of large clips on the watch's Wi-Fi (a 250 KB clip timed out at 6 s; 147 KB took 2.3 s). A
 compressed upload (Opus in Ogg or FLAC through `MediaCodec`, in memory) would cut the bytes 2-10x; not done in P9.
 
+### Long phrases, strict choice and no network (P10, Galaxy Watch5 Pro, release build, 2026-11-12/13)
+
+Before (P10 STEP 0, field log of the P9 release): 4 cloud presses OK (WAV 69-198 KB, upload 0.85-1.57 s); the owner's
+long sentence reached the cloud and came back as text, then the local rules kept "amigo quiero ir a la cooperativa es lo
+único que te pido" as the place and a "Cooperativa ..." business won. Without any network: `rung=system reason=offline`
+-> offline recognizer (5 s to ready), errors 12 / 2 / 12 / 12 -> "unavailable" at 15.2 s -> the system's white "La red
+no está conectada" dialog; the next presses opened that dialog at once.
+
+After (P10 release, the owner speaking; times from the press, `adb logcat -s WgoVoice`):
+
+| press (what the owner said) | capture | WAV -> FLAC | drain | upload | end of speech -> text | result |
+|---|---|---|---|---|---|---|
+| "llévame a la calle 6A #36-41 barrio San Vicente porque ahí es mi casa" | 10.0 s (cap) | 306 -> 148 KB | 31 ms | 0.78 s (timeout 8.5 s) | 0.97 s | text OK; then the place search picked a business 220 m away (fixed: fa8060a) |
+| "llévame a alguna droguería que quede en el centro porque no conozco Pasto ..." | 10.0 s (cap) | 312 -> 133 KB | 51 ms | 1.45 s (timeout 8.1 s) | 1.70 s | text OK; pick list of 3 pharmacies, not checked against "centro" (fixed: b5ac8b5) |
+| "llévame por favor al mejor restaurante de la avenida de los estudiantes ..." | 10.0 s (cap) | 306 -> 131 KB | 100 ms | 0.95 s (timeout 8.0 s) | 1.39 s | text OK; "No encontré", suggesting "Peluquería canina mi mejor amigo" (fixed: b5ac8b5) |
+
+- Compression: FLAC 2.1-2.3x smaller on real speech (2.2x on the emulator), identical transcripts on the emulator's
+  A/B; drain 31-100 ms on the watch (budget 150 ms); every 10 s clip uploaded within its scaled timeout (8.0-8.5 s).
+- The same three phrases through the real pipeline afterwards (text, real model and Nominatim, real index, JVM trace):
+  pharmacies nearest the centre ("Drogueria Plaza De Nariño, Carrera 25 #19-52, Centro" among them), restaurants on
+  "Av. de los Estudiantes" (Ambrosía, Bennie's pizza, Herencia Restaurante), and "Calle 6A" in three neighbourhoods
+  (OpenStreetMap has no house numbers or "San Vicente" for it), all as the "¿CUÁL?" pick list, no model call.
+- The owner's own sentences and the STEP 0 golden phrases are unit tests (`LongPhraseStrictChoiceTest`).
+- No network (emulator, Wi-Fi and data off): "Sin conexión" on screen at the press (`offline_at_press` +0 ms, one
+  haptic), no capture, no recognizer, no system dialog; REINTENTAR still offline shows it again; with the network
+  back it goes straight to listening (cloud rung) without restarting the app.
+
+Not verified live on the watch: the re-run of the three phrases with the fixes, the vague phrase, Wi-Fi off with the
+phone's Bluetooth network, Wi-Fi and Bluetooth both off, and a network lost mid-capture (the owner was not available for
+the second round; the no-network path is verified on the emulator and by `VoiceLadderTest`).
+
 ## Top remaining power and resource risks (real watch)
 
 1. **GPS for the whole trip, wrist down included** (P6-A): the foreground service keeps one high-accuracy request; the
