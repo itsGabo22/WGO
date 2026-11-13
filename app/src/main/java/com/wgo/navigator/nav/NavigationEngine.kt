@@ -55,12 +55,17 @@ data class NavConfig(
  *   clamped to 0.5x-2x; stationary fixes do not update the ratio (the estimate holds while waiting at a light).
  * - Turn events: spec section 8, approaching at 200 m and "now" at 50 m, once per maneuver, for real turns only
  *   (not for "continue", the departure or the arrival).
+ * - Alternatives (P11, docs/ARCHITECTURE.md "Routing and reroute"): the routes OSRM offered besides the active one.
+ *   A fix more than [ALT_LEAVE_M] from the active route and within [ALT_NEAR_M] of one alternative, for
+ *   [ALT_FIXES] usable fixes in a row on the same alternative, makes it the active route at once (no request;
+ *   [NavEvent.Rerouted]); [selectRoute] does the same on the user's choice. The old active route joins the alternatives.
  */
 class NavigationEngine(
     route: Route,
     private val clock: NavClock,
     private val onEvent: (NavEvent) -> Unit = {},
-    private val onRerouteRequest: (GeoCoord) -> Unit = {}
+    private val onRerouteRequest: (GeoCoord) -> Unit = {},
+    alternatives: List<Route> = emptyList()
 ) {
     val config: NavConfig = NavConfig.forMode(route.mode)
 
@@ -69,6 +74,13 @@ class NavigationEngine(
 
     var state: NavState = NavState.WaitingForGps
         private set
+
+    /** P11: the known routes other than the active one (each with its steps), best first. */
+    var alternatives: List<Route> = alternatives.filter { it.polyline.size >= 2 }.take(MAX_ALTERNATIVES)
+        private set
+    private var altGeometries: List<RouteGeometry> = this.alternatives.map(::RouteGeometry)
+    private var altCandidate = -1
+    private var altCount = 0
 
     // ---- matching ----
     private var matched = false
@@ -153,7 +165,7 @@ class NavigationEngine(
      * The answer to [onRerouteRequest]: a new route, or null when the request failed. Returns false (and ignores it)
      * when no request was pending, for example because the user came back on the old route meanwhile.
      */
-    fun onRerouteResult(newRoute: Route?): Boolean {
+    fun onRerouteResult(newRoute: Route?, newAlternatives: List<Route> = emptyList()): Boolean {
         if (!rerouteInFlight) return false
         rerouteInFlight = false
         val last = lastNavigating
@@ -161,7 +173,45 @@ class NavigationEngine(
             if (offRoute && last != null) state = offRouteState(last)
             return true
         }
-        geometry = RouteGeometry(newRoute)
+        setAlternatives(newAlternatives)
+        activate(RouteGeometry(newRoute))
+        return true
+    }
+
+    /**
+     * P11: the user picked the known route [index] of [alternatives] (the RUTA chip): it becomes active at once, with no
+     * request; the old active route joins the alternatives. False when there is no such route or the trip is over.
+     */
+    fun selectRoute(index: Int): Boolean {
+        if (state == NavState.Arrived || index !in altGeometries.indices) return false
+        switchTo(index)
+        return true
+    }
+
+    private fun setAlternatives(routes: List<Route>) {
+        alternatives = routes.filter { it.polyline.size >= 2 }.take(MAX_ALTERNATIVES)
+        altGeometries = alternatives.map(::RouteGeometry)
+        altCandidate = -1
+        altCount = 0
+    }
+
+    /** Makes the alternative [index] active; the active route takes its place among the alternatives. */
+    private fun switchTo(index: Int) {
+        val chosen = altGeometries[index]
+        val old = geometry
+        altGeometries = altGeometries.toMutableList().also { it[index] = old }
+        alternatives = altGeometries.map { it.route }
+        altCandidate = -1
+        altCount = 0
+        // A reroute answer still on its way is for the old situation: ignore it.
+        rerouteInFlight = false
+        rerouteAttempts = 0
+        activate(chosen)
+    }
+
+    /** Follows [g] from now on (reroute or switch): matching and announcements start over on it. */
+    private fun activate(g: RouteGeometry) {
+        geometry = g
         matched = false
         progress = 0.0
         seg = 0
@@ -176,7 +226,6 @@ class NavigationEngine(
         onEvent(NavEvent.Rerouted)
         val fix = lastFix
         if (fix != null) process(fix, clock.elapsedMs()) else state = NavState.WaitingForGps
-        return true
     }
 
     /** LOST ROUTE -> retry: a fresh series of reroutes, starting now. */
@@ -215,6 +264,12 @@ class NavigationEngine(
             return
         }
 
+        // P11: on a known alternative (and away from the active route) for ALT_FIXES fixes: it becomes active.
+        if (followsAlternative(fix)) {
+            switchTo(altCandidate)
+            return
+        }
+
         // Off-route counting with hysteresis.
         when {
             candDist > config.offRouteM -> offCount++
@@ -246,6 +301,28 @@ class NavigationEngine(
             state = nav
             announce(nav)
         }
+    }
+
+    /** Counts the fixes in a row near the same alternative while away from the active route; true at [ALT_FIXES]. */
+    private fun followsAlternative(fix: Fix): Boolean {
+        if (altGeometries.isEmpty() || candDist <= ALT_LEAVE_M) {
+            altCandidate = -1
+            altCount = 0
+            return false
+        }
+        var best = -1
+        var bestD = ALT_NEAR_M
+        altGeometries.forEachIndexed { i, a ->
+            val d = a.distanceTo(fix.lat, fix.lon)
+            if (d <= bestD) { bestD = d; best = i }
+        }
+        if (best < 0) {
+            altCandidate = -1
+            altCount = 0
+            return false
+        }
+        if (best == altCandidate) altCount++ else { altCandidate = best; altCount = 1 }
+        return altCount >= ALT_FIXES
     }
 
     private fun offRouteState(nav: NavState.Navigating): NavState = when {
@@ -422,6 +499,18 @@ class NavigationEngine(
         fun gpsLostAfterMs(expectedIntervalMs: Long): Long = maxOf(GPS_LOST_MS, expectedIntervalMs * 2 + 2_000L)
         const val OFF_ROUTE_FIXES = 3
         const val U_TURN_FIXES = 3
+
+        /** P11: alternatives kept besides the active route (OSRM gives at most 3 routes). */
+        const val MAX_ALTERNATIVES = 2
+
+        /** P11: a fix within this of an alternative counts as following it... */
+        const val ALT_NEAR_M = 20.0
+
+        /** ...only while it is more than this from the active route... */
+        const val ALT_LEAVE_M = 40.0
+
+        /** ...for this many usable fixes in a row on the same alternative. */
+        const val ALT_FIXES = 3
         const val REROUTE_MIN_INTERVAL_MS = 20_000L
         const val MAX_REROUTES = 3
 

@@ -174,9 +174,11 @@ class NavigationHost private constructor(context: Context) {
     // ---- commands ----
 
     /** Starts a trip on [route] from the fresh [origin] fix. Must be called while the app is in the foreground. */
-    fun start(route: Route, place: Place, origin: Fix) {
+    fun start(route: Route, place: Place, origin: Fix, alternatives: List<Route> = emptyList()) {
         stopTrip()
-        val s = NavigationSession(route, place.coord, router, scope, NavClock { SystemClock.elapsedRealtime() })
+        val s = NavigationSession(
+            route, place.coord, router, scope, NavClock { SystemClock.elapsedRealtime() }, initialAlternatives = alternatives
+        )
         session = s
         _lastEnd.value = null
         _destinationName.value = place.name
@@ -258,6 +260,11 @@ class NavigationHost private constructor(context: Context) {
     }
 
     /** LOST ROUTE -> retry. */
+    /** P11 RUTA chip: the next known route becomes active (no network). */
+    fun selectNextRoute() {
+        session?.selectNext()
+    }
+
     fun retryReroute() {
         session?.retryReroute()
     }

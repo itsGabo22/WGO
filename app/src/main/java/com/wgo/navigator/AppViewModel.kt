@@ -623,7 +623,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                         "steps=${best.steps.size} points=${best.polyline.size} routes=${r.value.size} snapshot=${WgoMetrics.snapshot()}"
                 )
                 tripStore.saveTrip(place.name, place.coord.lat, place.coord.lon, mode)
-                startNavigation(best, place, fix)
+                startNavigation(best, place, fix, r.value.drop(1))
             }
             is Outcome.Err -> {
                 locationSource.setProfile(LocationProfile.IDLE)
@@ -752,9 +752,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         viewModelScope.launch { host.lastEnd.drop(1).collect { it?.let(::onTripEnded) } }
     }
 
-    private fun startNavigation(route: Route, place: Place, origin: Fix) {
+    private fun startNavigation(route: Route, place: Place, origin: Fix, alternatives: List<Route> = emptyList()) {
         _endConfirm.value = false
-        host.start(route, place, origin)
+        host.start(route, place, origin, alternatives)
         _screen.value = ScreenState.Navigation
     }
 

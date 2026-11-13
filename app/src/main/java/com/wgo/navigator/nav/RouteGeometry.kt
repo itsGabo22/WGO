@@ -92,6 +92,35 @@ class RouteGeometry(val route: Route) {
     fun distanceTo(s: Int, t: Double, px: Double, py: Double): Double =
         hypot(px - (xs[s] + t * (xs[s + 1] - xs[s])), py - (ys[s] + t * (ys[s + 1] - ys[s])))
 
+    /** P11: the distance in metres from ([lat], [lon]) to the whole polyline (every segment). */
+    fun distanceTo(lat: Double, lon: Double): Double {
+        val px = x(lon)
+        val py = y(lat)
+        var best = Double.MAX_VALUE
+        for (s in 0 until size - 1) {
+            val d = distanceTo(s, projectT(s, px, py), px, py)
+            if (d < best) best = d
+        }
+        return best
+    }
+
+    /** P11: how far along the polyline the point nearest to ([lat], [lon]) lies. */
+    fun alongOf(lat: Double, lon: Double): Double {
+        val px = x(lon)
+        val py = y(lat)
+        var best = Double.MAX_VALUE
+        var along = 0.0
+        for (s in 0 until size - 1) {
+            val t = projectT(s, px, py)
+            val d = distanceTo(s, t, px, py)
+            if (d < best) {
+                best = d
+                along = cum[s] + t * (cum[s + 1] - cum[s])
+            }
+        }
+        return along
+    }
+
     /** The segment that contains [along] (binary search). */
     fun segmentAt(along: Double): Int {
         if (along <= 0.0) return 0

@@ -31,15 +31,22 @@ class NavigationSession(
     private val router: Router,
     private val scope: CoroutineScope,
     private val clock: NavClock,
-    private val tickMs: Long = 1_000L
+    private val tickMs: Long = 1_000L,
+    /** P11: the other routes OSRM offered at the start (each with its steps). */
+    initialAlternatives: List<Route> = emptyList()
 ) {
     private val _state = MutableStateFlow<NavState>(NavState.WaitingForGps)
     val state: StateFlow<NavState> = _state.asStateFlow()
 
     private val _route = MutableStateFlow(initialRoute)
 
-    /** The route being followed (replaced after a successful reroute). */
+    /** The route being followed (replaced after a successful reroute or a switch to an alternative). */
     val route: StateFlow<Route> = _route.asStateFlow()
+
+    private val _alternatives = MutableStateFlow(initialAlternatives)
+
+    /** P11: the known routes besides [route], best first (empty without alternatives). */
+    val alternatives: StateFlow<List<Route>> = _alternatives.asStateFlow()
 
     private val _remaining = MutableStateFlow(initialRoute.polyline)
 
@@ -56,7 +63,11 @@ class NavigationSession(
     var rerouteRequests = 0
         private set
 
-    private val engine = NavigationEngine(initialRoute, clock, { _events.tryEmit(it) }, ::requestReroute)
+    private val engine = NavigationEngine(initialRoute, clock, { _events.tryEmit(it) }, ::requestReroute, initialAlternatives)
+
+    init {
+        _alternatives.value = engine.alternatives
+    }
     private var tickJob: Job? = null
     private var rerouteJob: Job? = null
     private var remainingAlong = 0.0
@@ -97,6 +108,31 @@ class NavigationSession(
         engine.expectedFixIntervalMs = ms
     }
 
+    /** P11: the user picked the known route [index] of [alternatives] (no request). */
+    fun selectRoute(index: Int) {
+        if (engine.selectRoute(index)) publish(routeChanged = true)
+    }
+
+    /**
+     * P11 RUTA chip: the next route in a stable order (fastest first, as OSRM gave them) becomes active, with no request.
+     * The order is renewed when a reroute brings new routes.
+     */
+    fun selectNext() {
+        val order = routeOrder
+        if (order.size < 2) return
+        val next = order[(order.indexOfFirst { it === _route.value } + 1).mod(order.size)]
+        val index = engine.alternatives.indexOfFirst { it === next }
+        if (index >= 0) selectRoute(index)
+    }
+
+    /** P11: the known routes in a stable order (the active one is one of them). */
+    private var routeOrder: List<Route> = listOf(initialRoute) + engine.alternatives
+
+    private val _choice = MutableStateFlow(RouteChoice(0, routeOrder.size))
+
+    /** P11: which of the known routes is active (1-based on the chip: "RUTA 2/3") and how many there are. */
+    val choice: StateFlow<RouteChoice> = _choice.asStateFlow()
+
     /** LOST ROUTE -> retry. */
     fun retryReroute() {
         engine.retryReroute()
@@ -115,13 +151,25 @@ class NavigationSession(
         rerouteRequests++
         val mode = _route.value.mode
         rerouteJob = scope.launch {
-            val result = router.route(from, destination, mode).valueOrNull()
-            if (engine.onRerouteResult(result) && result != null) _route.value = result
-            publish(routeChanged = result != null)
+            // P11: the new route comes with its own alternatives (one request).
+            val result = router.routes(from, destination, mode).valueOrNull()
+            engine.onRerouteResult(result?.firstOrNull(), result?.drop(1).orEmpty())
+            publish()
         }
     }
 
     private fun publish(routeChanged: Boolean = false) {
+        var changed = routeChanged
+        // A reroute or a switch to an alternative replaced the active route.
+        val active = engine.geometry.route
+        if (active !== _route.value) {
+            _route.value = active
+            changed = true
+        }
+        if (engine.alternatives != _alternatives.value) _alternatives.value = engine.alternatives
+        if (routeOrder.none { it === active }) routeOrder = listOf(active) + engine.alternatives // a reroute's routes
+        val choice = RouteChoice(routeOrder.indexOfFirst { it === active }.coerceAtLeast(0), routeOrder.size)
+        if (choice != _choice.value) _choice.value = choice
         val s = engine.state
         _state.value = s
         val nav = when (s) {
@@ -132,11 +180,14 @@ class NavigationSession(
             is NavState.GpsLost -> s.last
             else -> null
         } ?: return
-        if (routeChanged || kotlin.math.abs(nav.progressM - remainingAlong) >= REMAINING_STEP_M) {
+        if (changed || kotlin.math.abs(nav.progressM - remainingAlong) >= REMAINING_STEP_M) {
             remainingAlong = nav.progressM
             _remaining.value = engine.geometry.remainingFrom(nav.progressM)
         }
     }
+
+    /** P11: the active route's place among the known routes ([index] 0-based) and their [count]. */
+    data class RouteChoice(val index: Int, val count: Int)
 
     companion object {
         /** The radar's remaining route is cut again only after this much progress. */
