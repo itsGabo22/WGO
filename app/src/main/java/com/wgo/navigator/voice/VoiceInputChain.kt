@@ -7,6 +7,7 @@ import com.wgo.navigator.core.VoiceInput
 import com.wgo.navigator.core.WgoFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import com.wgo.navigator.net.isOnline
 
 enum class VoiceStrategy { InApp, SystemDialog, None }
 
@@ -19,9 +20,13 @@ enum class VoiceStrategy { InApp, SystemDialog, None }
 class VoiceInputChain(
     context: Context,
     private val inApp: InAppVoiceInput = InAppVoiceInput(context),
-    val dialog: SystemVoiceDialog = SystemVoiceDialog()
+    val dialog: SystemVoiceDialog = SystemVoiceDialog(),
+    online: (() -> Boolean)? = null
 ) : VoiceInput {
     private val app = context.applicationContext
+
+    /** P10: without a network the system speech dialog is never opened (it only says "no network" in its own UI). */
+    private val online: () -> Boolean = online ?: { isOnline(app) }
 
     @Volatile
     private var inAppBroken = false
@@ -52,15 +57,26 @@ class VoiceInputChain(
                     if (earlyUnavailable && SystemVoiceDialog.isAvailable(app)) fallBack = true else emit(event)
                 }
                 if (fallBack) {
-                    inAppBroken = true
-                    VoiceLog.event("strategy=SystemDialog reason=inapp_failed_before_ready")
-                    emit(VoiceEvent.AwaitingSystem)
-                    emit(dialog.request(language))
+                    if (!online()) {
+                        // A failure caused by a missing network: no dialog, and later presses keep the in-app recognizer.
+                        VoiceLog.event("strategy=none reason=offline")
+                        emit(VoiceEvent.Failed(WgoFailure.Offline))
+                    } else {
+                        inAppBroken = true
+                        VoiceLog.event("strategy=SystemDialog reason=inapp_failed_before_ready")
+                        emit(VoiceEvent.AwaitingSystem)
+                        emit(dialog.request(language))
+                    }
                 }
             }
             VoiceStrategy.SystemDialog -> {
-                emit(VoiceEvent.AwaitingSystem)
-                emit(dialog.request(language))
+                if (!online()) {
+                    VoiceLog.event("strategy=none reason=offline")
+                    emit(VoiceEvent.Failed(WgoFailure.Offline))
+                } else {
+                    emit(VoiceEvent.AwaitingSystem)
+                    emit(dialog.request(language))
+                }
             }
             VoiceStrategy.None -> emit(VoiceEvent.Failed(WgoFailure.Unavailable))
         }

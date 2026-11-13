@@ -163,23 +163,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
                 baseUrl = BuildConfig.LLM_BASE_URL.ifBlank { LlmInterpreter.DEFAULT_BASE_URL },
                 model = BuildConfig.STT_MODEL.ifBlank { TranscriptionClient.DEFAULT_MODEL },
                 http = HttpClient(WgoUserAgent.plain),
-                budget = sttBudget
+                budget = sttBudget,
+                online = { isOnline(application) }
             )
         )
     }
 
     /** The P8 recognizer chain: rung 2 of the ladder (and the only rung in SISTEMA mode or without a key). */
-    private val systemVoice = VoiceInputChain(application)
+    private val systemVoice = VoiceInputChain(application, online = { isOnline(application) })
 
     private val voice = VoiceLadder(
         system = systemVoice,
         systemStrategy = systemVoice::strategy,
+        online = { isOnline(application) },
         cloud = cloudVoice,
         cloudBlocker = {
             when {
                 speechMode() == SpeechMode.System -> "setting_system"
                 !cloudNoticeAnswered() -> "notice"
-                !isOnline(application) -> "offline"
                 sttBudget.coolingDown() -> "cooldown"
                 sttBudget.capReachedAsKnown() -> "daily_cap"
                 else -> null
@@ -233,6 +234,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         if (cloudVoice != null && speechMode() == SpeechMode.Cloud && !cloudNoticeAnswered()) {
             if (_screen.value != ScreenState.VoiceNotice) VoiceLog.event("notice_shown")
             _screen.value = ScreenState.VoiceNotice
+            return
+        }
+        // P10: no network, no voice: say so at once in WGO's own surface (no capture, no recognizer, no system dialog).
+        if (!isOnline(getApplication())) {
+            VoiceLog.press(" rung=none")
+            VoiceLog.event("offline_at_press")
+            fail(PipelineError.Offline, Step.Listen)
             return
         }
         _transcript.value = ""
@@ -602,6 +610,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
         failedStep = step
         _error.value = error
         _screen.value = ScreenState.Error
+        if (error == PipelineError.Offline) _haptics.tryEmit(HapticEvent.HeavyClick) // spec section 8: no connection
         WgoMetrics.event("pipeline error=$error step=$step")
     }
 

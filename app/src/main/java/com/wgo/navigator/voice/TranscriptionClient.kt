@@ -32,7 +32,9 @@ class TranscriptionClient(
     private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
     private val totalTimeoutMs: Long = TOTAL_TIMEOUT_MS,
     private val retryWindowMs: Long = RETRY_WINDOW_MS,
-    private val now: () -> Long = ::elapsed
+    private val now: () -> Long = ::elapsed,
+    /** P10: no upload and no retry without a network (fail fast; the ladder shows SIN CONEXIÓN). */
+    private val online: () -> Boolean = { true }
 ) : Transcriber {
     private val endpoint = baseUrl.trimEnd('/') + "/audio/transcriptions"
     private val warmUrl = baseUrl.trimEnd('/') + "/models"
@@ -47,6 +49,10 @@ class TranscriptionClient(
 
     override suspend fun transcribe(wav: ByteArray, language: Language): Transcription {
         if (apiKey.isBlank()) return Transcription.Failed(WgoFailure.Unavailable, "no_key")
+        if (!online()) {
+            VoiceLog.event("stt_skip reason=offline")
+            return Transcription.Failed(WgoFailure.Offline, "offline")
+        }
         if (!budget.tryAcquire()) {
             val why = if (budget.coolingDown()) "cooldown" else "daily_cap"
             VoiceLog.event("stt_skip reason=$why")
@@ -85,7 +91,7 @@ class TranscriptionClient(
                     is Outcome.Err -> {
                         VoiceLog.event("stt_response code=${outcome.failure} ms=$ms")
                         // One retry, only when the connection itself failed early (never after a slow answer).
-                        if (outcome.failure == WgoFailure.Offline && attempt == 1 && now() - started < retryWindowMs) {
+                        if (outcome.failure == WgoFailure.Offline && attempt == 1 && now() - started < retryWindowMs && online()) {
                             VoiceLog.event("stt_retry")
                             continue
                         }
