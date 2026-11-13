@@ -410,6 +410,15 @@ release install, its launch and its cold start were checked there).
 | Cold start (release, `am start -W`) | emulator / watch | 873, 851, 900 ms / 1,542, 911, 882 ms |
 | Compass accuracy (target +-20 deg stationary) | watch | not verified (no live session) |
 
+## Known limitation: stale distance in ambient (P11, not fixed)
+
+In ambient (the dimmed screen) Wear OS redraws the app only about once a minute, so the maneuver distance shown there
+can be up to a minute old; with the screen off nothing is shown. The turn haptics stay accurate in both cases: the
+trip runs in the foreground service and plays them from the engine's events (measured again in P11 on the emulator:
+Tick and DoubleClick on time in ambient). Backlog (proposed fix, not implemented): content that stays true while stale
+(the street and the maneuver, no metre count; "PRONTO" / "SOON" wording within the approach distance instead of a
+number) and an optional "screen on while navigating" setting for users who accept the battery cost.
+
 ## Top remaining power and resource risks (real watch)
 
 1. **GPS for the whole trip, wrist down included** (P6-A): the foreground service keeps one high-accuracy request; the
