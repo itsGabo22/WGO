@@ -53,7 +53,9 @@ data class PlaceCandidate(
     /** P11: query tokens matched only by prefix, sound or spelling (index rows; fewer ranks first inside a tier). */
     val inexact: Int = 0,
     /** P11: the query matched the row's brand ("Mister Pollo MRP"). */
-    val brand: Boolean = false
+    val brand: Boolean = false,
+    /** P11: the row's normalised brand (empty when none): branches of one chain share it. */
+    val brandKey: String = ""
 ) {
     /** A destination category (docs/PLACE_SEARCH.md, "Landmark prior"). */
     val landmark: Boolean get() = PlaceCategories.isLandmark(place.category)
@@ -170,7 +172,8 @@ class PlaceResolver(
             hits.forEach {
                 candidates += PlaceCandidate(
                     it.place.toPlace(), it.tier, it.categoryBoost, it.distanceM, it.place.confidence, PlaceSource.Index,
-                    inexact = it.inexact, brand = it.brand
+                    inexact = it.inexact, brand = it.brand,
+                    brandKey = if (it.place.brand.isEmpty()) "" else PlaceText.normalize(it.place.brand)
                 )
             }
         }
@@ -228,6 +231,13 @@ class PlaceResolver(
             expand(chooser, request, name, language, s)
         }
         var ordered = dedupe(sortedCandidates(rankByHint(request, s)))
+        // P11 chain: its branches nearest to the user first (the position stays on the watch); no model call.
+        chainOf(request, ordered, hasFix = fix != null)?.let { branches ->
+            lastRequests = s.requests
+            lastAiCalls = s.aiCalls
+            WgoMetrics.event("places resolved chain n=${branches.size} nearest=${request.nearest} requests=${s.requests} ai_calls=${s.aiCalls}")
+            return Resolution.Found(branches, uncertain = !request.nearest)
+        }
         // Role 2 (P8): the language model picks among the real candidates by id when the ranking is ambiguous.
         if (chooser != null && ChoiceTriggers.shouldChoose(request, ordered) && s.takeAiCall()) {
             ordered = choose(chooser, request, name, ordered, language)
@@ -400,6 +410,55 @@ class PlaceResolver(
 
         /** Language-model calls per utterance, the interpreter's included (docs/PLACE_SEARCH.md, P8). */
         const val MAX_AI_CALLS = 2
+
+        /** P11: two branches of a chain closer than this are one place (Overture copies at the same mall). */
+        const val BRANCH_DEDUPE_M = 60.0
+
+        /** P11: a name chain is the query plus at most this many words ("Lili Pink Unicentro"). */
+        private const val MAX_BRANCH_SUFFIX = 3
+
+        /**
+         * P11 (docs/PLACE_SEARCH.md, "Brand variants and chains"): when the best candidate belongs to a chain, up to
+         * [MAX_CANDIDATES] of its branches within [FAR_KM], nearest first with a position ([hasFix]; distances were
+         * computed on the watch), else most confident first, and with a landmark hint the branches that match it
+         * first; null when it is not a chain (fewer than 2 branches, a landmark, a nickname, my places). Branches: the
+         * candidates that share the best one's brand (the query matched it), or whose name is exactly the query's words
+         * followed by at most [MAX_BRANCH_SUFFIX] words ("Max" is not "Maxiel"); a category word the user said must
+         * match every branch ("panadería Nogal" is not "Nogal Suite Hotel"). Two branches within [BRANCH_DEDUPE_M]
+         * keep the better-matched one. The exact whole name of one place with no brand behind it is that place.
+         */
+        fun chainOf(request: PlaceRequest, ordered: List<PlaceCandidate>, hasFix: Boolean): List<PlaceCandidate>? {
+            val top = ordered.firstOrNull() ?: return null
+            if (top.source != PlaceSource.Index || top.tier < 2 || top.landmark || request.fromAlias || request.address) return null
+            val query = PlaceCategories.core(PlaceText.tokens(request.name))
+            if (query.isEmpty()) return null
+            fun namedChain(c: PlaceCandidate): Boolean {
+                val name = PlaceCategories.core(PlaceText.tokens(c.place.name))
+                if (name.size < query.size || name.size > query.size + MAX_BRANCH_SUFFIX) return false
+                return query.indices.all { PlaceText.quality(query[it], name[it]) == PlaceText.EQUAL }
+            }
+            val byBrand = top.brand && top.brandKey.isNotEmpty()
+            val byName = namedChain(top)
+            if (!byBrand && !byName) return null
+            val saidCategory = ordered.any { it.categoryBoost }
+            val members = ordered.filter { c ->
+                c.source == PlaceSource.Index && c.tier >= 2 && !c.landmark && c.distanceM <= FAR_KM * 1000 &&
+                    (!saidCategory || c.categoryBoost) &&
+                    ((byBrand && c.brand && c.brandKey == top.brandKey) || (byName && namedChain(c)))
+            }
+            // One row per place: the better-matched copy wins ("Mister Pollo" over the "Mister Pizza" row of its brand).
+            val kept = ArrayList<PlaceCandidate>()
+            for (c in members.sortedWith(compareByDescending<PlaceCandidate> { it.tier }.thenBy { it.inexact })) {
+                if (kept.none { RadarProjection.distanceMeters(it.place.coord, c.place.coord) <= BRANCH_DEDUPE_M }) kept += c
+            }
+            if (kept.size < 2) return null
+            // The whole name of one place, said exactly, with no brand behind it: that place, not a chain.
+            fun exact(c: PlaceCandidate) = c.tier == 3 && c.inexact == 0
+            if (!byBrand && exact(top) && kept.count(::exact) < 2) return null
+            val order = compareByDescending<PlaceCandidate> { it.hintScore }
+                .then(if (hasFix) compareBy { it.distanceM } else compareByDescending { it.confidence })
+            return kept.sortedWith(order).take(MAX_CANDIDATES)
+        }
 
         /** Region words every Pasto place may carry: never enough to tie a name to the destination. */
         private val REGION = setOf("pasto", "narino", "colombia", "san", "juan")
