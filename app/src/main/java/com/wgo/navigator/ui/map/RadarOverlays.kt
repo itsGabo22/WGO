@@ -46,7 +46,9 @@ fun RadarOverlays(
     clock: WgoClock,
     modifier: Modifier = Modifier,
     /** The chevron's rotation in degrees (north-up maps, P8). */
-    chevronDegrees: Float = 0f
+    chevronDegrees: Float = 0f,
+    /** P11: the other known routes, projected; drawn under the active route, lighter, never animated. */
+    alternatives: List<Path> = emptyList()
 ) {
     val reduceMotion = LocalWgoReduceMotion.current
     val ringStroke = 1.2.dp.atLeastRealDp()
@@ -81,6 +83,7 @@ fun RadarOverlays(
                     val t = if (reduceMotion) 0L else clock.millis
                     val anim = MapAnim(t, look.stepped)
 
+                    for (alt in alternatives) drawAlternative(alt, palette, u)
                     if (route != null) drawRoute(route, palette, paint, flow = if (reduceMotion) 0f else anim.phase(1000))
 
                     if (maneuver != null) {

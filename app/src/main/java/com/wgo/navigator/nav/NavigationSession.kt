@@ -50,6 +50,16 @@ class NavigationSession(
     /** P11: the known routes besides [route], best first (empty without alternatives). */
     val alternatives: StateFlow<List<Route>> = _alternatives.asStateFlow()
 
+    private val _altLines = MutableStateFlow<List<AltLine>>(emptyList())
+
+    /**
+     * P11: the alternatives as the map draws them (what is left of each from the user, its time difference with the
+     * active route, a label point); updated with [remaining].
+     */
+    val alternativeLines: StateFlow<List<AltLine>> = _altLines.asStateFlow()
+    private var lastPosition: GeoCoord? = null
+    private var altCache: Pair<Route, List<Pair<RouteGeometry, GeoCoord>>>? = null
+
     private val _remaining = MutableStateFlow(initialRoute.polyline)
 
     /**
@@ -89,6 +99,7 @@ class NavigationSession(
     }
 
     fun onFix(fix: Fix) {
+        lastPosition = GeoCoord(fix.lat, fix.lon)
         engine.onFix(fix)
         publish()
     }
@@ -191,11 +202,37 @@ class NavigationSession(
         if (changed || kotlin.math.abs(nav.progressM - remainingAlong) >= REMAINING_STEP_M) {
             remainingAlong = nav.progressM
             _remaining.value = engine.geometry.remainingFrom(nav.progressM)
+            val lines = altLines(nav)
+            if (lines != _altLines.value) _altLines.value = lines
         }
     }
 
+    /** P11: each alternative from the point nearest to the user, with its remaining time minus the active one's. */
+    private fun altLines(nav: NavState.Navigating): List<AltLine> {
+        val alts = engine.alternatives
+        if (alts.isEmpty()) return emptyList()
+        val active = engine.geometry
+        val cached = altCache?.takeIf { (route, list) ->
+            route === active.route && list.size == alts.size && list.indices.all { list[it].first.route === alts[it] }
+        } ?: Pair(active.route, alts.map { a -> RouteGeometry(a).let { g -> g to labelPoint(g, active) } }).also { altCache = it }
+        val at = lastPosition ?: nav.snapped
+        val activeLeftS = if (active.total > 0) active.route.durationS * nav.remainingM / active.total else 0.0
+        return cached.second.map { (g, label) ->
+            val along = g.alongOf(at.lat, at.lon)
+            val leftS = if (g.total > 0) g.route.durationS * (g.total - along) / g.total else 0.0
+            AltLine(g.remainingFrom(along), leftS - activeLeftS, label)
+        }
+    }
+
+    /** The vertex of [alt] farthest from the active route: where its time label is easy to tell apart. */
+    private fun labelPoint(alt: RouteGeometry, active: RouteGeometry): GeoCoord =
+        alt.route.polyline.maxByOrNull { active.distanceTo(it.lat, it.lon) } ?: alt.route.polyline.last()
+
     /** P11: the active route's place among the known routes ([index] 0-based) and their [count]. */
     data class RouteChoice(val index: Int, val count: Int)
+
+    /** P11: an alternative for the map: [points] left of it, [deltaS] its remaining time minus the active one's. */
+    data class AltLine(val points: List<GeoCoord>, val deltaS: Double, val label: GeoCoord)
 
     companion object {
         /** The radar's remaining route is cut again only after this much progress. */

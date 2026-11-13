@@ -133,7 +133,9 @@ fun ScreenActiveNavigation(
     /** P8: north up (default; the map never turns) or heading up. */
     northUp: Boolean = true,
     /** The offline places index: heading up draws upright landmark labels from it (P8). */
-    landmarkIndex: com.wgo.navigator.places.PlaceIndex? = null
+    landmarkIndex: com.wgo.navigator.places.PlaceIndex? = null,
+    /** P11 RUTA chip: the next known route becomes active (no network). */
+    onNextRoute: () -> Unit = {}
 ) {
     if (navState != null &&
         (locationPermission == PermissionStatus.Denied || locationPermission == PermissionStatus.PermanentlyDenied)
@@ -171,6 +173,8 @@ fun ScreenActiveNavigation(
         var tileSize by remember { mutableDoubleStateOf(RadarProjection.DEFAULT_TILE_SIZE_PX) }
         // The HUD state last shown (for the landmark labels' keep-clear boxes; set after the HUD is composed).
         var hudShown by remember { mutableStateOf(HudMode.Compact) }
+        var routeChipShown by remember { mutableStateOf(false) }
+        val language = LocalLanguage.current
         // Heading up only: the index is loaded off the main thread (once per process) and its landmark rows kept.
         var landmarks by remember { mutableStateOf(emptyList<com.wgo.navigator.places.IndexedPlace>()) }
         LaunchedEffect(northUp, landmarkIndex) {
@@ -196,8 +200,10 @@ fun ScreenActiveNavigation(
                 viewBearing = explore.viewBearing(radar.bearing),
                 northUp = northUp,
                 landmarks = landmarks,
-                labelBlocked = landmarkLabelBlocks(hudShown, explore.exploring),
-                onTileSize = { tileSize = it }
+                labelBlocked = landmarkLabelBlocks(hudShown, explore.exploring, routeChipShown),
+                onTileSize = { tileSize = it },
+                alternatives = radar.alternatives,
+                altLabel = { minutes -> altDeltaLabel(minutes, language) }
             )
         }
 
@@ -284,7 +290,8 @@ fun ScreenActiveNavigation(
                 maneuver = nav?.next,
                 rerouting = navState is NavState.OffRoute || navState is NavState.Rerouting,
                 exploring = explore.exploring,
-                nowMs = SystemClock.elapsedRealtime()
+                nowMs = SystemClock.elapsedRealtime(),
+                routeKey = radar.routeId
             )
             val hud = tracker.update(input)
             val shownNow = forcedHud ?: hud.shown
@@ -317,15 +324,39 @@ fun ScreenActiveNavigation(
             val provider by MapTiles.provider.collectAsState()
             MapAttributionArc(visible = explore.exploring || tripStart, provider = provider)
 
+            // P11 RUTA k/n: the first 15 s of the trip (HUD compact) and explore mode, with 2+ known routes; in explore
+            // it takes the RECENTER slot (a HUD tap and the auto-return still recenter). Hidden over the user.
+            var routeWindow by remember { mutableStateOf(true) }
+            LaunchedEffect(Unit) {
+                delay(ROUTE_CHIP_START_MS)
+                routeWindow = false
+            }
+            val density = LocalDensity.current.density
+            val viewCenter = explore.viewCenter(radar.location)
+            val userDp = if (viewCenter == null || screenSize == IntSize.Zero) null else RadarProjection.toScreen(
+                radar.location, viewCenter, if (northUp) 0.0 else (explore.viewBearing(radar.bearing) ?: radar.bearing).toDouble(), zoom,
+                screenSize.width / 2f, screenSize.height * USER_ANCHOR_Y_FRACTION, tileSize
+            ).let { p -> Offset(p.x / density, p.y / density) }
+            val routeChip = radar.routeCount >= 2 && RecenterRule.visible(userDp?.x, userDp?.y) &&
+                (explore.exploring || (routeWindow && shownNow == HudMode.Compact))
+            androidx.compose.runtime.SideEffect { routeChipShown = routeChip }
+            if (routeChip) {
+                val index = radar.routeIndex + 1
+                val description = String.format(string(StringKey.ROUTE_CHIP_A11Y), index, radar.routeCount)
+                WgoChip(
+                    label = String.format(string(StringKey.ROUTE_CHIP), index, radar.routeCount),
+                    onClick = onNextRoute,
+                    width = ROUTE_CHIP_WIDTH,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = RecenterRule.CENTER_Y_DP.dp - wgoTouchSide(32.dp) / 2)
+                        .semantics(mergeDescendants = true) { contentDescription = description }
+                )
+            }
+
             // RECENTER (explore only): 40 dp `primary` circle centred at (113.5, 108), 48 real dp touch; hidden while
             // the user's chevron is under it (P7, RecenterRule), so it never covers the user.
-            if (explore.exploring) {
-                val density = LocalDensity.current.density
-                val center = explore.viewCenter(radar.location)
-                val userDp = if (center == null || screenSize == IntSize.Zero) null else RadarProjection.toScreen(
-                    radar.location, center, if (northUp) 0.0 else (explore.viewBearing(radar.bearing) ?: radar.bearing).toDouble(), zoom,
-                    screenSize.width / 2f, screenSize.height * USER_ANCHOR_Y_FRACTION, tileSize
-                ).let { p -> Offset(p.x / density, p.y / density) }
+            if (explore.exploring && !routeChip) {
                 if (RecenterRule.visible(userDp?.x, userDp?.y)) {
                     RecenterButton(
                         onClick = { explore.startReturn() },
@@ -421,12 +452,26 @@ internal fun MapControlButton(
  * The controls over the map, in reference dp (spec section 7 geometry): heading-up landmark labels keep clear of them
  * (P8). The HUD box follows the state shown; the recenter button only while exploring.
  */
-internal fun landmarkLabelBlocks(hud: HudMode, exploring: Boolean): List<com.wgo.navigator.ui.map.LabelBlock> = buildList {
+internal fun landmarkLabelBlocks(hud: HudMode, exploring: Boolean, routeChip: Boolean = false): List<com.wgo.navigator.ui.map.LabelBlock> = buildList {
     add(if (hud == HudMode.Expanded) com.wgo.navigator.ui.map.LabelBlock(38.5f, 30f, 188.5f, 120f) else com.wgo.navigator.ui.map.LabelBlock(57.5f, 22f, 169.5f, 58f))
     add(com.wgo.navigator.ui.map.LabelBlock(21.5f, 130f, 61.5f, 170f)) // zoom -
     add(com.wgo.navigator.ui.map.LabelBlock(165.5f, 130f, 205.5f, 170f)) // zoom +
     add(com.wgo.navigator.ui.map.LabelBlock(70.5f, 176f, 156.5f, 208f)) // CANCELAR
     if (exploring) add(com.wgo.navigator.ui.map.LabelBlock(93.5f, 88f, 133.5f, 128f)) // recenter
+    if (routeChip) add(com.wgo.navigator.ui.map.LabelBlock(73.5f, 92f, 153.5f, 124f)) // RUTA k/n (P11)
+}
+
+/** P11: the RUTA chip shows this long at the start of a trip (then only in explore mode). */
+private const val ROUTE_CHIP_START_MS = 15_000L
+
+/** P11: the RUTA chip's width (its 48 REAL dp touch box stays clear of the zoom buttons' down to s = 0.846). */
+internal val ROUTE_CHIP_WIDTH = 80.dp
+
+/** P11: "+2 MIN", "−1 MIN" or "=" for an alternative's time difference. */
+internal fun altDeltaLabel(minutes: Int, language: com.wgo.navigator.Language): String = when {
+    minutes > 0 -> String.format(com.wgo.navigator.ui.stringFor(StringKey.ALT_DELTA_MORE, language), minutes)
+    minutes < 0 -> String.format(com.wgo.navigator.ui.stringFor(StringKey.ALT_DELTA_LESS, language), -minutes)
+    else -> com.wgo.navigator.ui.stringFor(StringKey.ALT_DELTA_SAME, language)
 }
 
 /** The attribution shows this long when the trip's map first appears (spec 9.1, P8). */

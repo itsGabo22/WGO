@@ -259,6 +259,19 @@ fun DrawScope.drawRoute(route: Path, palette: WgoMapPalette, paint: RadarPaint, 
     drawPath(route, palette.routeHalo, style = paint.flowStrokes[k])
 }
 
+/** P11: another known route, lighter than the active one and never animated (the route colour at 45 %, 3 dp). */
+fun DrawScope.drawAlternative(path: Path, palette: WgoMapPalette, u: Float) {
+    drawPath(
+        path, palette.route.copy(alpha = ALTERNATIVE_ALPHA),
+        style = androidx.compose.ui.graphics.drawscope.Stroke(
+            width = 3f * u, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round
+        )
+    )
+}
+
+/** P11: the alternatives' alpha (docs/design, "Best route, alternatives and live reroute"). */
+const val ALTERNATIVE_ALPHA = 0.45f
+
 fun DrawScope.drawManeuverNode(palette: WgoMapPalette, fill: Color, at: Offset, u: Float, breathe: Float, look: MapLook) {
     scale(breathe, breathe, pivot = at) {
         if (look.square) {

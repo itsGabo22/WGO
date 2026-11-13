@@ -441,6 +441,7 @@ class MainActivity : ComponentActivity() {
                                     onEnd = appViewModel::endNavigation,
                                     onKeep = appViewModel::keepNavigating,
                                     onRetryReroute = appViewModel::retryReroute,
+                                    onNextRoute = appViewModel::selectNextRoute,
                                     onRetryGps = appViewModel::retryGps,
                                     locationPermission = locationPermission,
                                     onRetryLocation = appViewModel::retryLocation,

@@ -24,7 +24,9 @@ object HudRules {
         /** OFF ROUTE or REROUTING: the HUD shows the status line. */
         val rerouting: Boolean,
         val exploring: Boolean,
-        val nowMs: Long
+        val nowMs: Long,
+        /** P11: the active route's identity: a switch to another known route (no OFF ROUTE before it) opens the window too. */
+        val routeKey: Any? = null
     )
 
     /** The user's tap: [mode] for as long as the next maneuver is [maneuver]. */
@@ -37,7 +39,9 @@ object HudRules {
         val wasRerouting: Boolean,
         /** When the guidance came back after OFF ROUTE / REROUTING (null: no reroute window). */
         val newRouteAtMs: Long?,
-        val shown: HudMode
+        val shown: HudMode,
+        /** P11: the route the last step saw. */
+        val routeKey: Any? = null
     )
 
     /** A trip starts COMPACT unless the first maneuver is within [EXPAND_AT_M]. */
@@ -53,9 +57,10 @@ object HudRules {
     fun step(state: State, input: Input): State {
         val auto = automatic(input.distanceToNextM, state.auto)
         val override = state.override?.takeIf { it.maneuver == input.maneuver }
+        val switched = state.routeKey != null && input.routeKey != null && input.routeKey != state.routeKey
         val newRouteAt = when {
             input.rerouting -> null
-            state.wasRerouting -> input.nowMs
+            state.wasRerouting || switched -> input.nowMs
             else -> state.newRouteAtMs?.takeIf { input.nowMs - it < REROUTE_EXPAND_MS }
         }
         val shown = when {
@@ -64,7 +69,7 @@ object HudRules {
             input.rerouting || newRouteAt != null -> HudMode.Expanded
             else -> auto
         }
-        return State(auto, override, input.rerouting, newRouteAt, shown)
+        return State(auto, override, input.rerouting, newRouteAt, shown, input.routeKey ?: state.routeKey)
     }
 
     /** A tap on the HUD (not while exploring: there it recenters): the other state until the maneuver changes. */

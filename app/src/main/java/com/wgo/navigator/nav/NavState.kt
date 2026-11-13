@@ -57,6 +57,9 @@ sealed interface NavEvent {
     data class AtTurn(val step: RouteStep, val distanceM: Double) : NavEvent
     data object OffRouteDetected : NavEvent
     data object Rerouted : NavEvent
+
+    /** P11: the user drove onto a known alternative, now the active route (followed by [Rerouted]). */
+    data object AlternativeTaken : NavEvent
     data object GpsLost : NavEvent
     data object GpsRecovered : NavEvent
     data object Arrived : NavEvent

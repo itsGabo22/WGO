@@ -53,7 +53,7 @@ class LiveRadarSource(
                 if (!prev.searching && bearing == prev.bearing &&
                     RadarProjection.distanceMeters(prev.location, location) < MIN_REDRAW_MOVE_M
                 ) return
-                _state.value = RadarState(
+                _state.value = prev.copy(
                     location = location,
                     bearing = bearing,
                     route = route,
@@ -75,6 +75,14 @@ class LiveRadarSource(
         route = remaining
         maneuver = nextManeuver
         _state.update { it.copy(route = remaining, maneuver = nextManeuver) }
+    }
+
+    /** P11: the other known routes, which route is active among them, and its identity (see [RadarState]). */
+    fun setAlternatives(alternatives: List<RadarAlt>, routeIndex: Int, routeCount: Int, routeId: Int) {
+        _state.update {
+            if (it.alternatives == alternatives && it.routeIndex == routeIndex && it.routeCount == routeCount && it.routeId == routeId) it
+            else it.copy(alternatives = alternatives, routeIndex = routeIndex, routeCount = routeCount, routeId = routeId)
+        }
     }
 
     companion object {

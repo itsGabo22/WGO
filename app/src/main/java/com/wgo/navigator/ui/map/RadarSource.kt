@@ -13,6 +13,10 @@ enum class BlipKind { Incident, Poi }
 @Immutable
 data class RadarBlip(val position: GeoCoord, val kind: BlipKind)
 
+/** P11: another known route: [points] left of it, [deltaMin] its time difference (minutes, rounded), a [label] point. */
+@Immutable
+data class RadarAlt(val points: List<GeoCoord>, val deltaMin: Int, val label: GeoCoord)
+
 /** Everything the radar needs to draw one frame of data. Updated at most once per second. */
 @Immutable
 data class RadarState(
@@ -27,7 +31,14 @@ data class RadarState(
     /** Accuracy radius of the last fix in meters; NaN when unknown (demo data). */
     val accuracyM: Float = Float.NaN,
     /** True while there is no usable fix yet (or only coarse ones): the position shown is not trustworthy. */
-    val searching: Boolean = false
+    val searching: Boolean = false,
+    /** P11: the other known routes, drawn lighter. */
+    val alternatives: List<RadarAlt> = emptyList(),
+    /** P11: the active route among the known ones (0-based) and how many there are (the RUTA chip). */
+    val routeIndex: Int = 0,
+    val routeCount: Int = 1,
+    /** P11: changes whenever the active route changes (reroute or switch): the HUD opens its 4 s window. */
+    val routeId: Int = 0
 )
 
 /** The radar's data input: [LiveRadarSource] in the app, [DemoRadarSource] in previews and demos. */

@@ -300,6 +300,7 @@ class NavigationEngine(
 
         // P11: on a known alternative (and away from the active route) for ALT_FIXES fixes: it becomes active.
         if (followsAlternative(fix)) {
+            onEvent(NavEvent.AlternativeTaken)
             switchTo(altCandidate)
             return
         }

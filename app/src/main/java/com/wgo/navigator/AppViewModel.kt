@@ -825,6 +825,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Ha
     }
 
     /** RETRY on the lost-route surface: a fresh series of reroutes. */
+    /** P11 RUTA chip: the next known route (no network); Click haptic (spec section 8: a confirmed choice). */
+    fun selectNextRoute() {
+        host.selectNextRoute()
+        _haptics.tryEmit(HapticEvent.Click)
+    }
+
     fun retryReroute() {
         host.retryReroute()
     }

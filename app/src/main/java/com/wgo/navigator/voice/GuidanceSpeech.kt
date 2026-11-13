@@ -33,6 +33,9 @@ object GuidancePhrases {
     }
 
     fun reroute(language: Language) = Phrase(stringFor(StringKey.SAY_REROUTE, language), urgent = false)
+
+    /** P11: the user took a known alternative (no request): "Nueva ruta". */
+    fun newRoute(language: Language) = Phrase(stringFor(StringKey.SAY_NEW_ROUTE, language), urgent = false)
     fun arrived(language: Language) = Phrase(stringFor(StringKey.SAY_ARRIVED, language), urgent = true)
     fun gpsLost(language: Language) = Phrase(stringFor(StringKey.SAY_GPS_LOST, language), urgent = false)
     fun lostRoute(language: Language) = Phrase(stringFor(StringKey.SAY_LOST_ROUTE, language), urgent = false)

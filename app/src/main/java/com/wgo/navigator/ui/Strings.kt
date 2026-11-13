@@ -67,8 +67,8 @@ enum class StringKey {
     SET_SPEECH, SPEECH_CLOUD, SPEECH_SYSTEM, PICK_WHICH, NOTICE_TITLE, NOTICE_BODY, BTN_ACCEPT, BTN_USE_SYSTEM, CR_STT_D, HUD_EXPAND, HUD_COLLAPSE, RECENTER,
     // Live navigation states (P5-D)
     NAV_GPS_SEARCHING, NAV_GPS_SEARCH_HINT, NAV_PAUSED, NAV_GPS_LOST, NAV_GPS_LOST_HINT, NAV_OFF_ROUTE, NAV_REROUTING,
-    // P11 offline reroute
-    NAV_OFFLINE_NOT_UPDATED,
+    // P11 offline reroute, routes and alternatives
+    NAV_OFFLINE_NOT_UPDATED, ROUTE_CHIP, ROUTE_CHIP_A11Y, ALT_DELTA_MORE, ALT_DELTA_LESS, ALT_DELTA_SAME, SAY_NEW_ROUTE,
     NAV_LOST_BADGE, NAV_LOST_TITLE, NAV_LOST_HINT, NAV_END_TITLE, BTN_END, BTN_KEEP, NAV_ARRIVED, BTN_FINISH,
     // Foreground service notification and ongoing activity (P6-A)
     NOTIF_CHANNEL_NAV, NOTIF_CHANNEL_NAV_DESC, NOTIF_NAVIGATING, ONGOING_SEARCHING, ONGOING_GPS_LOST, ONGOING_REROUTING,
@@ -249,6 +249,12 @@ private val es = mapOf(
     StringKey.NAV_OFF_ROUTE to "FUERA DE RUTA",
     StringKey.NAV_REROUTING to "RECALCULANDO…",
     StringKey.NAV_OFFLINE_NOT_UPDATED to "SIN CONEXIÓN · RUTA NO ACTUALIZADA",
+    StringKey.ROUTE_CHIP to "RUTA %1${'$'}d/%2${'$'}d",
+    StringKey.ROUTE_CHIP_A11Y to "Cambiar de ruta, ruta %1${'$'}d de %2${'$'}d",
+    StringKey.ALT_DELTA_MORE to "+%d MIN",
+    StringKey.ALT_DELTA_LESS to "−%d MIN",
+    StringKey.ALT_DELTA_SAME to "=",
+    StringKey.SAY_NEW_ROUTE to "Nueva ruta",
     StringKey.NAV_LOST_BADGE to "SIN RUTA",
     StringKey.NAV_LOST_TITLE to "No pude recalcular la ruta",
     StringKey.NAV_LOST_HINT to "Reintenta o termina.",
@@ -453,6 +459,12 @@ private val en = mapOf(
     StringKey.NAV_OFF_ROUTE to "OFF ROUTE",
     StringKey.NAV_REROUTING to "REROUTING…",
     StringKey.NAV_OFFLINE_NOT_UPDATED to "OFFLINE · ROUTE NOT UPDATED",
+    StringKey.ROUTE_CHIP to "ROUTE %1${'$'}d/%2${'$'}d",
+    StringKey.ROUTE_CHIP_A11Y to "Change route, route %1${'$'}d of %2${'$'}d",
+    StringKey.ALT_DELTA_MORE to "+%d MIN",
+    StringKey.ALT_DELTA_LESS to "−%d MIN",
+    StringKey.ALT_DELTA_SAME to "=",
+    StringKey.SAY_NEW_ROUTE to "New route",
     StringKey.NAV_LOST_BADGE to "NO ROUTE",
     StringKey.NAV_LOST_TITLE to "Couldn't find a new route",
     StringKey.NAV_LOST_HINT to "Retry or end it.",

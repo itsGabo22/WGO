@@ -32,6 +32,7 @@ import com.wgo.navigator.nav.NavigationSession
 import com.wgo.navigator.net.HttpClient
 import com.wgo.navigator.net.WgoUserAgent
 import com.wgo.navigator.net.isOnline
+import com.wgo.navigator.ui.map.RadarAlt
 import com.wgo.navigator.route.OsrmRouter
 import com.wgo.navigator.ui.map.GeoCoord
 import com.wgo.navigator.ui.map.LiveRadarSource
@@ -224,6 +225,12 @@ class NavigationHost private constructor(context: Context) {
                 combine(s.remaining, s.state) { remaining, state -> remaining to nextManeuverOf(state) }
                     .collect { (remaining, maneuver) -> radar.setRoute(remaining, maneuver) }
             }
+            // P11: the other known routes (lighter, with their time difference) and the RUTA chip's state.
+            launch {
+                combine(s.alternativeLines, s.choice, s.route) { lines, choice, route ->
+                    Triple(lines.map { RadarAlt(it.points, Math.round(it.deltaS / 60.0).toInt(), it.label) }, choice, System.identityHashCode(route))
+                }.collect { (alts, choice, routeId) -> radar.setAlternatives(alts, choice.index, choice.count, routeId) }
+            }
         }
         lastSpeedMps = origin.speedMps
         applyProfile()
@@ -404,6 +411,7 @@ class NavigationHost private constructor(context: Context) {
             is NavEvent.ApproachingTurn -> if (dedupe.approaching(event.step)) GuidancePhrases.approaching(event.step, event.distanceM, lang) else null
             is NavEvent.AtTurn -> if (dedupe.atTurn(event.step)) GuidancePhrases.atTurn(event.step, lang) else null
             NavEvent.OffRouteDetected -> GuidancePhrases.reroute(lang)
+            NavEvent.AlternativeTaken -> GuidancePhrases.newRoute(lang)
             NavEvent.Rerouted -> {
                 dedupe.newRoute()
                 null
@@ -494,7 +502,7 @@ fun hapticFor(event: NavEvent): HapticEvent? = when (event) {
     is NavEvent.ApproachingTurn -> HapticEvent.Tick
     is NavEvent.AtTurn -> HapticEvent.DoubleClick
     NavEvent.GpsLost -> HapticEvent.HeavyClick
-    NavEvent.Arrived, NavEvent.OffRouteDetected, NavEvent.Rerouted, NavEvent.GpsRecovered -> null
+    NavEvent.Arrived, NavEvent.OffRouteDetected, NavEvent.Rerouted, NavEvent.GpsRecovered, NavEvent.AlternativeTaken -> null
 }
 
 /** The guidance kept by every non-terminal state (null while waiting for GPS or after arrival). */

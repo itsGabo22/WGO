@@ -67,7 +67,11 @@ fun RadarMinimap(
     /** Heading up only: the landmark rows the upright labels are picked from (empty: none). */
     landmarks: List<com.wgo.navigator.places.IndexedPlace> = emptyList(),
     /** The controls drawn over the map (reference dp): landmark labels keep clear of them. */
-    labelBlocked: List<LabelBlock> = emptyList()
+    labelBlocked: List<LabelBlock> = emptyList(),
+    /** P11: the other known routes, drawn lighter with their time difference. */
+    alternatives: List<RadarAlt> = emptyList(),
+    /** P11: the time-difference label of an alternative ("+2 MIN"), from Strings.kt. */
+    altLabel: (Int) -> String = { "" }
 ) {
     val palette = Wgo.palette
     val dark = palette === NightPalette
@@ -100,6 +104,22 @@ fun RadarMinimap(
         blips.map {
             val p = RadarProjection.toScreen(it.position, center, heading, zoom, anchor.x, anchor.y, tileSize)
             ProjectedBlip(Offset(p.x, p.y), it.kind)
+        }
+    }
+    // P11: the alternatives' paths and their label points, re-projected with the route.
+    val projectedAlternatives = remember(alternatives, center, heading, zoom, size, tileSize) {
+        if (size == IntSize.Zero) emptyList() else alternatives.filter { it.points.size >= 2 }.map { alt ->
+            Path().apply {
+                alt.points.forEachIndexed { i, point ->
+                    val p = RadarProjection.toScreen(point, center, heading, zoom, anchor.x, anchor.y, tileSize)
+                    if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y)
+                }
+            }
+        }
+    }
+    val altLabels = remember(alternatives, center, heading, zoom, size, tileSize) {
+        if (size == IntSize.Zero) emptyList() else alternatives.filter { it.points.size >= 2 }.map { alt ->
+            RadarProjection.toScreen(alt.label, center, heading, zoom, anchor.x, anchor.y, tileSize).let { Offset(it.x, it.y) } to alt.deltaMin
         }
     }
     // The user (chevron, halo, rings, sweep): at the anchor while following, at its real place while exploring.
@@ -144,8 +164,29 @@ fun RadarMinimap(
             maneuver = projectedManeuver,
             blips = projectedBlips,
             clock = clock,
-            chevronDegrees = if (northUp) bearing else 0f
+            chevronDegrees = if (northUp) bearing else 0f,
+            alternatives = projectedAlternatives
         )
+
+        // P11: each alternative's time difference, a small pill clamped inside the dial and kept off the controls.
+        if (size != IntSize.Zero) {
+            // px / density is already reference dp here (WgoResponsive scales the density once).
+            val density = androidx.compose.ui.platform.LocalDensity.current.density
+            for ((at, minutes) in altLabels) {
+                val placed = AltLabelRules.place(at.x / density, at.y / density, labelBlocked) ?: continue
+                Box(
+                    Modifier
+                        .offset(x = (placed.x - AltLabelRules.WIDTH_DP / 2).dp, y = (placed.y - AltLabelRules.HEIGHT_DP / 2).dp)
+                        .size(AltLabelRules.WIDTH_DP.dp, AltLabelRules.HEIGHT_DP.dp)
+                        .clip(CircleShape)
+                        .background(palette.surface)
+                        .clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(altLabel(minutes), color = palette.ink, style = WgoType.labelSm, maxLines = 1)
+                }
+            }
+        }
 
         // Heading up (P8): upright landmark names replace the raster labels, which would turn upside down.
         if (!northUp && tileLayer == null) {
