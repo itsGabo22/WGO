@@ -22,6 +22,11 @@ and `docs/THIRD_PARTY_DATA.md`).
   language model; text about 1.1 s after you stop talking, median on the watch). Silence sends nothing ("No te oí");
   invented silence phrases are rejected; if the cloud fails, the watch's own recognizer takes over ("DILO DE NUEVO").
   A one-time notice explains what is sent; Settings > RECONOCIMIENTO switches to SISTEMA (the recognizer only).
+  P10: the audio is sent as FLAC (about 2.2x smaller); without any network the press shows WGO's own "Sin conexión"
+  screen at once (never the system's dialog). Long phrases keep only the destination ("por favor amigo, quiero ir a
+  la cooperativa, es lo único que te pido" -> Universidad Cooperativa); a kind of place near a landmark ("alguna
+  droguería que quede en el centro") or a street address lists real options under "¿CUÁL?", and Confirm place shows
+  the words it heard, so nothing is guessed silently.
   Easy requests are understood on the watch, hard ones by a language model (text only, never coordinates).
 - **Real places**: your private places, an offline index of 6,285 Pasto places (Overture), then OpenStreetMap search;
   "X de la Y" uses Y as a landmark hint; far results are never picked first; Pasto nicknames ("la cooperativa",
