@@ -70,7 +70,9 @@ data class HudContent(
     /** OFF ROUTE / REROUTING text, replacing the instruction (null when on the route). */
     val status: String?,
     /** Remaining distance · ETA, or null. */
-    val totals: String?
+    val totals: String?,
+    /** P11: the arrow points where to face the route (degrees from straight ahead, + clockwise); null: the maneuver. */
+    val faceDeg: Float? = null
 )
 
 /** Geometry of the HUD (reference dp, spec section 7 / tokens.json `navigation`). */
@@ -144,8 +146,18 @@ private fun hudColors(imminent: Boolean): HudColors {
 private fun HudContent.imminent() = distanceM != null && distanceM <= TURN_IMMINENT_METERS
 
 @Composable
-private fun ManeuverIcon(maneuver: Maneuver?, tint: Color, size: Dp) {
+private fun ManeuverIcon(maneuver: Maneuver?, tint: Color, size: Dp, faceDeg: Float? = null) {
     val turn = remember { WgoIcons.turnRight(2.6f) }
+    if (faceDeg != null) {
+        // P11 turn-to-face: the straight arrow turned toward the route (information: it turns under reduced motion too).
+        Icon(
+            imageVector = WgoIcons.ArrowUpward,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size).graphicsLayer { rotationZ = faceDeg }
+        )
+        return
+    }
     Icon(
         imageVector = if (maneuver == null || maneuver in STRAIGHT_LIKE) WgoIcons.ArrowUpward else turn,
         contentDescription = null,
@@ -198,7 +210,7 @@ private fun HudCard(content: HudContent, onTap: () -> Unit, clock: WgoClock) {
         verticalArrangement = Arrangement.Center
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ManeuverIcon(content.maneuver, colors.accent, 26.dp)
+            ManeuverIcon(content.maneuver, colors.accent, 26.dp, content.faceDeg)
             Odometer(text = content.distanceNumber, color = colors.content, style = TRIMMED_NUMERAL)
             Text(text = content.distanceUnit, style = WgoType.labelMd, color = colors.content)
         }
@@ -267,7 +279,7 @@ private fun HudPill(content: HudContent, onTap: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally)
         ) {
-            ManeuverIcon(content.maneuver, colors.accent, 22.dp)
+            ManeuverIcon(content.maneuver, colors.accent, 22.dp, content.faceDeg)
             Odometer(text = content.distanceNumber, color = colors.content, style = TABULAR_HEADLINE)
             Text(text = content.distanceUnit, style = WgoType.labelMd, color = colors.content)
         }

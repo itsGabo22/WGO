@@ -36,6 +36,8 @@ import com.wgo.navigator.ui.map.RadarAlt
 import com.wgo.navigator.heading.CompassSensor
 import com.wgo.navigator.heading.HeadingFusion
 import com.wgo.navigator.heading.HeadingThrottle
+import com.wgo.navigator.heading.FaceRule
+import com.wgo.navigator.heading.HeadingMath
 import com.wgo.navigator.route.OsrmRouter
 import com.wgo.navigator.ui.map.GeoCoord
 import com.wgo.navigator.ui.map.LiveRadarSource
@@ -239,6 +241,7 @@ class NavigationHost private constructor(context: Context) {
         // P11: true north for the compass, from the trip origin (constant within the 25 km the trips cover).
         declinationDeg = CompassSensor.declination(origin.lat, origin.lon)
         lastCourseDeg = Double.NaN
+        faceRule.open()
         applyProfile()
         // The fresh ORIGIN fix starts the engine at once (an old cached fallback is ignored as stale).
         s.onFix(origin)
@@ -350,8 +353,27 @@ class NavigationHost private constructor(context: Context) {
     private fun pushHeading() {
         val radar = _radar.value ?: return
         val speed = lastSpeedMps.toDouble().takeUnless { it.isNaN() } ?: 0.0
-        headingThrottle.next(fusion.fused(speed, lastCourseDeg), SystemClock.elapsedRealtime())?.let { radar.setHeading(it.toFloat()) }
+        headingThrottle.next(fusion.fused(speed, lastCourseDeg), SystemClock.elapsedRealtime())?.let {
+            radar.setHeading(it.toFloat())
+            updateFace(it)
+        }
         radar.setCalibrate(fusion.needsCalibration && speed < HeadingFusion.GPS_ONLY_MPS)
+    }
+
+    private val faceRule = FaceRule()
+
+    /** P11 turn-to-face: the angle from [headingDeg] to the route 25 m ahead, while the window is open and slow. */
+    private fun updateFace(headingDeg: Double?) {
+        val radar = _radar.value ?: return
+        val s = session ?: return
+        val nav = s.state.value.guidance() ?: return radar.setFace(null)
+        val at = lastFixCoord ?: return
+        val target = s.geometry.pointAt(nav.progressM + FaceRule.AHEAD_M)
+        val face = faceRule.face(
+            nav.progressM, lastSpeedMps.toDouble(), headingDeg,
+            HeadingMath.bearing(at.lat, at.lon, target.lat, target.lon)
+        )
+        radar.setFace(face?.let { Math.round(it).toFloat() })
     }
 
     // ---- service hooks ----
@@ -397,7 +419,11 @@ class NavigationHost private constructor(context: Context) {
                     _radar.value?.onFix(fix)
                     // P11: the GPS course for the heading fusion (used only when moving fast enough).
                     if (!fix.bearingDeg.isNaN()) lastCourseDeg = fix.bearingDeg.toDouble()
-                    if (compassRunning) pushHeading()
+                    if (compassRunning) {
+                        pushHeading()
+                        // The face window also closes with progress or speed, not only with a heading change.
+                        updateFace(fusion.fused(lastSpeedMps.toDouble().takeUnless { it.isNaN() } ?: 0.0, lastCourseDeg))
+                    }
                 }
             }
         } else if (!want && fixJob != null) {
@@ -464,6 +490,7 @@ class NavigationHost private constructor(context: Context) {
             NavEvent.AlternativeTaken -> GuidancePhrases.newRoute(lang)
             NavEvent.Rerouted -> {
                 dedupe.newRoute()
+                faceRule.open() // P11: after a new route, show where to face again
                 null
             }
             NavEvent.GpsLost -> if (dedupe.gpsLost()) GuidancePhrases.gpsLost(lang) else null

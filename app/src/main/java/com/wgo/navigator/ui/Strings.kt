@@ -70,7 +70,7 @@ enum class StringKey {
     // P11 offline reroute, routes and alternatives
     NAV_OFFLINE_NOT_UPDATED, ROUTE_CHIP, ROUTE_CHIP_A11Y, ALT_DELTA_MORE, ALT_DELTA_LESS, ALT_DELTA_SAME, SAY_NEW_ROUTE,
     // P11 compass
-    COMPASS_CALIBRATE,
+    COMPASS_CALIBRATE, FACE_ROUTE,
     NAV_LOST_BADGE, NAV_LOST_TITLE, NAV_LOST_HINT, NAV_END_TITLE, BTN_END, BTN_KEEP, NAV_ARRIVED, BTN_FINISH,
     // Foreground service notification and ongoing activity (P6-A)
     NOTIF_CHANNEL_NAV, NOTIF_CHANNEL_NAV_DESC, NOTIF_NAVIGATING, ONGOING_SEARCHING, ONGOING_GPS_LOST, ONGOING_REROUTING,
@@ -258,6 +258,7 @@ private val es = mapOf(
     StringKey.ALT_DELTA_SAME to "=",
     StringKey.SAY_NEW_ROUTE to "Nueva ruta",
     StringKey.COMPASS_CALIBRATE to "MUEVE EL RELOJ EN 8",
+    StringKey.FACE_ROUTE to "GIRA HACIA LA RUTA",
     StringKey.NAV_LOST_BADGE to "SIN RUTA",
     StringKey.NAV_LOST_TITLE to "No pude recalcular la ruta",
     StringKey.NAV_LOST_HINT to "Reintenta o termina.",
@@ -469,6 +470,7 @@ private val en = mapOf(
     StringKey.ALT_DELTA_SAME to "=",
     StringKey.SAY_NEW_ROUTE to "New route",
     StringKey.COMPASS_CALIBRATE to "MOVE THE WATCH IN A FIGURE 8",
+    StringKey.FACE_ROUTE to "TURN TOWARD THE ROUTE",
     StringKey.NAV_LOST_BADGE to "NO ROUTE",
     StringKey.NAV_LOST_TITLE to "Couldn't find a new route",
     StringKey.NAV_LOST_HINT to "Retry or end it.",

@@ -124,6 +124,51 @@ class HeadingFusion(private val alpha: Double = ALPHA) {
 }
 
 /**
+ * P11 "turn to face the route" (docs/design "Compass heading"): opened at trip start and after each new route; while
+ * open and the user is slower than [SHOW_BELOW_MPS], the angle from the heading to the route [AHEAD_M] ahead of the
+ * snapped position (+ clockwise). It closes after [CLOSE_AFTER_M] of progress or at [CLOSE_AT_MPS].
+ */
+class FaceRule {
+    private var pending = false
+    private var openedAt: Double? = null
+
+    /** Trip start or a new route: the window opens at the next guidance. */
+    fun open() {
+        pending = true
+        openedAt = null
+    }
+
+    /**
+     * The angle to show, or null. [progressM] the snapped progress, [speedMps] the speed (NaN unknown), [headingDeg] the
+     * fused heading, [bearingToRouteDeg] from the user to the route [AHEAD_M] ahead.
+     */
+    fun face(progressM: Double, speedMps: Double, headingDeg: Double?, bearingToRouteDeg: Double): Double? {
+        if (pending) {
+            openedAt = progressM
+            pending = false
+        }
+        val start = openedAt ?: return null
+        val speed = if (speedMps.isNaN()) 0.0 else speedMps
+        if (progressM - start >= CLOSE_AFTER_M || speed >= CLOSE_AT_MPS) {
+            openedAt = null
+            return null
+        }
+        if (speed >= SHOW_BELOW_MPS || headingDeg == null) return null
+        return HeadingMath.diff(headingDeg, bearingToRouteDeg)
+    }
+
+    companion object {
+        const val AHEAD_M = 25.0
+        const val SHOW_BELOW_MPS = 2.0
+        const val CLOSE_AFTER_M = 30.0
+        const val CLOSE_AT_MPS = 3.0
+
+        /** From this angle on the HUD says "GIRA HACIA LA RUTA". */
+        const val TURN_HINT_DEG = 25.0
+    }
+}
+
+/**
  * The map gets a new heading at most every [MIN_INTERVAL_MS] and only for a change of [MIN_CHANGE_DEG] or more (P11:
  * <= 10 Hz, no re-projection for sensor noise).
  */
