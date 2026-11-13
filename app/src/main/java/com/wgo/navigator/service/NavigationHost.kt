@@ -37,6 +37,7 @@ import com.wgo.navigator.heading.CompassSensor
 import com.wgo.navigator.heading.HeadingFusion
 import com.wgo.navigator.heading.HeadingThrottle
 import com.wgo.navigator.heading.FaceRule
+import com.wgo.navigator.heading.CompassPolicy
 import com.wgo.navigator.heading.HeadingMath
 import com.wgo.navigator.route.OsrmRouter
 import com.wgo.navigator.ui.map.GeoCoord
@@ -334,7 +335,7 @@ class NavigationHost private constructor(context: Context) {
 
     /** The listener only during a trip with the navigation screen interactive: never on Home, in ambient or off. */
     private fun updateCompass() {
-        if (session != null && visible && !ambient) {
+        if (CompassPolicy.shouldListen(tripActive = session != null, visible = visible, ambient = ambient)) {
             (compass ?: CompassSensor(app) { magnetic, accuracy -> onCompass(magnetic, accuracy) }.also { compass = it }).start()
         } else {
             compass?.stop()

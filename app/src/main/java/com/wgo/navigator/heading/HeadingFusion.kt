@@ -168,6 +168,11 @@ class FaceRule {
     }
 }
 
+/** P11 budget: the compass listens only during a trip with the navigation screen visible and not ambient. */
+object CompassPolicy {
+    fun shouldListen(tripActive: Boolean, visible: Boolean, ambient: Boolean): Boolean = tripActive && visible && !ambient
+}
+
 /**
  * The map gets a new heading at most every [MIN_INTERVAL_MS] and only for a change of [MIN_CHANGE_DEG] or more (P11:
  * <= 10 Hz, no re-projection for sensor noise).
